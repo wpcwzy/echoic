@@ -1,5 +1,8 @@
 # DashScope / 百炼 API 速查（Echoic 会议转写与 LLM）
 
+> 说话人分离（实时 vs 文件转写）的专项调研见 [bailian-diarization.md](./bailian-diarization.md)（2026-10-27）。
+
+
 > 核查日期 2026-10-26。所有 URL 以官方文档为准；标 **待验证** 的条目未在官方文档中找到明确说明，勿直接写死。
 > 关键结论：**DashScope 兼容模式没有 `/v1/audio/transcriptions`**（实测 404，见 §3），录音文件识别只吃公网 URL。
 

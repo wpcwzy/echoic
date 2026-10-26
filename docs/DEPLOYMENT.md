@@ -225,17 +225,22 @@ curl -fsS http://localhost:8000/api/system/health   # storage 状态应为 ok
 
 ### 5.2 阿里云百炼 DashScope（推荐中文场景）
 
-1. 在 [百炼控制台](https://bailian.console.aliyun.com/) 创建 API Key，开通 Paraformer 语音识别与 Qwen 模型；
+1. 在 [百炼控制台](https://bailian.console.aliyun.com/) 创建 API Key，开通语音识别与 Qwen 模型；
 2. 「设置 → AI 服务」按下表填写（或写入 `.env` 后重建空数据库）：
 
 | 模块 | provider | base_url | model |
 |---|---|---|---|
-| ASR | `dashscope_realtime` | `wss://dashscope.aliyuncs.com/api-ws/v1/inference` | `paraformer-realtime-v2` |
+| ASR（整场录音，推荐，支持说话人分离） | `dashscope_file` | `https://dashscope.aliyuncs.com` | `qwen-audio-3.1-asr-flash-filetrans`（推荐）或 `paraformer-v2` / `fun-asr` |
+| ASR（仅录音页实时字幕，无说话人分离） | `dashscope_realtime` | `wss://dashscope.aliyuncs.com/api-ws/v1/inference` | `paraformer-realtime-v2` |
 | LLM | `openai` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus`（或 qwen-max / qwen-turbo） |
 | Embedding（可选） | `dashscope` | `https://dashscope.aliyuncs.com` | `text-embedding-v3` |
 
-> ASR 使用 DashScope 实时 WebSocket 协议（本地 16k 单声道 wav 流式发送），无需公网 URL；
-> 若使用 `dashscope_file` 则需要可公网访问的 OSS 地址，私有化场景建议实时接口或 OpenAI 兼容 Whisper。
+> **整场会议转写请用 `dashscope_file`**：Echoic 会通过百炼临时上传凭证把本地文件变成 `oss://` URL，
+> 不需要公网可访问地址，也不需要自建 OSS；支持 `diarization_enabled` 并落库 `speaker_id`。
+> 注意：**百炼所有实时 ASR 模型都不支持说话人分离**（截至 2026-10），实时字幕只作为边录边看的单说话人参考；
+> 若开启实时字幕，最终稿仍会用文件转写（`ECHOIC_LIVE_MERGE_MODE=replace`）。
+> 文件转写开说话人分离时官方建议单文件 ≤2 小时；模型支持与参数详见
+> [百炼说话人分离调研](research/bailian-diarization.md)。
 
 ### 5.3 OpenAI 兼容端点（DeepSeek / Ollama / vLLM / LM Studio …）
 
