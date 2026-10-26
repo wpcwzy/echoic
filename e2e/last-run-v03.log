@@ -1,0 +1,128 @@
+Echoic v0.3 E2E Smoke — 2026-10-27 04:02:12
+目标服务: http://127.0.0.1:8100 | data dir: /home/wpcwzy/echoic/.cache/e2e-v03-data
+Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
+==============================================================================
+
+[1;36m━━━ 0. 环境 / features / 演示数据 ━━━[0m
+[1;32m[PASS][0m v03.health (0.01s)
+        version=0.3.0 demo_mode=True worker=ok db=ok ffmpeg=ok
+[1;32m[PASS][0m v03.auth.login-admin (0.20s)
+        user=管理员 cookie 标志齐全
+[1;32m[PASS][0m v03.system.info (0.01s)
+        recordings=8 segments=170 chunks=142 worker={'embedded': True, 'running': True, 'queue_depth': 1, 'last_error': None, 'last_trash_purge': {'purged': 0, 'ids': [], 'errors': 0, 'retention_days': 30, 'at': '2026-10-26T20:01:33.545018Z'}}
+[1;32m[PASS][0m v03.library.demo (0.01s)
+        total=8 demo_id=1 title='TraceOpt paper discussion' demo_status=ready
+[1;32m[PASS][0m v03.features (0.01s)
+        live={'enabled': True, 'provider': 'mock', 'max_minutes': 60, 'merge_mode': 'replace'} vector={'backend': 'numpy', 'search_enabled': True, 'embeddings_configured': False} storage={'backend': 'local'} trash={'retention_days': 30}
+[1;32m[PASS][0m v03.health.storage (0.00s)
+        health.storage=ok
+
+[1;36m━━━ 1. 回收站（R-23） ━━━[0m
+[1;32m[PASS][0m v03.trash.soft-delete (2.16s)
+        id=10 deleted_at=2026-10-26T20:02:15.196855Z restore_before=2026-11-25T20:02:15.196855Z
+[1;32m[PASS][0m v03.trash.invisible-everywhere (0.08s)
+        detail/media/transcript/insights/chat/shares/patch/search/dashboard/公开分享 均不可见
+[1;32m[PASS][0m v03.trash.list (0.01s)
+        回收站 2 条，deleted_at=2026-10-26T20:02:15.196855Z
+[1;32m[PASS][0m v03.trash.restore (0.02s)
+        id=10 恢复后 transcript=8 段，insights/列表恢复正常
+[1;32m[PASS][0m v03.trash.share-revoked (0.01s)
+        删除录音时分享自动撤销；恢复后旧链接保持失效（404）
+[1;32m[PASS][0m v03.trash.purge (0.02s)
+        id=10 已彻底删除（DB + 媒体目录 85a9993d-ef7f-422c-bc0c-af9114e03afe 已清理）
+
+[1;36m━━━ 2. 批量操作（R-23） ━━━[0m
+[1;32m[PASS][0m v03.batch.setup (5.38s)
+        创建 3 条录音 [10, 11, 12] + 标签 id=8
+[1;32m[PASS][0m v03.batch.partial-trash (0.02s)
+        批量 trash：succeeded=3 failed=1（无效 id 99999999）
+[1;32m[PASS][0m v03.batch.partial-restore (0.02s)
+        批量 restore：succeeded=3 failed=1
+[1;32m[PASS][0m v03.batch.tags (0.02s)
+        批量 tag_add / tag_remove 各 2 条成功，详情标签同步
+[1;32m[PASS][0m v03.batch.reprocess (1.02s)
+        批量 reprocess(from=insights) 成功并恢复 ready（id=10）
+[1;32m[PASS][0m v03.batch.purge-only-trashed (0.02s)
+        批量 purge：active → 逐条失败；回收站 → 成功并彻底删除
+[1;32m[PASS][0m v03.batch.limit-400 (0.01s)
+        批量上限 100：101 条 → 400；空列表 → 422
+[1;32m[PASS][0m v03.batch.member-scope (1.54s)
+        成员：批量移入自己录音成功；tag 批量 403；混合越权 1 成功 1 失败
+
+[1;36m━━━ 3. 实时转写 Beta（R-19，mock provider） ━━━[0m
+[1;32m[PASS][0m v03.live.replace (4.09s)
+        session=1 events=19 finals=4 total_ms=12000 recording=14 merge_status=merged speakers=2
+[1;32m[PASS][0m v03.live.promote (3.42s)
+        session=2 recording=15 转录单说话人，finals=3
+[1;32m[PASS][0m v03.live.stop-idempotent (0.01s)
+        stop 幂等：status=ended
+[1;32m[PASS][0m v03.live.duplicate-producer (0.01s)
+        同一 active 会话的第二个 WS 生产者被 close 4409 拒绝
+[1;32m[PASS][0m v03.live.rebind-conflict (2.68s)
+        同一实时会话重复绑定录音 → 409 CONFLICT
+
+[1;36m━━━ 4. 向量 / 混合检索（R-20，mock embeddings） ━━━[0m
+[1;32m[PASS][0m v03.vector.setup-embeddings (0.02s)
+        embeddings=mock backend=numpy chunks_total=147 stale=0
+[1;32m[PASS][0m v03.vector.reindex (0.05s)
+        reindex: recordings=13 chunks=147 skipped=0 indexed=147
+[1;32m[PASS][0m v03.vector.semantic-search (0.02s)
+        semantic 命中 3 条（top score=0.336296 fallback=None）
+[1;32m[PASS][0m v03.vector.hybrid-search (0.01s)
+        hybrid 命中 8 条（fallback=None）
+[1;32m[PASS][0m v03.vector.member-acl (2.60s)
+        member 结果 1 条且仅含自有录音；admin 8 条（query='这里还有一个细节需要确认，接口字段的定义最好和前端再对一遍，避免联调返工。，数据统计的口径要统一，否则后面报表对不上，我建议先拉一个小会定下来。'）
+[1;32m[PASS][0m v03.vector.fallback-none (0.02s)
+        embeddings=none → semantic fallback_reason='未配置 Embedding 模型，语义检索不可用，已降级为关键词检索'，reindex 400
+[1;32m[PASS][0m v03.vector.restore-mock (0.02s)
+        已恢复 embeddings=mock，hybrid 搜索无 fallback
+
+[1;36m━━━ 5. storage local / media Range / 问答回归 ━━━[0m
+[1;32m[PASS][0m v03.storage.local-range (1.13s)
+        local 存储 Range 206；source=upload
+[1;32m[PASS][0m v03.regression.demo-chat-sse (0.22s)
+        事件=['start', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta']… 回答长度=262 预览='这场会围绕 ICPE 投稿倒排了时间：**摘要两周内投出，正文再三周**，五周后'
+
+==============================================================================
+[1mv0.3 PASS/FAIL 矩阵[0m
+------------------------------------------------------------------------------
+[1;32mPASS[0m v03.health                                     0.01s  version=0.3.0 demo_mode=True worker=ok db=ok ffmpeg=ok
+[1;32mPASS[0m v03.auth.login-admin                           0.20s  user=管理员 cookie 标志齐全
+[1;32mPASS[0m v03.system.info                                0.01s  recordings=8 segments=170 chunks=142 worker={'embedded': True, 'running': True, 'queue_depth': 1, 'last_error': None, 'last_trash_purge': {'purged': 0, 'ids': [], 'errors': 0, 'retention_days': 30, 'at': '2026-10-26T20:01:33.545018Z'}}
+[1;32mPASS[0m v03.library.demo                               0.01s  total=8 demo_id=1 title='TraceOpt paper discussion' demo_status=ready
+[1;32mPASS[0m v03.features                                   0.01s  live={'enabled': True, 'provider': 'mock', 'max_minutes': 60, 'merge_mode': 'replace'} vector={'backend': 'numpy', 'search_enabled': True, 'embeddings_configured': False} storage={'backend': 'local'} trash={'retention_days': 30}
+[1;32mPASS[0m v03.health.storage                             0.00s  health.storage=ok
+[1;32mPASS[0m v03.trash.soft-delete                          2.16s  id=10 deleted_at=2026-10-26T20:02:15.196855Z restore_before=2026-11-25T20:02:15.196855Z
+[1;32mPASS[0m v03.trash.invisible-everywhere                 0.08s  detail/media/transcript/insights/chat/shares/patch/search/dashboard/公开分享 均不可见
+[1;32mPASS[0m v03.trash.list                                 0.01s  回收站 2 条，deleted_at=2026-10-26T20:02:15.196855Z
+[1;32mPASS[0m v03.trash.restore                              0.02s  id=10 恢复后 transcript=8 段，insights/列表恢复正常
+[1;32mPASS[0m v03.trash.share-revoked                        0.01s  删除录音时分享自动撤销；恢复后旧链接保持失效（404）
+[1;32mPASS[0m v03.trash.purge                                0.02s  id=10 已彻底删除（DB + 媒体目录 85a9993d-ef7f-422c-bc0c-af9114e03afe 已清理）
+[1;32mPASS[0m v03.batch.setup                                5.38s  创建 3 条录音 [10, 11, 12] + 标签 id=8
+[1;32mPASS[0m v03.batch.partial-trash                        0.02s  批量 trash：succeeded=3 failed=1（无效 id 99999999）
+[1;32mPASS[0m v03.batch.partial-restore                      0.02s  批量 restore：succeeded=3 failed=1
+[1;32mPASS[0m v03.batch.tags                                 0.02s  批量 tag_add / tag_remove 各 2 条成功，详情标签同步
+[1;32mPASS[0m v03.batch.reprocess                            1.02s  批量 reprocess(from=insights) 成功并恢复 ready（id=10）
+[1;32mPASS[0m v03.batch.purge-only-trashed                   0.02s  批量 purge：active → 逐条失败；回收站 → 成功并彻底删除
+[1;32mPASS[0m v03.batch.limit-400                            0.01s  批量上限 100：101 条 → 400；空列表 → 422
+[1;32mPASS[0m v03.batch.member-scope                         1.54s  成员：批量移入自己录音成功；tag 批量 403；混合越权 1 成功 1 失败
+[1;32mPASS[0m v03.live.replace                               4.09s  session=1 events=19 finals=4 total_ms=12000 recording=14 merge_status=merged speakers=2
+[1;32mPASS[0m v03.live.promote                               3.42s  session=2 recording=15 转录单说话人，finals=3
+[1;32mPASS[0m v03.live.stop-idempotent                       0.01s  stop 幂等：status=ended
+[1;32mPASS[0m v03.live.duplicate-producer                    0.01s  同一 active 会话的第二个 WS 生产者被 close 4409 拒绝
+[1;32mPASS[0m v03.live.rebind-conflict                       2.68s  同一实时会话重复绑定录音 → 409 CONFLICT
+[1;32mPASS[0m v03.vector.setup-embeddings                    0.02s  embeddings=mock backend=numpy chunks_total=147 stale=0
+[1;32mPASS[0m v03.vector.reindex                             0.05s  reindex: recordings=13 chunks=147 skipped=0 indexed=147
+[1;32mPASS[0m v03.vector.semantic-search                     0.02s  semantic 命中 3 条（top score=0.336296 fallback=None）
+[1;32mPASS[0m v03.vector.hybrid-search                       0.01s  hybrid 命中 8 条（fallback=None）
+[1;32mPASS[0m v03.vector.member-acl                          2.60s  member 结果 1 条且仅含自有录音；admin 8 条（query='这里还有一个细节需要确认，接口字段的定义最好和前端再对一遍，避免联调返工。，数据统计的口径要统一，否则后面报表对不上，我建议先拉一个小会定下来。'）
+[1;32mPASS[0m v03.vector.fallback-none                       0.02s  embeddings=none → semantic fallback_reason='未配置 Embedding 模型，语义检索不可用，已降级为关键词检索'，reindex 400
+[1;32mPASS[0m v03.vector.restore-mock                        0.02s  已恢复 embeddings=mock，hybrid 搜索无 fallback
+[1;32mPASS[0m v03.storage.local-range                        1.13s  local 存储 Range 206；source=upload
+[1;32mPASS[0m v03.regression.demo-chat-sse                   0.22s  事件=['start', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta']… 回答长度=262 预览='这场会围绕 ICPE 投稿倒排了时间：**摘要两周内投出，正文再三周**，五周后'
+------------------------------------------------------------------------------
+总计 34 项：[1;32m34 通过[0m，[1;31m0 失败[0m，0 跳过
+
+[1;32mE2E v0.3 SMOKE: PASS ✔[0m
+
+日志已保存：/home/wpcwzy/echoic/e2e/last-run-v03.log

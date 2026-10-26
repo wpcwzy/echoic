@@ -291,7 +291,7 @@ def test_patch_recording_not_found(auth_client):
     assert response.status_code == 404
 
 
-def test_delete_recording_removes_rows_and_files(auth_client, db):
+def test_delete_recording_moves_to_trash(auth_client, db):
     recording = make_recording(db, title="待删除")
     write_media(recording, original=b"mp3-bytes", playback=b"m4a-bytes")
     directory = settings.media_path / recording.uuid
@@ -299,11 +299,25 @@ def test_delete_recording_removes_rows_and_files(auth_client, db):
 
     response = auth_client.delete(f"/api/recordings/{recording.id}")
     assert response.status_code == 200
-    assert response.json()["ok"] is True
+    body = response.json()
+    assert body["ok"] is True
+    assert body["id"] == recording.id
+    assert body["deleted_at"] and body["restore_before"]
+    # v0.3 soft delete: hidden from APIs, but the row/media survive until purge.
     assert auth_client.get(f"/api/recordings/{recording.id}").status_code == 404
+    assert directory.exists()
+    db.expire_all()
+    stored = db.get(Recording, recording.id)
+    assert stored is not None and stored.deleted_at is not None
+
+    # purging from the trash removes DB row + media files
+    purge = auth_client.delete(f"/api/recordings/{recording.id}/purge")
+    assert purge.status_code == 200
+    assert purge.json()["purged"] is True
     assert not directory.exists()
     remaining = db.query(Recording).filter(Recording.id == recording.id).all()
     assert remaining == []
+    assert auth_client.delete(f"/api/recordings/{recording.id}/purge").status_code == 404
 
 
 # ------------------------------------------------------------------ process control

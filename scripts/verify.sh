@@ -6,9 +6,9 @@
 #   1) 后端单元 + 集成测试（pytest）
 #   2) 前端类型检查 + 生产构建（tsc + vite build）
 #   3) 生产式启动服务（临时数据目录）并检查 /api/system/health
-#   4) 若存在 e2e/smoke.py / e2e/smoke_v02.py，则以生产式临时服务运行端到端冒烟
-#      （v0.1 30 项 + v0.2 34 项：角色/权限、分享、consume），日志写入临时目录，
-#      不会覆盖 e2e/last-run*.log
+#   4) 若存在 e2e/smoke*.py，则以生产式临时服务运行端到端冒烟
+#      （v0.1 30 项 + v0.2 34 项 + v0.3：回收站/批量/实时 mock WS/向量检索），
+#      日志写入临时目录，不会覆盖 e2e/last-run*.log
 #
 # 用法：
 #   ./scripts/verify.sh                 # 全量
@@ -141,6 +141,9 @@ else
   export ECHOIC_CONSUME_ENABLED="${ECHOIC_CONSUME_ENABLED:-true}"
   export ECHOIC_CONSUME_DIR="${ECHOIC_CONSUME_DIR:-$DATA_DIR/consume}"
   mkdir -p "$ECHOIC_CONSUME_DIR"
+  # v0.3 实时转写 Beta（mock provider，无需 Key）与向量检索（hot 配置由 e2e 写入 mock embedding）
+  export ECHOIC_LIVE_ENABLED="${ECHOIC_LIVE_ENABLED:-true}"
+  export ECHOIC_LIVE_PROVIDER="${ECHOIC_LIVE_PROVIDER:-mock}"
   (
     cd "$BACKEND_DIR" && exec "$VENV/bin/uvicorn" app.main:app \
       --host 127.0.0.1 --port "$PORT" --proxy-headers
@@ -198,6 +201,22 @@ else
   else
     skip "E2E v0.2 冒烟（e2e/smoke_v02.py 不存在或服务未就绪）"
   fi
+
+  # ---- 可选：v0.3 e2e（回收站/批量、实时 mock WS、向量检索）----
+  if [ "$READY" = 1 ] && [ -f "$REPO_ROOT/e2e/smoke_v03.py" ]; then
+    step "E2E v0.3 冒烟（e2e/smoke_v03.py）"
+    if ( cd "$REPO_ROOT" && ECHOIC_E2E_BASE_URL="http://127.0.0.1:${PORT}" \
+           ECHOIC_E2E_LOG_V03="$DATA_DIR/smoke-v03.log" \
+           ECHOIC_E2E_DATA_DIR="$DATA_DIR" \
+           ECHOIC_E2E_CONSUME_DIR="$ECHOIC_CONSUME_DIR" \
+           "$VENV/bin/python" e2e/smoke_v03.py --data-dir "$DATA_DIR" ); then
+      ok "E2E v0.3 冒烟"
+    else
+      fail "E2E v0.3 冒烟（详情见 $DATA_DIR/smoke-v03.log）"
+    fi
+  else
+    skip "E2E v0.3 冒烟（e2e/smoke_v03.py 不存在或服务未就绪）"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -208,5 +227,5 @@ if [ "$FAIL" -gt 0 ]; then
   exit 1
 fi
 printf '\033[1;32m全部检查通过 ✔\033[0m\n'
-printf 'e2e 冒烟日志（如已运行）：%s/smoke.log（v0.1）、%s/smoke-v02.log（v0.2）\n' "$DATA_DIR" "$DATA_DIR"
+printf 'e2e 冒烟日志（如已运行）：%s/smoke.log（v0.1）、%s/smoke-v02.log（v0.2）、%s/smoke-v03.log（v0.3）\n' "$DATA_DIR" "$DATA_DIR" "$DATA_DIR"
 exit 0

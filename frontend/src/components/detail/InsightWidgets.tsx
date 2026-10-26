@@ -12,7 +12,13 @@ export function InsightCards({ insights }: { insights: Insight[] }) {
         return (
           <article className="insight-card" key={item.id}>
             <header className="insight-card__head">
-              <span className="insight-card__badge" style={{ color: meta.color, background: meta.bg }}>
+              <span
+                className="insight-card__badge"
+                style={{
+                  color: `var(--cat-${item.category}-fg)`,
+                  background: `var(--cat-${item.category}-bg)`,
+                }}
+              >
                 {meta.label}
               </span>
               <h4 className="insight-card__title">{item.title}</h4>

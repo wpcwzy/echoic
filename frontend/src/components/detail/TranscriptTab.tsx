@@ -4,13 +4,16 @@ import type { MenuProps } from 'antd'
 import {
   CheckOutlined,
   CloseOutlined,
+  DownOutlined,
   DownloadOutlined,
   EditOutlined,
   ExportOutlined,
   SearchOutlined,
   TeamOutlined,
+  ThunderboltOutlined,
+  UpOutlined,
 } from '@ant-design/icons'
-import type { Segment, Speaker, Transcript } from '../../types'
+import type { RecordingLive, Segment, Speaker, Transcript } from '../../types'
 import { useUpdateSegment, useUpdateSpeaker, exportUrl } from '../../api/queries'
 import { formatMs } from '../../utils/format'
 import { toast, toastError } from '../../utils/toast'
@@ -32,6 +35,8 @@ interface TranscriptTabProps {
   onRetry: () => void
   /** Public share page mode: hide editing / renaming / exports. */
   readOnly?: boolean
+  /** Live transcript produced during browser recording (R-19 Beta). */
+  live?: RecordingLive | null
 }
 
 function triggerDownload(url: string): void {
@@ -133,8 +138,10 @@ export function TranscriptTab({
   onSeek,
   onRetry,
   readOnly = false,
+  live = null,
 }: TranscriptTabProps) {
   const [query, setQuery] = useState('')
+  const [liveOpen, setLiveOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
   const [speakerModalOpen, setSpeakerModalOpen] = useState(false)
@@ -278,6 +285,43 @@ export function TranscriptTab({
           </div>
         )}
       </div>
+
+      {live && live.segments?.length > 0 && (
+        <div className={`live-transcript ${liveOpen ? 'is-open' : ''}`}>
+          <button
+            type="button"
+            className="live-transcript__toggle"
+            aria-expanded={liveOpen}
+            onClick={() => setLiveOpen((value) => !value)}
+          >
+            <span className="live-transcript__title">
+              <ThunderboltOutlined /> 实时稿
+              <span className="beta-chip">Beta</span>
+              <span className="live-transcript__sub">未区分说话人</span>
+            </span>
+            <span className="live-transcript__meta">
+              {live.segments.length} 段 · {live.session.provider || 'live'}
+              {live.session.total_audio_ms ? ` · ${formatMs(live.session.total_audio_ms)}` : ''}
+            </span>
+            {liveOpen ? <UpOutlined /> : <DownOutlined />}
+          </button>
+          {liveOpen && (
+            <div className="live-transcript__body">
+              <div className="live-transcript__note">
+                实时稿是录音过程中的即时识别结果，可能存在错漏，且不区分说话人；最终请以离线转写为准。
+              </div>
+              {live.segments.map((segment) => (
+                <div className="live-transcript__segment" key={segment.id}>
+                  <button type="button" className="live-transcript__time" onClick={() => onSeek(segment.start_ms)}>
+                    {formatMs(segment.start_ms)}
+                  </button>
+                  <span className="live-transcript__text">{segment.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="transcript-stream">
         {filtered.map((segment, index) => {

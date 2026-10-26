@@ -1,31 +1,61 @@
+import { theme as antdTheme } from 'antd'
 import type { ThemeConfig } from 'antd'
-import type { Insight, RecordingStatus } from './types'
+import type { Insight, RecordingStatus, UserRole } from './types'
+import type { ResolvedTheme } from './store/theme'
 
 /**
- * Ant Design theme — light, airy, meeting-app inspired.
- * The visual contract lives in docs/FRONTEND.md and styles/app.css.
+ * Ant Design theme — light & dark variants.
+ * Custom CSS lives in styles/global.css + styles/app.css and is driven by the
+ * same `[data-theme]` attribute so both layers stay in sync.
  */
-export const theme: ThemeConfig = {
-  token: {
-    colorPrimary: '#1677ff',
-    colorBgLayout: '#f5f6f7',
-    colorBgContainer: '#ffffff',
-    colorBorderSecondary: '#eceef1',
-    colorBorder: '#e3e5e8',
-    colorText: '#1f2329',
-    colorTextSecondary: '#646a73',
-    colorTextTertiary: '#8f959e',
-    borderRadius: 10,
-    borderRadiusLG: 14,
-    borderRadiusSM: 8,
-    fontSize: 14,
-    controlHeight: 34,
-    controlHeightLG: 40,
-    fontFamily:
-      '"Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
-    boxShadowSecondary: '0 6px 24px rgba(31, 35, 41, 0.08)',
-  },
-  components: {
+
+const BASE_TOKEN = {
+  colorPrimary: '#1677ff',
+  borderRadius: 10,
+  borderRadiusLG: 14,
+  borderRadiusSM: 8,
+  fontSize: 14,
+  controlHeight: 34,
+  controlHeightLG: 40,
+  fontFamily:
+    '"Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
+}
+
+const LIGHT_TOKEN: ThemeConfig['token'] = {
+  ...BASE_TOKEN,
+  colorBgLayout: '#f5f6f7',
+  colorBgContainer: '#ffffff',
+  colorBgElevated: '#ffffff',
+  colorBorderSecondary: '#eceef1',
+  colorBorder: '#e3e5e8',
+  colorText: '#1f2329',
+  colorTextSecondary: '#646a73',
+  colorTextTertiary: '#8f959e',
+  boxShadowSecondary: '0 6px 24px rgba(31, 35, 41, 0.08)',
+}
+
+const DARK_TOKEN: ThemeConfig['token'] = {
+  ...BASE_TOKEN,
+  colorPrimary: '#4096ff',
+  colorInfo: '#4096ff',
+  colorBgLayout: '#0f1115',
+  colorBgContainer: '#1a1d23',
+  colorBgElevated: '#21242b',
+  colorBorderSecondary: '#2a2e36',
+  colorBorder: '#333842',
+  colorText: 'rgba(255, 255, 255, 0.88)',
+  colorTextSecondary: 'rgba(255, 255, 255, 0.64)',
+  colorTextTertiary: 'rgba(255, 255, 255, 0.44)',
+  colorTextQuaternary: 'rgba(255, 255, 255, 0.28)',
+  colorFillSecondary: 'rgba(255, 255, 255, 0.08)',
+  colorFillTertiary: 'rgba(255, 255, 255, 0.05)',
+  colorFillQuaternary: 'rgba(255, 255, 255, 0.03)',
+  boxShadowSecondary: '0 8px 28px rgba(0, 0, 0, 0.45)',
+}
+
+function componentTokens(resolved: ResolvedTheme): ThemeConfig['components'] {
+  const dark = resolved === 'dark'
+  return {
     Button: {
       fontWeight: 500,
       primaryShadow: 'none',
@@ -33,26 +63,41 @@ export const theme: ThemeConfig = {
       dangerShadow: 'none',
     },
     Tabs: {
-      inkBarColor: '#1677ff',
-      itemColor: '#646a73',
-      itemSelectedColor: '#1f2329',
-      itemHoverColor: '#1f2329',
+      inkBarColor: dark ? '#4096ff' : '#1677ff',
+      itemColor: dark ? 'rgba(255,255,255,0.64)' : '#646a73',
+      itemSelectedColor: dark ? 'rgba(255,255,255,0.88)' : '#1f2329',
+      itemHoverColor: dark ? '#ffffff' : '#1f2329',
       horizontalItemGutter: 28,
       titleFontSize: 14,
     },
     Segmented: {
-      trackBg: '#f0f1f3',
-      itemSelectedBg: '#ffffff',
-      itemColor: '#646a73',
-      itemSelectedColor: '#1f2329',
+      trackBg: dark ? 'rgba(255,255,255,0.06)' : '#f0f1f3',
+      itemSelectedBg: dark ? 'rgba(255,255,255,0.14)' : '#ffffff',
+      itemColor: dark ? 'rgba(255,255,255,0.64)' : '#646a73',
+      itemSelectedColor: dark ? 'rgba(255,255,255,0.92)' : '#1f2329',
     },
     Input: {
-      activeShadow: '0 0 0 3px rgba(22, 119, 255, 0.10)',
+      activeShadow: dark ? '0 0 0 3px rgba(64, 150, 255, 0.24)' : '0 0 0 3px rgba(22, 119, 255, 0.10)',
     },
     Modal: {
       titleFontSize: 16,
     },
-  },
+  }
+}
+
+/** Builds the AntD ThemeConfig for the resolved theme (light/dark algorithms). */
+export function buildAntdTheme(resolved: ResolvedTheme): ThemeConfig {
+  return {
+    algorithm: resolved === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+    token: resolved === 'dark' ? DARK_TOKEN : LIGHT_TOKEN,
+    components: componentTokens(resolved),
+  }
+}
+
+/** Light theme config kept for backwards compatibility / non-themed contexts. */
+export const theme: ThemeConfig = {
+  token: LIGHT_TOKEN,
+  components: componentTokens('light'),
 }
 
 export const speakerPalette = [
@@ -124,4 +169,9 @@ export const analysisKindLabel: Record<string, string> = {
   action_items: '待办事项',
   suggested_questions: '猜你想问',
   keywords: '关键词',
+}
+
+export const roleMeta: Record<UserRole, { label: string; color: string }> = {
+  admin: { label: '管理员', color: 'blue' },
+  member: { label: '成员', color: 'default' },
 }

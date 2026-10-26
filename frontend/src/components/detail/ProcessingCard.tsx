@@ -62,7 +62,7 @@ export function ProcessingCard({ recording, onRetry, onCancel, retryLoading }: P
                 percent={progress}
                 showInfo={false}
                 strokeColor={{ from: '#69b1ff', to: '#1677ff' }}
-                trailColor="rgba(31, 35, 41, 0.06)"
+                trailColor="var(--fill-1)"
               />
               <div className="processing-card__progress-meta">
                 <span>

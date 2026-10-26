@@ -35,14 +35,21 @@ def _counts(db: Session, user_ids: list[int]) -> tuple[dict[int, int], dict[int,
     recording_counts = dict(
         db.execute(
             select(Recording.owner_id, func.count(Recording.id))
-            .where(Recording.owner_id.in_(user_ids))
+            .where(
+                Recording.owner_id.in_(user_ids),
+                Recording.deleted_at.is_(None),
+            )
             .group_by(Recording.owner_id)
         ).all()
     )
     share_counts = dict(
         db.execute(
             select(Share.created_by, func.count(Share.id))
-            .where(Share.created_by.in_(user_ids))
+            .join(Recording, Recording.id == Share.recording_id)
+            .where(
+                Share.created_by.in_(user_ids),
+                Recording.deleted_at.is_(None),
+            )
             .group_by(Share.created_by)
         ).all()
     )

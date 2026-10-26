@@ -419,35 +419,68 @@ def _process_candidate(
         return
 
     recording_uuid = str(uuid_lib.uuid4())
+    storage_dir = storage.storage_relpath(recording_uuid)
     try:
-        directory = storage.recording_dir(recording_uuid)
-    except OSError as exc:  # pragma: no cover - disk issues
-        _record_failure(
-            db,
-            source=path,
-            consume_root=consume_root,
-            sha256=sha256,
-            stat=stat,
-            message=f"无法创建媒体目录：{exc}",
-            existing=existing,
-        )
-        result.failed += 1
-        return
-    target = directory / f"original{extension}"
-    try:
-        _move_file(path, target)
-    except OSError as exc:
-        _record_failure(
-            db,
-            source=path,
-            consume_root=consume_root,
-            sha256=sha256,
-            stat=stat,
-            message=f"无法移动文件到媒体目录：{exc}",
-            existing=existing,
-        )
-        result.failed += 1
-        return
+        from ..core.storage_backend import get_storage, original_key
+
+        backend = get_storage()
+        remote_storage = getattr(backend, "name", "local") != "local"
+    except Exception:  # noqa: BLE001 - fall back to local
+        backend = None
+        remote_storage = False
+    if remote_storage:
+        try:
+            backend.save_file(
+                path,
+                original_key(storage_dir, path.name, extension),
+                content_type=info.mime_type or None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _record_failure(
+                db,
+                source=path,
+                consume_root=consume_root,
+                sha256=sha256,
+                stat=stat,
+                message=f"无法保存到对象存储：{exc}",
+                existing=existing,
+            )
+            result.failed += 1
+            return
+        try:
+            path.unlink()
+        except OSError:
+            logger.warning("consume: imported %r but could not remove source file", path.name)
+    else:
+        try:
+            directory = storage.recording_dir(recording_uuid)
+        except OSError as exc:  # pragma: no cover - disk issues
+            _record_failure(
+                db,
+                source=path,
+                consume_root=consume_root,
+                sha256=sha256,
+                stat=stat,
+                message=f"无法创建媒体目录：{exc}",
+                existing=existing,
+            )
+            result.failed += 1
+            return
+        target = directory / f"original{extension}"
+        try:
+            _move_file(path, target)
+        except OSError as exc:
+            _record_failure(
+                db,
+                source=path,
+                consume_root=consume_root,
+                sha256=sha256,
+                stat=stat,
+                message=f"无法移动文件到媒体目录：{exc}",
+                existing=existing,
+            )
+            result.failed += 1
+            return
 
     title = Path(path.name).stem.strip() or "未命名录音"
     recording = Recording(
@@ -461,7 +494,7 @@ def _process_candidate(
         mime_type=info.mime_type or storage.guess_mime(extension),
         original_filename=path.name[:255],
         original_ext=extension,
-        storage_dir=storage.storage_relpath(recording_uuid),
+        storage_dir=storage_dir,
         size_bytes=int(stat.st_size),
         duration_ms=int(info.duration_ms or 0),
         recorded_at=_mtime_datetime(stat),

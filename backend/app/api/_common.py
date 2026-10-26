@@ -18,6 +18,12 @@ from sqlalchemy.orm import Session
 from ..core.errors import ApiError, bad_request, not_found
 from ..core.media import guess_mime
 from ..core.storage import StorageError, resolve_storage_dir
+from ..core.storage_backend import (
+    get_storage as get_media_storage,
+    recording_original_key,
+    recording_playback_key,
+    serve_key as serve_storage_key,
+)
 from ..core.utils import utcnow
 from ..deps import is_admin
 from ..models import (
@@ -146,7 +152,8 @@ def recordings_to_summaries(
 
 
 # ------------------------------------------------------------------ scoped stats
-def library_stats(db: Session, user: User | None = None) -> LibraryStats:
+def library_stats(db: Session, user: User | None = None, *, trashed: bool = False) -> LibraryStats:
+    """Library counters. ``trashed=True`` reports the trash view instead."""
     week_ago = utcnow() - timedelta(days=7)
     stmt = select(
         func.count(Recording.id),
@@ -162,6 +169,10 @@ def library_stats(db: Session, user: User | None = None) -> LibraryStats:
         func.coalesce(func.sum(Recording.duration_ms), 0),
         func.coalesce(func.sum(case((Recording.created_at >= week_ago, 1), else_=0)), 0),
     )
+    if trashed:
+        stmt = stmt.where(Recording.deleted_at.is_not(None))
+    else:
+        stmt = stmt.where(Recording.deleted_at.is_(None))
     owner_id = visible_owner_id(user)
     if owner_id is not None:
         stmt = stmt.where(Recording.owner_id == owner_id)
@@ -248,13 +259,16 @@ def tags_with_counts(
 ) -> list[TagWithCountOut]:
     """Tag catalogue with recording counts scoped to the caller's visibility."""
     owner_id = visible_owner_id(user)
-    count_query = select(func.count(recording_tags.c.recording_id)).where(
-        recording_tags.c.tag_id == Tag.id
+    count_query = (
+        select(func.count(recording_tags.c.recording_id))
+        .join(Recording, Recording.id == recording_tags.c.recording_id)
+        .where(
+            recording_tags.c.tag_id == Tag.id,
+            Recording.deleted_at.is_(None),
+        )
     )
     if owner_id is not None:
-        count_query = count_query.join(
-            Recording, Recording.id == recording_tags.c.recording_id
-        ).where(Recording.owner_id == owner_id)
+        count_query = count_query.where(Recording.owner_id == owner_id)
     count_column = count_query.scalar_subquery()
     stmt = select(Tag, count_column.label("recording_count"))
     if order == "count":
@@ -449,6 +463,53 @@ def pick_media(recording: Recording, *, download: bool) -> tuple[Path, str, str,
         content_type = recording.mime_type or guess_mime(path.suffix)
         filename = recording.original_filename or f"{recording.title or 'recording'}{path.suffix}"
     return path, content_type, filename, download
+
+
+def serve_recording_media(recording: Recording, request: Request, *, download: bool):
+    """Stream a recording's media through the configured storage backend.
+
+    Local deployments keep the v0.2 file-range path; S3/MinIO deployments proxy
+    Range requests (or optionally 307 to a presigned URL when enabled).
+    """
+    backend = get_media_storage()
+    if getattr(backend, "name", "local") == "local":
+        path, media_type, filename, attachment = pick_media(recording, download=download)
+        return serve_media_file(
+            path,
+            request,
+            content_type=media_type,
+            filename=filename,
+            inline=not attachment,
+        )
+
+    original = recording_original_key(backend, recording.storage_dir, recording.original_ext)
+    playback = recording_playback_key(backend, recording.storage_dir)
+    if download:
+        key = original or playback
+    elif recording.media_type == "video":
+        key = original or playback
+    else:
+        key = playback or original
+    if not key:
+        raise not_found("媒体文件不存在")
+    if key.endswith("/playback.m4a"):
+        media_type = "audio/mp4"
+        filename = f"{recording.title or 'recording'}.m4a"
+    else:
+        suffix = Path(key).suffix
+        media_type = recording.mime_type or guess_mime(suffix)
+        filename = recording.original_filename or f"{recording.title or 'recording'}{suffix}"
+    try:
+        return serve_storage_key(
+            backend,
+            key,
+            filename=filename,
+            request_headers=request.headers,
+            media_type=media_type,
+            download=bool(download),
+        )
+    except StorageError as exc:
+        raise ApiError(503, f"媒体存储暂不可用：{exc}", "STORAGE_UNAVAILABLE") from exc
 
 
 # ------------------------------------------------------------------ job queue bridge

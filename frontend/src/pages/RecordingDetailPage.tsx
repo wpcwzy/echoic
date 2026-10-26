@@ -19,6 +19,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons'
 import { useQueryClient } from '@tanstack/react-query'
+import { ApiError } from '../api/client'
 import {
   exportUrl,
   mediaUrl,
@@ -29,10 +30,12 @@ import {
   useRecording,
   useRegenerateInsights,
   useReprocessRecording,
+  useSystemFeatures,
   useTranscript,
   useUpdateRecording,
 } from '../api/queries'
 import { useUsers } from '../api/users'
+import { useRecordingLive } from '../api/live'
 import { AudioPlayerProvider, findActiveSegmentId, useAudioPlayer } from '../hooks/useAudioPlayer'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 import { useUiStore } from '../store/ui'
@@ -109,16 +112,27 @@ export default function RecordingDetailPage() {
   }
 
   if (recordingQuery.isError || !recording) {
+    const errorStatus = recordingQuery.error instanceof ApiError ? recordingQuery.error.status : null
+    const notFound = errorStatus === 404
     return (
       <div className="detail-page detail-page--error">
         <ErrorState
-          title="录音加载失败"
-          description={recordingQuery.error?.message || '该录音可能已被删除，或服务暂时不可用。'}
-          onRetry={() => void recordingQuery.refetch()}
+          title={notFound ? '录音已移入回收站或不存在' : '录音加载失败'}
+          description={
+            notFound
+              ? '该录音可能已被移入回收站、彻底删除，或你没有访问权限。管理员/所有者可以在资料库的回收站中恢复它（默认保留 30 天）。'
+              : recordingQuery.error?.message || '服务暂时不可用，请稍后重试。'
+          }
+          onRetry={notFound ? undefined : () => void recordingQuery.refetch()}
         />
-        <Link to="/" className="detail-error__back">
-          返回资料库
-        </Link>
+        <div className="detail-error__actions">
+          <Link to="/" className="detail-error__back">
+            返回资料库
+          </Link>
+          <Link to="/?trashed=1" className="detail-error__back">
+            打开回收站
+          </Link>
+        </div>
       </div>
     )
   }
@@ -159,11 +173,14 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   const isReady = recording.status === 'ready'
   const transcriptQuery = useTranscript(id, recording.has_transcript || isReady)
   const insightsQuery = useInsights(id, isReady, pollInsights)
+  const liveTranscriptQuery = useRecordingLive(id, isReady)
   const reprocess = useReprocessRecording(id)
   const cancelRecording = useCancelRecording(id)
   const deleteRecording = useDeleteRecording()
   const regenerate = useRegenerateInsights(id)
   const updateRecording = useUpdateRecording(id)
+  const featuresQuery = useSystemFeatures()
+  const retentionDays = featuresQuery.data?.trash.retention_days ?? 30
   const currentUser = useAuthStore((state) => state.user)
   const isAdmin = isAdminUser(currentUser)
   const transferUsersQuery = useUsers({ page_size: 100, include_disabled: false }, isAdmin && transferOpen)
@@ -269,17 +286,17 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
 
   const handleDelete = () => {
     confirmAction({
-      title: '删除这条录音？',
-      content: `《${recording.title}》的转写、AI 分析与媒体文件都会被删除，且无法恢复。`,
+      title: '移入回收站？',
+      content: `《${recording.title}》将被移入回收站，可在 ${retentionDays} 天内恢复；超过保留期后会自动彻底删除。`,
       danger: true,
-      okText: '删除',
+      okText: '移入回收站',
       onOk: async () => {
         try {
           await deleteRecording.mutateAsync(id)
-          toast.success('录音已删除')
-          navigate('/')
+          toast.success('已移入回收站，可在资料库中恢复')
+          navigate('/?trashed=1')
         } catch (error) {
-          toastError(error, '删除失败')
+          toastError(error, '移入回收站失败')
         }
       },
     })
@@ -303,7 +320,7 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
       ],
     },
     { type: 'divider' },
-    { key: 'delete', icon: <DeleteOutlined />, danger: true, label: '删除录音' },
+    { key: 'delete', icon: <DeleteOutlined />, danger: true, label: '移入回收站' },
   ]
 
   const onMoreClick: MenuProps['onClick'] = ({ key }) => {
@@ -515,6 +532,7 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
                       playing={playing}
                       onSeek={(ms) => seekTo(ms)}
                       onRetry={() => void transcriptQuery.refetch()}
+                      live={liveTranscriptQuery.data ?? null}
                     />
                   )}
                   {tab === 'summary' && (

@@ -18,8 +18,6 @@ import logging
 import threading
 import time
 
-from sqlalchemy import select
-
 from .config import settings
 from .core.utils import utcnow
 from .db import SessionLocal, init_db
@@ -87,12 +85,34 @@ def _maybe_consume_scan() -> None:
         logger.exception("consume scan hook failed")
 
 
+def _maybe_trash_purge() -> None:
+    """Hourly purge of expired trash (R-23); throttled inside services.trash."""
+    try:
+        from .services.trash import maybe_purge_expired
+
+        result = maybe_purge_expired()
+        if result and result.get("purged"):
+            logger.info("worker purged %s expired trash recording(s)", result["purged"])
+    except Exception:  # noqa: BLE001 - retention cleanup must never stop job processing
+        logger.exception("trash purge hook failed")
+
+
+def _trash_status() -> dict | None:
+    try:
+        from .services.trash import last_purge_info
+
+        return last_purge_info()
+    except Exception:  # pragma: no cover - status must stay safe before boot
+        return None
+
+
 def _worker_loop() -> None:
     logger.info("embedded worker started")
     _state["running"] = True
     _state["started_at"] = utcnow().isoformat()
     while not _stop_event.is_set():
         _maybe_consume_scan()
+        _maybe_trash_purge()
         try:
             claimed = claim_next_job()
         except Exception as exc:  # noqa: BLE001
@@ -160,6 +180,7 @@ def worker_status() -> dict:
         "embedded": bool(settings.embedded_worker),
         "started_at": _state.get("started_at"),
         "last_consume_scan": last_consume_scan,
+        "last_trash_purge": _trash_status(),
     }
 
 
@@ -175,6 +196,7 @@ def run_forever() -> None:
     try:
         while True:
             _maybe_consume_scan()
+            _maybe_trash_purge()
             claimed = claim_next_job()
             if claimed is None:
                 time.sleep(1.5)

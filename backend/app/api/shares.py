@@ -44,6 +44,7 @@ def list_shares(
     user: User = Depends(get_current_user),
 ):
     stmt = select(Share).join(Recording, Recording.id == Share.recording_id)
+    stmt = stmt.where(Recording.deleted_at.is_(None))
     if not is_admin(user):
         stmt = stmt.where(Recording.owner_id == user.id)
     if recording_id is not None:
@@ -63,7 +64,12 @@ def revoke_share(
 ):
     share = db.get(Share, share_id)
     recording = db.get(Recording, share.recording_id) if share is not None else None
-    if share is None or recording is None or not can_access_recording(user, recording):
+    if (
+        share is None
+        or recording is None
+        or recording.deleted_at is not None
+        or not can_access_recording(user, recording)
+    ):
         raise not_found("分享不存在")
     if share.revoked_at is None:
         share.revoked_at = utcnow()

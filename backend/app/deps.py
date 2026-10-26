@@ -79,15 +79,29 @@ def can_access_recording(user: User, recording: Recording) -> bool:
     return recording.owner_id is not None and recording.owner_id == user.id
 
 
-def get_recording_for_user(db: Session, user: User, recording_id: int) -> Recording:
+def get_recording_for_user(
+    db: Session, user: User, recording_id: int, *, include_deleted: bool = False
+) -> Recording:
+    recording = db.get(Recording, recording_id)
+    if recording is None or not can_access_recording(user, recording):
+        raise not_found("录音不存在")
+    if not include_deleted and getattr(recording, "deleted_at", None) is not None:
+        raise not_found("录音不存在")
+    return recording
+
+
+def get_recording_any(db: Session, user: User, recording_id: int) -> Recording:
+    """Permission-checked lookup that also returns trashed recordings (for trash APIs)."""
     recording = db.get(Recording, recording_id)
     if recording is None or not can_access_recording(user, recording):
         raise not_found("录音不存在")
     return recording
 
 
-def recording_scope(query, user: User):
-    """Apply the visibility scope to a Recording SQLAlchemy query."""
-    if is_admin(user):
-        return query
-    return query.where(Recording.owner_id == user.id)
+def recording_scope(query, user: User, *, include_deleted: bool = False):
+    """Apply visibility scope (and exclude trashed recordings by default)."""
+    if not is_admin(user):
+        query = query.where(Recording.owner_id == user.id)
+    if not include_deleted:
+        query = query.where(Recording.deleted_at.is_(None))
+    return query

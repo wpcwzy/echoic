@@ -4,10 +4,15 @@ import type { MenuProps } from 'antd'
 import {
   AppstoreOutlined,
   AudioOutlined,
+  BgColorsOutlined,
+  CheckOutlined,
+  DesktopOutlined,
   LogoutOutlined,
+  MoonOutlined,
   QuestionCircleOutlined,
   SearchOutlined,
   SettingOutlined,
+  SunOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons'
@@ -15,6 +20,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useLogout } from '../api/queries'
 import { useAuthStore } from '../store/auth'
+import { useThemeStore, type ThemeMode } from '../store/theme'
 import { colorFromString, initials } from '../utils/format'
 import { isAdminUser, roleLabel } from '../utils/roles'
 import { toast } from '../utils/toast'
@@ -67,6 +73,8 @@ export default function AppShell() {
   const logout = useLogout()
   const user = useAuthStore((state) => state.user)
   const reset = useAuthStore((state) => state.reset)
+  const themeMode = useThemeStore((state) => state.mode)
+  const setThemeMode = useThemeStore((state) => state.setMode)
 
   const isAdmin = isAdminUser(user)
   const isDetail = location.pathname.startsWith('/r/')
@@ -114,6 +122,13 @@ export default function AppShell() {
   const avatarColor = colorFromString(displayName)
   const currentRole = roleLabel(user?.role)
 
+  const themeMenuLabel = (mode: ThemeMode, label: string) => (
+    <span className="theme-menu-item">
+      <span>{label}</span>
+      {themeMode === mode && <CheckOutlined className="theme-menu-item__check" />}
+    </span>
+  )
+
   const userMenu: MenuProps['items'] = [
     {
       key: 'account',
@@ -132,6 +147,16 @@ export default function AppShell() {
       disabled: true,
     },
     { type: 'divider' },
+    {
+      key: 'theme',
+      icon: <BgColorsOutlined />,
+      label: '外观',
+      children: [
+        { key: 'theme-light', icon: <SunOutlined />, label: themeMenuLabel('light', '浅色') },
+        { key: 'theme-dark', icon: <MoonOutlined />, label: themeMenuLabel('dark', '深色') },
+        { key: 'theme-system', icon: <DesktopOutlined />, label: themeMenuLabel('system', '跟随系统') },
+      ],
+    },
     ...(isAdmin ? [{ key: 'settings', icon: <UserOutlined />, label: '账户与设置' } as const] : []),
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
   ]
@@ -139,6 +164,12 @@ export default function AppShell() {
   const onUserMenuClick: MenuProps['onClick'] = ({ key }) => {
     if (key === 'logout') handleLogout()
     if (key === 'settings') navigate('/settings?tab=account')
+    if (key.startsWith('theme-')) {
+      const nextMode = key.replace('theme-', '') as ThemeMode
+      setThemeMode(nextMode)
+      const label = nextMode === 'light' ? '浅色' : nextMode === 'dark' ? '深色' : '跟随系统'
+      toast.success(`外观已切换为「${label}」`)
+    }
   }
 
   const navLink = (item: NavItem, className: string) => (

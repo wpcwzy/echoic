@@ -129,8 +129,21 @@ async def _retrieve(
     summary_payload: dict | None,
     chapters_payload: list | None,
     question: str,
+    chat_retrieval: Any = None,
 ) -> tuple[str, list[dict]]:
     """Return (context block, citations) for the question."""
+    selected: list[int] | None = None
+    if chat_retrieval is not None and getattr(chat_retrieval, "chunks", None):
+        index_by_chunk_id = {int(chunk.id): index for index, chunk in enumerate(chunks)}
+        picked: list[int] = []
+        for hit in chat_retrieval.chunks:
+            chunk_id = getattr(hit, "chunk_id", None)
+            index = index_by_chunk_id.get(int(chunk_id)) if chunk_id is not None else None
+            if index is not None and index not in picked:
+                picked.append(index)
+        if picked:
+            selected = picked[:TOP_CHUNKS]
+
     scores: list[float] = [0.0] * len(chunks)
     has_vectors = any(chunk.embedding for chunk in chunks) and (cfg.embeddings.provider or "none") != "none"
     if has_vectors and chunks:
@@ -150,8 +163,9 @@ async def _retrieve(
     if not has_vectors:
         scores = _lexical_scores(question, chunks)
 
-    ranked = sorted(range(len(chunks)), key=lambda index: scores[index], reverse=True)
-    selected = [index for index in ranked[:TOP_CHUNKS] if scores[index] > 0] or ranked[: min(3, len(ranked))]
+    if selected is None:
+        ranked = sorted(range(len(chunks)), key=lambda index: scores[index], reverse=True)
+        selected = [index for index in ranked[:TOP_CHUNKS] if scores[index] > 0] or ranked[: min(3, len(ranked))]
 
     # Context budget: summary → chapter directory → transcript chunks.
     parts: list[str] = []
@@ -391,6 +405,14 @@ async def stream_chat(db_factory, recording_id: int, user_message: str) -> Any:
     cfg = prepared["cfg"]
     citations: list[dict] = []
     answer = ""
+    chat_retrieval = None
+    try:
+        from .retrieval import retrieve_for_chat
+
+        with db_factory() as db:
+            chat_retrieval = await retrieve_for_chat(db, int(recording_id), question, top_k=TOP_CHUNKS)
+    except Exception:  # noqa: BLE001 - hybrid retrieval must never break Q&A
+        logger.warning("hybrid chat retrieval failed, falling back to v0.2 scoring", exc_info=True)
     try:
         context, citations = await _retrieve(
             cfg,
@@ -400,6 +422,7 @@ async def stream_chat(db_factory, recording_id: int, user_message: str) -> Any:
             prepared["summary_payload"],
             prepared["chapters_payload"],
             question,
+            chat_retrieval=chat_retrieval,
         )
         messages = _build_messages(context, prepared["history"], question, cfg.prompts.get("chat") or "")
         llm = build_llm_provider(cfg.llm)

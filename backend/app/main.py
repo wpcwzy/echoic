@@ -17,6 +17,7 @@ from .api import (
     chat,
     dashboard,
     insights,
+    live,
     public,
     recordings,
     search,
@@ -26,6 +27,7 @@ from .api import (
     tags,
     transcript,
     users,
+    vector,
 )
 from .config import settings
 from .core.errors import ApiError, ProviderError
@@ -160,6 +162,8 @@ def create_app() -> FastAPI:
     app.include_router(users.router, prefix="/api/users", tags=["users"])
     app.include_router(shares.router, prefix="/api/shares", tags=["shares"])
     app.include_router(public.router, prefix="/api/public", tags=["public"])
+    app.include_router(live.router, prefix="/api/live", tags=["live"])
+    app.include_router(vector.router, prefix="/api/vector", tags=["vector"])
 
     static_dir = settings.resolved_static_dir
     if static_dir is not None:

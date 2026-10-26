@@ -119,6 +119,11 @@ def build_embedding_provider(cfg: EmbeddingConfig) -> EmbeddingProvider | None:
     if provider in ("none", ""):
         return None
     base_url, model = _apply_defaults("embeddings", provider, cfg.base_url, cfg.model)
+    if provider == "mock":
+        # v0.3.0 R-20: deterministic 256-dim hashing vectors, no network calls.
+        from .embeddings_mock import MockEmbeddingProvider
+
+        return MockEmbeddingProvider(model=model or "mock-embedding")
     if provider == "openai":
         from .embeddings_openai import OpenAIEmbeddingProvider
 

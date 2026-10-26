@@ -26,31 +26,50 @@ def run_migrations() -> list[str]:
     applied: list[str] = []
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
+    dialect = engine.dialect.name
+    bool_default = "FALSE" if dialect == "postgresql" else "0"
 
-    if "users" in tables:
-        columns = _column_names(inspector, "users")
-        dialect = engine.dialect.name
-        bool_default = "FALSE" if dialect == "postgresql" else "0"
-        additions: list[tuple[str, str]] = []
-        if "role" not in columns:
-            additions.append(("role", "ADD COLUMN role VARCHAR(16) DEFAULT 'member'"))
-        if "email" not in columns:
-            additions.append(("email", "ADD COLUMN email VARCHAR(255)"))
-        if "disabled" not in columns:
-            additions.append(("disabled", f"ADD COLUMN disabled BOOLEAN DEFAULT {bool_default}"))
-        if "last_login_at" not in columns:
-            additions.append(("last_login_at", "ADD COLUMN last_login_at TIMESTAMP"))
-        if additions:
-            with engine.begin() as conn:
-                for name, clause in additions:
-                    conn.execute(text(f"ALTER TABLE users {clause}"))
-                    applied.append(f"users.{name}")
-            logger.info("schema migration: added users columns %s", [name for name, _ in additions])
+    add_columns: dict[str, list[tuple[str, str]]] = {
+        "users": [
+            ("role", "ADD COLUMN role VARCHAR(16) DEFAULT 'member'"),
+            ("email", "ADD COLUMN email VARCHAR(255)"),
+            ("disabled", f"ADD COLUMN disabled BOOLEAN DEFAULT {bool_default}"),
+            ("last_login_at", "ADD COLUMN last_login_at TIMESTAMP"),
+        ],
+        "recordings": [
+            ("deleted_at", "ADD COLUMN deleted_at TIMESTAMP"),
+            ("deleted_by", "ADD COLUMN deleted_by INTEGER"),
+        ],
+        "chunks": [
+            ("embedding_model", "ADD COLUMN embedding_model VARCHAR(120)"),
+        ],
+    }
 
-    # Create new tables (shares, imported_files, ...). Safe / idempotent.
+    for table, specs in add_columns.items():
+        if table not in tables:
+            continue
+        columns = _column_names(inspector, table)
+        additions = [(name, clause) for name, clause in specs if name not in columns]
+        if not additions:
+            continue
+        with engine.begin() as conn:
+            for name, clause in additions:
+                conn.execute(text(f"ALTER TABLE {table} {clause}"))
+                applied.append(f"{table}.{name}")
+        logger.info("schema migration: added %s columns %s", table, [name for name, _ in additions])
+
+    # Create new tables (shares, imported_files, live_sessions, live_segments, ...).
     from . import models  # noqa: F401  (ensure all mappings are registered)
 
     Base.metadata.create_all(bind=engine)
+
+    # Indexes introduced after v0.2 (idempotent).
+    if "recordings" in set(inspect(engine).get_table_names()):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_recordings_deleted_at ON recordings (deleted_at)"))
+        except Exception:  # pragma: no cover - very old SQLite; index is an optimization only
+            logger.warning("could not create recordings.deleted_at index", exc_info=True)
 
     if "users" in set(inspect(engine).get_table_names()):
         from .models import User

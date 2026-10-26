@@ -31,6 +31,7 @@ _LOAD_OPTIONS = (
 
 
 def _scoped(stmt, user: User):
+    stmt = stmt.where(Recording.deleted_at.is_(None))
     if is_admin(user):
         return stmt
     return stmt.where(Recording.owner_id == user.id)

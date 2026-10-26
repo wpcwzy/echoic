@@ -13,16 +13,23 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, progress, stage, showStage = false, size = 'default', className }: StatusBadgeProps) {
-  const meta = statusMeta[status] ?? statusMeta.uploaded
-  const isActive = status === 'queued' || status === 'processing' || status === 'uploaded'
+  const safeStatus = statusMeta[status] ? status : 'uploaded'
+  const meta = statusMeta[safeStatus]
+  const isActive = safeStatus === 'queued' || safeStatus === 'processing' || safeStatus === 'uploaded'
   const percent = typeof progress === 'number' ? Math.max(0, Math.min(100, Math.round(progress))) : null
 
   const badge = (
     <span
       className={`status-badge ${size === 'small' ? 'status-badge--sm' : ''} ${className ?? ''}`}
-      style={{ color: meta.color, background: meta.bg }}
+      style={{
+        color: `var(--status-${safeStatus}-fg)`,
+        background: `var(--status-${safeStatus}-bg)`,
+      }}
     >
-      <span className={`status-badge__dot ${isActive ? 'status-badge__dot--pulse' : ''}`} style={{ background: meta.dot }} />
+      <span
+        className={`status-badge__dot ${isActive ? 'status-badge__dot--pulse' : ''}`}
+        style={{ background: `var(--status-${safeStatus}-dot)` }}
+      />
       <span>{meta.label}</span>
       {isActive && percent !== null && <span className="status-badge__pct">{percent}%</span>}
     </span>

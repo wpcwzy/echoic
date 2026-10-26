@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react'
 import { Modal } from 'antd'
 import { ApartmentOutlined } from '@ant-design/icons'
 import { Background, Controls, ReactFlow, type NodeTypes } from '@xyflow/react'
+import { useResolvedTheme } from '../../store/theme'
 import type { ViewpointNode } from '../../types'
 import { buildMindMap, kindColor, type MindNodeData } from '../../utils/mindmap'
 import { MindMapNodeView } from './MindMapNode'
@@ -32,6 +33,8 @@ interface MindMapModalProps {
  * Clicking a node seeks the audio to its `time_ms` when available.
  */
 export function MindMapModal({ open, onClose, root, title, onSeek }: MindMapModalProps) {
+  const resolvedTheme = useResolvedTheme()
+  const gridColor = resolvedTheme === 'dark' ? '#262b33' : '#e6e9ef'
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const graph = useMemo(() => (root ? buildMindMap(root) : { nodes: [], edges: [] }), [root])
   const bounds = useMemo(() => {
@@ -144,7 +147,7 @@ export function MindMapModal({ open, onClose, root, title, onSeek }: MindMapModa
               }}
               proOptions={{ hideAttribution: true }}
             >
-              <Background gap={20} color="#e6e9ef" />
+              <Background gap={20} color={gridColor} />
               <Controls showInteractive={false} position="bottom-right" />
             </ReactFlow>
           </div>

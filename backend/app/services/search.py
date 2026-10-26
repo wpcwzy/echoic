@@ -78,12 +78,13 @@ def search(
         return result
     pattern = _pattern(needle)
 
-    # recordings whose title/description match
+    # recordings whose title/description match (trashed recordings are invisible)
     title_stmt = select(Recording).where(
+        Recording.deleted_at.is_(None),
         or_(
             Recording.title.ilike(pattern, escape="\\"),
             Recording.description.ilike(pattern, escape="\\"),
-        )
+        ),
     )
     if owner_id is not None:
         title_stmt = title_stmt.where(Recording.owner_id == owner_id)
@@ -94,7 +95,10 @@ def search(
         select(TranscriptSegment, Recording, Speaker)
         .join(Recording, Recording.id == TranscriptSegment.recording_id)
         .outerjoin(Speaker, Speaker.id == TranscriptSegment.speaker_id)
-        .where(TranscriptSegment.text.ilike(pattern, escape="\\"))
+        .where(
+            TranscriptSegment.text.ilike(pattern, escape="\\"),
+            Recording.deleted_at.is_(None),
+        )
         .order_by(TranscriptSegment.recording_id.asc(), TranscriptSegment.start_ms.asc())
     )
     if owner_id is not None:

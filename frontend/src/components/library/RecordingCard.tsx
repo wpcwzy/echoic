@@ -1,24 +1,37 @@
-import { Button, Progress, Tooltip } from 'antd'
+import { Button, Checkbox, Progress, Tooltip } from 'antd'
 import {
   CalendarOutlined,
   ClockCircleOutlined,
+  DeleteOutlined,
   FileTextOutlined,
   PlayCircleFilled,
   RobotOutlined,
   TeamOutlined,
+  UndoOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import type { RecordingStatus, RecordingSummary } from '../../types'
 import { statusMeta } from '../../theme'
-import { formatDateShort, formatMs, formatRelative, hexToRgba } from '../../utils/format'
+import { daysUntilPurge, formatDateShort, formatMs, formatRelative, hexToRgba } from '../../utils/format'
 import { StatusBadge } from '../common/StatusBadge'
 import { AvatarGroup } from '../common/AvatarGroup'
 
-interface RecordingCardProps {
+export interface RecordingCardProps {
   recording: RecordingSummary
   /** Admin view: show which user owns the recording. */
   showOwner?: boolean
+  /** v0.3: show a selection checkbox (library multi-select). */
+  selectable?: boolean
+  selected?: boolean
+  onSelectToggle?: (id: number, checked: boolean) => void
+  /** v0.3 trash view: read-only card with restore / purge actions. */
+  trashMode?: boolean
+  retentionDays?: number
+  onRestore?: (recording: RecordingSummary) => void
+  onPurge?: (recording: RecordingSummary) => void
+  restoring?: boolean
+  purging?: boolean
 }
 
 function OwnerChip({ recording }: { recording: RecordingSummary }) {
@@ -44,7 +57,7 @@ function TagChips({ recording }: { recording: RecordingSummary }) {
         <span
           key={tag.id}
           className="tag-chip"
-          style={{ color: tag.color || '#1677ff', background: hexToRgba(tag.color || '#1677ff', 0.1) }}
+          style={{ color: tag.color || 'var(--brand)', background: hexToRgba(tag.color || '#1677ff', 0.1) }}
         >
           {tag.name}
         </span>
@@ -53,21 +66,68 @@ function TagChips({ recording }: { recording: RecordingSummary }) {
   )
 }
 
-/** Library grid card with hover play affordance. */
-export function RecordingCard({ recording, showOwner = false }: RecordingCardProps) {
+function TrashBadge({ recording, retentionDays = 30 }: { recording: RecordingSummary; retentionDays?: number }) {
+  const days = daysUntilPurge(recording.deleted_at, retentionDays)
+  return (
+    <span className="trash-badge">
+      <DeleteOutlined /> 剩余 {days} 天
+    </span>
+  )
+}
+
+function SelectionCheckbox({
+  recording,
+  selectable,
+  selected,
+  onSelectToggle,
+}: Pick<RecordingCardProps, 'recording' | 'selectable' | 'selected' | 'onSelectToggle'>) {
+  if (!selectable) return null
+  return (
+    <Checkbox
+      className="recording-select"
+      checked={selected}
+      aria-label={`选择 ${recording.title || '录音'}`}
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) => {
+        event.stopPropagation()
+        onSelectToggle?.(recording.id, event.target.checked)
+      }}
+    />
+  )
+}
+
+/** Library grid card with optional selection + trash-mode actions. */
+export function RecordingCard({
+  recording,
+  showOwner = false,
+  selectable = false,
+  selected = false,
+  onSelectToggle,
+  trashMode = false,
+  retentionDays = 30,
+  onRestore,
+  onPurge,
+  restoring = false,
+  purging = false,
+}: RecordingCardProps) {
   const navigate = useNavigate()
-  const active = ACTIVE_STATUS.includes(recording.status)
-  const failed = recording.status === 'failed'
-  const open = () => navigate(`/r/${recording.id}`)
+  const active = ACTIVE_STATUS.includes(recording.status) && !trashMode
+  const failed = recording.status === 'failed' && !trashMode
+  const open = () => {
+    if (!trashMode) navigate(`/r/${recording.id}`)
+  }
 
   return (
     <article
-      className={`recording-card recording-card--${recording.status}`}
-      role="button"
-      tabIndex={0}
-      aria-label={`打开录音 ${recording.title}`}
+      className={`recording-card recording-card--${recording.status} ${trashMode ? 'recording-card--trashed' : ''} ${
+        selected ? 'is-selected' : ''
+      }`}
+      role={trashMode ? undefined : 'button'}
+      tabIndex={trashMode ? undefined : 0}
+      aria-label={trashMode ? undefined : `打开录音 ${recording.title}`}
       onClick={open}
       onKeyDown={(event) => {
+        if (trashMode) return
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
           open()
@@ -75,10 +135,22 @@ export function RecordingCard({ recording, showOwner = false }: RecordingCardPro
       }}
     >
       <div className="recording-card__top">
-        <StatusBadge status={recording.status} progress={recording.progress} stage={recording.stage} size="small" />
-        <Tooltip title="录音时间">
-          <span className="recording-card__date">{formatRelative(recording.recorded_at || recording.created_at)}</span>
-        </Tooltip>
+        <div className="recording-card__top-left">
+          <SelectionCheckbox
+            recording={recording}
+            selectable={selectable}
+            selected={selected}
+            onSelectToggle={onSelectToggle}
+          />
+          {trashMode ? <TrashBadge recording={recording} retentionDays={retentionDays} /> : (
+            <StatusBadge status={recording.status} progress={recording.progress} stage={recording.stage} size="small" />
+          )}
+        </div>
+        <span className="recording-card__date">
+          {trashMode && recording.deleted_at
+            ? `删除于 ${formatDateShort(recording.deleted_at)}`
+            : formatRelative(recording.recorded_at || recording.created_at)}
+        </span>
       </div>
 
       <h3 className="recording-card__title" title={recording.title}>
@@ -93,7 +165,7 @@ export function RecordingCard({ recording, showOwner = false }: RecordingCardPro
             size="small"
             showInfo={false}
             strokeColor={{ from: '#69b1ff', to: '#1677ff' }}
-            trailColor="rgba(31,35,41,0.06)"
+            trailColor="var(--fill-1)"
           />
         </div>
       )}
@@ -103,68 +175,114 @@ export function RecordingCard({ recording, showOwner = false }: RecordingCardPro
         <span>
           <ClockCircleOutlined /> {formatMs(recording.duration_ms)}
         </span>
-        <Tooltip title="录音时间">
-          <span>
-            <CalendarOutlined /> {formatDateShort(recording.recorded_at || recording.created_at)}
-          </span>
-        </Tooltip>
+        <span>
+          <CalendarOutlined /> {formatDateShort(recording.recorded_at || recording.created_at)}
+        </span>
         {showOwner && <OwnerChip recording={recording} />}
         <TagChips recording={recording} />
       </div>
 
       <footer className="recording-card__footer">
-        <AvatarGroup speakers={recording.speakers} max={3} size={22} />
-        <div className="recording-card__footer-right">
-          {recording.has_transcript && (
-            <Tooltip title="已有转录">
-              <FileTextOutlined className="recording-card__ai-icon" />
-            </Tooltip>
-          )}
-          {recording.insight_kinds?.length > 0 && (
-            <Tooltip title={`已有 ${recording.insight_kinds.length} 项 AI 分析`}>
-              <RobotOutlined className="recording-card__ai-icon" />
-            </Tooltip>
-          )}
-          <Tooltip title="打开并播放">
-            <button
-              type="button"
-              className="recording-card__play"
-              aria-label="打开并播放"
-              onClick={(event) => {
-                event.stopPropagation()
-                navigate(`/r/${recording.id}?autoplay=1`)
-              }}
-            >
-              <PlayCircleFilled />
-            </button>
-          </Tooltip>
-        </div>
+        {trashMode ? (
+          <>
+            <span className="recording-card__trash-hint">
+              {retentionDays} 天后自动彻底删除
+            </span>
+            <div className="recording-card__trash-actions">
+              <Button size="small" icon={<UndoOutlined />} loading={restoring} onClick={() => onRestore?.(recording)}>
+                恢复
+              </Button>
+              <Button size="small" danger icon={<DeleteOutlined />} loading={purging} onClick={() => onPurge?.(recording)}>
+                彻底删除
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <AvatarGroup speakers={recording.speakers} max={3} size={22} />
+            <div className="recording-card__footer-right">
+              {recording.has_transcript && (
+                <Tooltip title="已有转录">
+                  <FileTextOutlined className="recording-card__ai-icon" />
+                </Tooltip>
+              )}
+              {recording.insight_kinds?.length > 0 && (
+                <Tooltip title={`已有 ${recording.insight_kinds.length} 项 AI 分析`}>
+                  <RobotOutlined className="recording-card__ai-icon" />
+                </Tooltip>
+              )}
+              <Tooltip title="打开并播放">
+                <button
+                  type="button"
+                  className="recording-card__play"
+                  aria-label="打开并播放"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    navigate(`/r/${recording.id}?autoplay=1`)
+                  }}
+                >
+                  <PlayCircleFilled />
+                </button>
+              </Tooltip>
+            </div>
+          </>
+        )}
       </footer>
     </article>
   )
 }
 
 /** Compact list row for the list view. */
-export function RecordingRow({ recording, showOwner = false }: RecordingCardProps) {
+export function RecordingRow({
+  recording,
+  showOwner = false,
+  selectable = false,
+  selected = false,
+  onSelectToggle,
+  trashMode = false,
+  retentionDays = 30,
+  onRestore,
+  onPurge,
+  restoring = false,
+  purging = false,
+}: RecordingCardProps) {
   const navigate = useNavigate()
-  const meta = statusMeta[recording.status] ?? statusMeta.uploaded
-  const open = () => navigate(`/r/${recording.id}`)
+  const safeStatus = statusMeta[recording.status] ? recording.status : 'uploaded'
+  const open = () => {
+    if (!trashMode) navigate(`/r/${recording.id}`)
+  }
 
   return (
     <div
-      className="recording-row"
-      role="button"
-      tabIndex={0}
+      className={`recording-row ${trashMode ? 'recording-row--trashed' : ''} ${selected ? 'is-selected' : ''}`}
+      role={trashMode ? undefined : 'button'}
+      tabIndex={trashMode ? undefined : 0}
       onClick={open}
       onKeyDown={(event) => {
+        if (trashMode) return
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
           open()
         }
       }}
     >
-      <div className="recording-row__icon" style={{ color: meta.color, background: meta.bg }}>
-        {recording.media_type === 'video' ? <FileTextOutlined /> : <FileTextOutlined />}
+      {selectable && (
+        <Checkbox
+          className="recording-select"
+          checked={selected}
+          aria-label={`选择 ${recording.title || '录音'}`}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            event.stopPropagation()
+            onSelectToggle?.(recording.id, event.target.checked)
+          }}
+        />
+      )}
+      <div
+        className="recording-row__icon"
+        style={{ color: `var(--status-${safeStatus}-fg)`, background: `var(--status-${safeStatus}-bg)` }}
+      >
+        <FileTextOutlined />
       </div>
       <div className="recording-row__main">
         <div className="recording-row__title-line">
@@ -183,6 +301,12 @@ export function RecordingRow({ recording, showOwner = false }: RecordingCardProp
               <OwnerChip recording={recording} />
             </>
           )}
+          {trashMode && recording.deleted_at && (
+            <>
+              <span>·</span>
+              <span className="recording-row__deleted">删除于 {formatDateShort(recording.deleted_at)}</span>
+            </>
+          )}
           {recording.description && (
             <>
               <span>·</span>
@@ -191,20 +315,54 @@ export function RecordingRow({ recording, showOwner = false }: RecordingCardProp
           )}
         </div>
       </div>
-      <StatusBadge status={recording.status} progress={recording.progress} stage={recording.stage} size="small" />
+      {trashMode ? <TrashBadge recording={recording} retentionDays={retentionDays} /> : (
+        <StatusBadge status={recording.status} progress={recording.progress} stage={recording.stage} size="small" />
+      )}
       <span className="recording-row__duration">{formatMs(recording.duration_ms)}</span>
-      <Tooltip title="打开">
-        <Button
-          type="text"
-          shape="circle"
-          icon={<PlayCircleFilled />}
-          aria-label="打开并播放"
-          onClick={(event) => {
-            event.stopPropagation()
-            navigate(`/r/${recording.id}?autoplay=1`)
-          }}
-        />
-      </Tooltip>
+      {trashMode ? (
+        <div className="recording-row__trash-actions">
+          <Tooltip title="恢复到资料库">
+            <Button
+              type="text"
+              size="small"
+              icon={<UndoOutlined />}
+              aria-label="恢复录音"
+              loading={restoring}
+              onClick={(event) => {
+                event.stopPropagation()
+                onRestore?.(recording)
+              }}
+            />
+          </Tooltip>
+          <Tooltip title="彻底删除（无法恢复）">
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              aria-label="彻底删除"
+              loading={purging}
+              onClick={(event) => {
+                event.stopPropagation()
+                onPurge?.(recording)
+              }}
+            />
+          </Tooltip>
+        </div>
+      ) : (
+        <Tooltip title="打开">
+          <Button
+            type="text"
+            shape="circle"
+            icon={<PlayCircleFilled />}
+            aria-label="打开并播放"
+            onClick={(event) => {
+              event.stopPropagation()
+              navigate(`/r/${recording.id}?autoplay=1`)
+            }}
+          />
+        </Tooltip>
+      )}
     </div>
   )
 }

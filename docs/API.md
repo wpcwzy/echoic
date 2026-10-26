@@ -325,3 +325,57 @@ data: {"type":"done","message_id":42}
 - 处理进度通过 `GET /api/recordings/{id}` 轮询（前端 2s 一次，ready/failed 停止）。
 - 服务重启时 `processing/running` 的任务重置为 `queued`（最多 1 次自动重启，attempts 超限则 failed）。
 - 演示模式（默认 provider=mock）下所有 AI 输出来自内置高质量示例数据；上传真实音频时 mock ASR 会产生演示转录（页面顶部明确标注“演示模式”）。
+
+
+---
+
+## 10. v0.3 新增：回收站 / 实时转写 / 向量检索 / 对象存储（P1 batch 2+3）
+
+> 完整契约见 [`docs/10-v0.3.0-实现契约.md`](./10-v0.3.0-实现契约.md)。鉴权、错误格式、权限模型同 §0/§9。
+
+### 10.1 回收站与批量（R-23）
+
+- 全局软删除：列表/搜索/仪表盘/媒体/转录/分享/问答等默认排除 `deleted_at IS NOT NULL`；不可见资源 404。
+- `DELETE /api/recordings/{id}` → 移入回收站：`{ok:true,id,deleted_at,restore_before}`（同时撤销其公开分享）。
+- `GET /api/recordings?trashed=true` → 回收站列表（admin 全部 / member 仅自己；`stats` 为回收站范围）。
+- `POST /api/recordings/{id}/restore` → 恢复，返回 `RecordingSummary`（恢复不重新启用已撤销的分享链接）。
+- `DELETE /api/recordings/{id}/purge` → 彻底删除（仅回收站内；清理 DB + 媒体/对象存储），`{ok:true,purged:true}`。
+- `POST /api/recordings/batch`：
+```json
+{"action":"trash|restore|purge|reprocess|tag_add|tag_remove",
+ "recording_ids":[1,2,3],"tag_ids":[1,2],"from":"all|asr|insights|embeddings"}
+```
+→ `{action,succeeded,failed,results:[{id,ok,error?}]}`；单次 ≤ `ECHOIC_BATCH_MAX_ITEMS`（默认 100）、部分成功；`tag_add/tag_remove` 仅 admin；权限逐项校验。
+- 保留期 `ECHOIC_TRASH_RETENTION_DAYS`（默认 30），worker 每小时清理过期项。
+
+### 10.2 实时转写 Beta（R-19，默认关闭）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/live/sessions` | `{language?,merge_mode?}` → 201 `{id,uuid,status,provider,model,merge_mode,ws_url,...}`；`ECHOIC_LIVE_ENABLED=false` → 403 `LIVE_DISABLED` |
+| GET | `/api/live/sessions/{id}` | owner/admin：会话状态 |
+| GET | `/api/live/sessions/{id}/segments` | `{segments:[LiveSegmentOut]}` |
+| POST | `/api/live/sessions/{id}/stop` \| `/cancel` | 幂等结束/取消 |
+| WS | `/api/live/sessions/{id}/stream` | Cookie `echoic_token` 或 `?token=`；二进制 PCM16LE 16k mono 音频帧；JSON `{type:"start"}` / `{type:"stop"}`；服务端事件 `ready/partial/final/error/done`；close codes 4403/4404/4409/4413/1000/1011 |
+| GET | `/api/recordings/{id}/live` | 绑定该录音的实时会话 + 片段（详情页“实时稿 Beta”） |
+
+上传接口 `POST /api/recordings/upload` 新增可选 form 字段 `live_session_id`，绑定后按会话 `merge_mode` 合并：`replace`（默认，保留离线说话人转录）或 `promote`（用单说话人实时稿作为最终转录并重算分析；离线 ASR 失败时自动回退 promote）。
+
+### 10.3 向量 / 混合检索（R-20 Phase 1）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/vector/status` | admin：`{backend,available,embeddings_configured,embedding_model,dim,chunks_total,chunks_indexed,stale_chunks,fallback_reason}` |
+| POST | `/api/vector/reindex` | admin：`{recording_ids?,force?,dry_run?}` → `{ok,processed_recordings,chunks,skipped,errors}`；单次 ≤200 录音；无 embedding provider → 400 |
+| GET | `/api/vector/search?q=&mode=hybrid|semantic&limit=` | 登录用户；ACL（admin 全部/member 自己）→ `{query,mode,results:[{recording_id,title,segment_id,speaker,start_ms,end_ms,text,score}],fallback_reason}` |
+
+- Embedding provider 支持 `mock`（演示/测试，确定性 256 维）；生产可用 OpenAI 兼容或 DashScope embeddings。
+- `ECHOIC_VECTOR_BACKEND=auto|numpy|pgvector`；pgvector 不可用时自动降级 numpy 并返回 `fallback_reason`。
+- CLI：`python -m app.tools.vector_reindex --all [--dry-run] [--force] [--recording-id N]`。
+- AI 问答 RAG 自动使用混合检索（无向量时行为与 v0.2 等价）。
+
+### 10.4 系统
+
+- `GET /api/system/features`（登录）：`{live:{enabled,provider,max_minutes,merge_mode},vector:{backend,search_enabled,embeddings_configured},storage:{backend},trash:{retention_days}}`，供前端能力探测。
+- `GET /api/system/health` 新增 `storage/storage_backend/storage_detail` 字段；对象存储不可用时整体 `degraded`。
+- 对象存储：`ECHOIC_STORAGE_BACKEND=local|s3` + `ECHOIC_S3_*`；S3/MinIO 模式支持上传、管线 staging、Range 媒体代理（可选 307 预签名）、删除与迁移 CLI `python -m app.tools.storage_migrate --from local --to s3 --dry-run|--apply|--verify`。

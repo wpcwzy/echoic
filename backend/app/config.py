@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Echoic"
-    version: str = "0.2.0"
+    version: str = "0.3.0"
     debug: bool = False
     log_level: str = "INFO"
 
@@ -50,6 +50,32 @@ class Settings(BaseSettings):
     consume_dir: str = ""
     consume_interval_sec: int = 15
     consume_owner_username: str = ""
+
+    # v0.3.0: trash / batch
+    trash_retention_days: int = 30
+    batch_max_items: int = 100
+
+    # v0.3.0: object storage (local | s3)
+    storage_backend: str = "local"
+    s3_endpoint: str = ""
+    s3_bucket: str = "echoic"
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_region: str = "us-east-1"
+    s3_path_style: bool = True
+    s3_prefix: str = ""
+    s3_presign_redirect: bool = False
+
+    # v0.3.0: live transcription (beta, default off)
+    live_enabled: bool = False
+    live_provider: str = "auto"
+    live_max_minutes: int = 60
+    live_merge_mode: str = "replace"
+
+    # v0.3.0: vector retrieval
+    vector_backend: str = "auto"
+    vector_top_k: int = 8
+    vector_min_score: float = 0.2
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"

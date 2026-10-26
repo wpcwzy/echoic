@@ -187,3 +187,11 @@ export function humanizeError(error: unknown, fallback = '操作失败，请稍�
 export function dateStamp(date = new Date()): string {
   return dayjs(date).format('YYYYMMDD-HHmm')
 }
+
+/** Days left before a trashed recording is purged (retention-based). */
+export function daysUntilPurge(deletedAt: string | null | undefined, retentionDays = 30): number {
+  if (!deletedAt) return 0
+  const expire = dayjs(deletedAt).add(retentionDays, 'day')
+  const diff = expire.diff(dayjs(), 'hour')
+  return Math.max(0, Math.ceil(diff / 24))
+}

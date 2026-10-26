@@ -68,3 +68,47 @@ def test_migration_is_idempotent(isolated_engine):
     assert first
     second = migrations.run_migrations()
     assert second == []
+
+
+def test_migrates_v02_to_v03_columns_and_tables(tmp_path, monkeypatch):
+    """v0.2 -> v0.3 upgrade: trash columns, embedding_model, live tables."""
+    db_path = tmp_path / "v02.db"
+    con = sqlite3.connect(db_path)
+    con.executescript(
+        """
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY, username VARCHAR(64) UNIQUE, password_hash VARCHAR(255),
+            display_name VARCHAR(120), is_admin BOOLEAN, role VARCHAR(16), email VARCHAR(255),
+            disabled BOOLEAN, last_login_at TIMESTAMP, created_at DATETIME
+        );
+        INSERT INTO users (username,password_hash,display_name,is_admin,role,disabled,created_at)
+        VALUES ('admin','h','Admin',1,'admin',0,'2026-01-01');
+        CREATE TABLE recordings (
+            id INTEGER PRIMARY KEY, uuid VARCHAR(36), title VARCHAR(255), status VARCHAR(24),
+            owner_id INTEGER, created_at DATETIME
+        );
+        CREATE TABLE chunks (
+            id INTEGER PRIMARY KEY, recording_id INTEGER, idx INTEGER, text TEXT,
+            embedding BLOB, dim INTEGER
+        );
+        """
+    )
+    con.close()
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+    session_local = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    monkeypatch.setattr(migrations, "engine", engine)
+    monkeypatch.setattr(migrations, "SessionLocal", session_local)
+    try:
+        applied = migrations.run_migrations()
+        assert "recordings.deleted_at" in applied
+        assert "recordings.deleted_by" in applied
+        assert "chunks.embedding_model" in applied
+        inspector = inspect(engine)
+        recording_cols = {c["name"] for c in inspector.get_columns("recordings")}
+        assert {"deleted_at", "deleted_by"} <= recording_cols
+        chunk_cols = {c["name"] for c in inspector.get_columns("chunks")}
+        assert "embedding_model" in chunk_cols
+        tables = set(inspector.get_table_names())
+        assert {"live_sessions", "live_segments"} <= tables
+    finally:
+        engine.dispose()

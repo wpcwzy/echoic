@@ -2,6 +2,9 @@
 
 > 本文面向**自托管部署**：用 Docker Compose 一条命令跑起「录音 → 转录 → AI 纪要 → 观点树 / 思维导图 → RAG 问答」完整链路。
 > 开发调试见 [README 开发指南](../README.md#开发指南)；接口与架构分别见 [API.md](API.md)、[ARCHITECTURE.md](ARCHITECTURE.md)。
+>
+> **v0.3.0 新增（均为可选项，默认行为与 v0.2 一致）**：对象存储（S3/MinIO，§10）、实时转写 Beta（§11）、
+> 向量 / 混合检索（§12）、回收站与批量操作（§13）。默认仍为单容器 + SQLite + 本地存储，零外部依赖可运行。
 
 ---
 
@@ -11,22 +14,25 @@
 浏览器 ──HTTPS──▶ 反向代理(可选 Nginx/Caddy) ──▶ Echoic 容器 :8000
                                                   ├── FastAPI /api/*，SSE 流式问答
                                                   └── 前端静态资源（同源，无需单独 nginx）
-                                            卷 echoic-data:/data
+                                            卷 echoic-data:/data（local 存储模式，默认）
                                               ├── echoic.db（SQLite，默认）
                                               ├── media/{uuid}/original.* · playback.m4a
                                               ├── consume/（v0.2 自动导入监听目录）
                                               └── secret.key（JWT/密钥加密）
+                                    可选：对象存储（v0.3.0，S3/MinIO）──▶ media/{uuid}/* 外置到 bucket
 ```
 
 - **单容器**：FastAPI 同时提供 API 与前端，无 Redis / Celery 依赖；
-- **无外部服务**也能完整运行（默认 mock AI + SQLite + 内嵌任务线程）；
-- 真实 AI 服务只需**出站 HTTPS** 访问用户配置的服务商（阿里云百炼 / OpenAI 兼容端点 / Whisper 兼容服务）。
+- **无外部服务**也能完整运行（默认 mock AI + SQLite + 本地存储 + 内嵌任务线程）；
+- **可选扩展**（v0.3.0，均不改变默认部署）：对象存储 `--profile minio`、PostgreSQL `--profile postgres`、独立 worker `--profile worker`；
+- 真实 AI 服务只需**出站 HTTPS** 访问用户配置的服务商（阿里云百炼 / OpenAI 兼容端点 / Whisper 兼容服务）；实时转写 Beta（开启时）与语义检索也走同一出站网络。
 
 | 项目 | 默认值 | 说明 |
 |---|---|---|
 | 容器内端口 | `8000` | 由 uvicorn 监听 |
 | 宿主机端口 | `8000` | compose 中 `${ECHOIC_HTTP_PORT:-8000}` 可改 |
-| 数据目录 | `/data`（卷 `echoic-data`） | SQLite + 媒体 + 密钥 + consume |
+| 数据目录 | `/data`（卷 `echoic-data`） | SQLite + 密钥 + consume；local 模式还包含媒体 |
+| 媒体存储（v0.3.0） | `local`（默认） | 可切换为 S3 兼容存储：`ECHOIC_STORAGE_BACKEND=s3`（MinIO compose profile 或外部 S3/MinIO） |
 | 镜像 | `ghcr.io/wpcwzy/echoic:${ECHOIC_IMAGE_TAG:-latest}` | CI 发布的**多架构镜像**（linux/amd64 + arm64），无需本地构建 |
 
 ---
@@ -43,7 +49,9 @@
 | 网络 | 出站 HTTPS | 仅接入真实 AI 服务时需要 |
 
 > **镜像部署无需构建**：只需能访问 `ghcr.io`；运行阶段不需要联网（mock 模式）。
-> 仅「从源码构建」（§3.3）才需要访问 npm / PyPI（或配置国内镜像，见 §3.4）。
+> 仅「从源码构建」（§3.1）才需要访问 npm / PyPI（或配置国内镜像，见 §3.3）。
+> **v0.3.0 可选组件**：MinIO 对象存储、PostgreSQL、独立 worker 均通过 compose profile 启用，
+> 默认单容器 / SQLite / 本地存储行为不变，无需额外系统依赖。
 
 ---
 
@@ -150,6 +158,32 @@ docker build \
 > 另：开发机上的 `frontend/.npmrc` 可能含本机绝对路径（cache/logs-dir），
 > 该文件已被 `.dockerignore` 排除；Dockerfile 在构建阶段会生成只含容器内路径的项目级 `.npmrc`。
 
+### 3.4 可选：启用 MinIO 对象存储（v0.3.0）
+
+```bash
+# 1) .env 中启用 S3 后端（使用 compose 内置 MinIO）
+#    ECHOIC_STORAGE_BACKEND=s3
+#    ECHOIC_S3_ENDPOINT=http://minio:9000
+#    ECHOIC_S3_ACCESS_KEY=echoic                    # 与 ECHOIC_MINIO_ROOT_USER 一致
+#    ECHOIC_S3_SECRET_KEY=change-me-echoic-minio    # 与 ECHOIC_MINIO_ROOT_PASSWORD 一致（生产必改）
+#    ECHOIC_S3_BUCKET=echoic
+#    ECHOIC_S3_PATH_STYLE=true
+
+# 2) 启动 minio + 一次性 bucket 初始化 + echoic
+docker compose --profile minio up -d
+
+# 3) 确认状态（minio 应为 healthy；minio-init 退出码 0 表示 bucket 已创建）
+docker compose ps
+docker compose logs minio-init
+curl -fsS http://localhost:8000/api/system/health   # storage 状态应为 ok
+```
+
+- MinIO 控制台：`http://localhost:9001`（账号见 `ECHOIC_MINIO_ROOT_USER/PASSWORD`）；
+- 已有本地媒体迁移到 S3：见 §10 对象存储中的 `storage_migrate` 命令；
+- MinIO 官方社区镜像已停止公开分发（2026-10 状态），compose 默认使用活跃维护的
+  MinIO 协议兼容镜像 `pgsty/silo`（固定 release tag、多架构），可用 `ECHOIC_MINIO_IMAGE` 覆盖；
+- 详细说明、备份与故障排查见 §10 与 §15。
+
 ---
 
 ## 4. 首次登录与初始化
@@ -235,6 +269,8 @@ docker build \
 | `/data/media/{uuid}/` | 原始音视频与 `playback.m4a` | **必须** |
 | `/data/secret.key` | JWT / API Key 加密密钥 | **必须**（丢失后已保存的 API Key 无法解密） |
 | `/data/consume/` | v0.2 自动导入监听目录（处理完的原文件会移走/保留策略见日志） | 建议备份（源文件） |
+| S3 bucket（`ECHOIC_S3_BUCKET`，v0.3.0） | `s3` 存储模式下全部媒体对象（key 形如 `media/{uuid}/original.*`） | **必须**（可用 `mc mirror` / 对象存储备份工具；compose MiniO 场景可备份卷 `echoic-minio`） |
+| 回收站数据（v0.3.0） | 软删除的录音仍保留在 DB 与媒体/对象存储中，直到彻底删除或超过 `ECHOIC_TRASH_RETENTION_DAYS` | 包含在上面的备份中；**过期自动彻底清理不可恢复** |
 | PostgreSQL（可选 profile） | 使用 PG 时的业务数据 | 用 `pg_dump` 单独备份 |
 
 ### 6.2 备份
@@ -257,6 +293,24 @@ docker run --rm -v echoic-data:/data -v "$PWD/backups":/backup alpine \
 docker compose exec postgres pg_dump -U echoic echoic | gzip > backups/echoic-pg-$(date +%Y%m%d).sql.gz
 ```
 
+使用 S3 / MinIO 时（v0.3.0，媒体在 bucket 内）：
+
+```bash
+# 方式一：用 mc 镜像把 bucket 镜像到本地目录（示例）
+docker run --rm --network echoic_default -v "$PWD/backups":/backup \
+  -e MC_HOST_local="http://echoic:<口令>@minio:9000" \
+  docker.io/pgsty/silo:RELEASE.2026-10-26T00-00-00Z \
+  mcli mirror --overwrite local/echoic /backup/s3-echoic-$(date +%Y%m%d)
+
+# 方式二：直接备份 compose 内置 MinIO 数据卷（需停 minio 保证一致性）
+docker compose --profile minio stop minio
+docker run --rm -v echoic-minio:/data -v "$PWD/backups":/backup alpine \
+  tar czf /backup/echoic-minio-$(date +%Y%m%d).tar.gz -C /data .
+docker compose --profile minio start minio
+```
+
+> DB 备份与 S3 媒体备份应尽量在同一时间窗口完成；恢复时先恢复 DB，再恢复 bucket/对象。
+
 ### 6.3 恢复
 
 ```bash
@@ -265,6 +319,9 @@ docker run --rm -v echoic-data:/data -v "$PWD/backups":/backup alpine \
   sh -c 'rm -rf /data/* && tar xzf /backup/echoic-data-YYYYMMDD.tar.gz -C /data'
 docker compose up -d
 ```
+
+> 使用 S3/MinIO（v0.3.0）时：恢复顺序为 **先恢复数据库，再恢复 bucket/媒体对象**（见 6.2 的 S3 备份命令）；
+> `secret.key` 必须与数据库一并恢复，否则已保存的 API Key 与分享链接 Cookie 无法解密。
 
 ### 6.4 升级
 
@@ -283,7 +340,28 @@ curl -fsS http://localhost:8000/api/system/health
 - 回滚：把 `ECHOIC_IMAGE_TAG` 改回旧版本（或 `sha-xxxxxxx`）后重复 pull/up；
 - 源码构建环境：`git pull` 后执行
   `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`；
-- 数据库表结构由应用启动时自动迁移（v0.2 起包含迁移机制；**升级前务必先备份**）。
+- 数据库表结构由应用启动时自动迁移（**幂等**，兼容 v0.1/v0.2 数据目录；SQLite 与 PostgreSQL 均适用；**升级前务必先备份**）。
+
+#### v0.3.0 升级步骤（回收站 / 对象存储 / 实时 / 向量）
+
+```bash
+# 1) 备份（DB + 媒体/对象存储 + secret.key，见 6.2）
+# 2) 固定目标版本并拉取镜像
+sed -i 's/^ECHOIC_IMAGE_TAG=.*/ECHOIC_IMAGE_TAG=v0.3.0/' .env
+docker compose pull
+# 3) 启动（自动执行幂等迁移：recordings.deleted_at/deleted_by、chunks.embedding_model、
+#    live_sessions/live_segments 新表等）
+docker compose up -d
+# 4) 校验
+curl -fsS http://localhost:8000/api/system/health      # status/db/media/storage/worker 应为 ok
+curl -fsS http://localhost:8000/api/system/features    # 需登录；live/vector/storage/trash 能力开关
+docker compose logs --tail=100 echoic                  # 查看 migration 日志
+```
+
+- **旧数据兼容**：v0.3.0 默认仍为 local 存储 / 无实时 / 向量自动降级，升级后功能行为与 v0.2 一致；
+- 若计划启用 S3：升级完成后按 §10 配置并先 `storage_migrate --dry-run` → `--apply` → `--verify`，确认无误再清理本地媒体；
+- 若计划启用向量检索：在设置页配置 Embedding 后执行一次全量 reindex（§12）；
+- 升级失败回滚：`ECHOIC_IMAGE_TAG` 改回 `v0.2.0` 后 `docker compose pull && docker compose up -d`（数据库迁移为向后兼容的加列/建表，回滚不会删除数据）。
 
 ---
 
@@ -296,8 +374,9 @@ curl -fsS http://localhost:8000/api/system/health
 | 真实模型本地推理（Whisper/Ollama） | 8 核 + GPU | 16GB+ | 视模型 | 模型服务独立部署，Echoic 只作为客户端 |
 
 - 转码（16k wav / playback.m4a）为 CPU 峰值来源，处理 1 小时录音约需 1~3 分钟；
-- 向量（Embedding）存于 SQLite BLOB，512 维 × 数万切片约数百 MB；
-- 上传上限由 `ECHOIC_MAX_UPLOAD_MB` 控制（默认 2048MB），反向代理需同步调整 `client_max_body_size`。
+- 向量（Embedding）存于 SQLite BLOB，512 维 × 数万切片约数百 MB（v0.3.0 语义检索）；实时转写为 CPU/带宽轻量（16k mono PCM ≈ 32KB/s），但真实 ASR 按服务商时长计费；
+- 对象存储（v0.3.0）：若用内置 MinIO，额外预留与媒体量相当的磁盘（bucket 卷 `echoic-minio`）；
+- 上传上限由 `ECHOIC_MAX_UPLOAD_MB` 控制（默认 2048MB），反向代理需同步调整 `client_max_body_size`；使用 `ECHOIC_S3_PRESIGN_REDIRECT=true` 时大文件下载不经过应用服务器带宽。
 
 ---
 
@@ -389,7 +468,200 @@ docker compose --profile postgres --profile worker up -d
 
 ---
 
-## 10. 本地开发与类生产运行（不经 Docker）
+## 10. 对象存储（S3 / MinIO，v0.3.0）
+
+v0.3.0 新增**存储抽象**：媒体文件可外置到 S3 兼容对象存储，DB/密钥/consume 仍保留在 `/data`。
+
+| 模式 | 配置 | 说明 |
+|---|---|---|
+| `local`（默认） | `ECHOIC_STORAGE_BACKEND=local` | 行为与 v0.2 完全一致，媒体在 `echoic-data` 卷 |
+| `s3` | `ECHOIC_STORAGE_BACKEND=s3` + `ECHOIC_S3_*` | 媒体存入 bucket；支持 MinIO / AWS S3 / 其他 S3 兼容服务 |
+
+### 10.1 配置项
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `ECHOIC_STORAGE_BACKEND` | `local` | `local` / `s3` |
+| `ECHOIC_S3_ENDPOINT` | 空 | S3 端点；compose 内 MinIO 为 `http://minio:9000`，本机/宿主机访问为 `http://localhost:9000` |
+| `ECHOIC_S3_BUCKET` | `echoic` | bucket 名（compose MinIO 由 `minio-init` 自动创建） |
+| `ECHOIC_S3_ACCESS_KEY` / `ECHOIC_S3_SECRET_KEY` | 本地体验默认值 | 访问密钥；使用内置 MinIO 时**必须与** `ECHOIC_MINIO_ROOT_USER/PASSWORD` 一致 |
+| `ECHOIC_S3_REGION` | `us-east-1` | 区域（MinIO 任意值，AWS 按实际区域） |
+| `ECHOIC_S3_PATH_STYLE` | `true` | MinIO 必须 `true`；AWS S3 可用 `false`（virtual-hosted） |
+| `ECHOIC_S3_PREFIX` | 空 | 对象键前缀（多实例共享 bucket 时隔离用） |
+| `ECHOIC_S3_PRESIGN_REDIRECT` | `false` | `true` 时媒体接口返回 307 预签名 URL；默认 `false` = 同源代理 Range（推荐） |
+
+### 10.2 使用 compose 内置 MinIO
+
+```bash
+# .env 关键项（启用内置 MinIO）
+ECHOIC_STORAGE_BACKEND=s3
+ECHOIC_S3_ENDPOINT=http://minio:9000
+ECHOIC_S3_ACCESS_KEY=echoic                  # = ECHOIC_MINIO_ROOT_USER
+ECHOIC_S3_SECRET_KEY=change-me-echoic-minio  # = ECHOIC_MINIO_ROOT_PASSWORD（生产必改）
+ECHOIC_S3_BUCKET=echoic
+ECHOIC_S3_PATH_STYLE=true
+
+docker compose --profile minio up -d         # 启动 minio + minio-init + echoic
+docker compose ps                            # minio healthy；minio-init exited(0)
+docker compose logs minio-init               # bucket 创建结果
+```
+
+- `minio`：S3 API `9000`（`ECHOIC_MINIO_PORT`）、Console `9001`（`ECHOIC_MINIO_CONSOLE_PORT`），数据卷 `echoic-minio`；
+- `minio-init`：一次性容器，`mcli mb --ignore-existing` 幂等创建 bucket，失败自动重启重试；
+- **镜像说明**：MinIO 官方社区镜像已停止公开分发（2026-10：Docker Hub `minio/minio` 已 404，quay.io 需认证）。
+  compose 默认使用活跃维护的 MinIO 协议兼容分支 `docker.io/pgsty/silo:RELEASE.2026-10-26T00-00-00Z`
+  （多架构 amd64/arm64，镜像内置 `mcli` 客户端）；如你有官方镜像访问权限，可用
+  `ECHOIC_MINIO_IMAGE` 覆盖（`minio` 与 `minio-init` 复用同一镜像）。
+- **本机进程 / 宿主机访问**：把 `ECHOIC_S3_ENDPOINT` 改为 `http://localhost:9000` 并确保端口已映射；
+  容器之间使用服务名 `minio` 走 compose 网络即可。
+- **安全**：生产必须修改默认账号口令；建议只在内网/反代后暴露 S3 与 Console 端口；
+  外部 S3（AWS/OSS 等）建议使用仅授权该 bucket 的独立 AccessKey，而不是账号根密钥。
+  口令使用 URL 安全字符（默认模板中的 `MC_HOST_local` 会把它拼进 URL）。
+
+### 10.3 从 local 迁移到 S3（storage_migrate）
+
+```bash
+# 0) 先完成 §6.2 备份；先配置好 ECHOIC_S3_*（不要急着删除本地媒体）
+# 1) 预演：只统计不写入
+docker compose exec echoic python -m app.tools.storage_migrate --from local --to s3 --dry-run
+# 2) 执行迁移（默认保留源文件，可重试；逐录音复制 original/playback）
+#    可选：--limit N 分批迁移；--create-bucket 首次自动建 bucket
+docker compose exec echoic python -m app.tools.storage_migrate --from local --to s3 --apply
+# 3) 校验：对比对象 size/hash（--no-hash 可只比大小）
+docker compose exec echoic python -m app.tools.storage_migrate --from local --to s3 --verify
+# 4) 可选：全部校验通过后清理源文件（谨慎；默认保留）
+docker compose exec echoic python -m app.tools.storage_migrate --from local --to s3 --apply --prune
+```
+
+- 迁移期间无需停机，但建议避免同时上传/处理大文件；失败可重复执行（幂等/可重试）；
+- 先 `--dry-run` 看计划，再 `--apply`，最后 `--verify`；**确认 verify 全部通过后再考虑 --prune**（保留源文件是最安全的回滚手段）；
+- 回滚：设置 `ECHOIC_STORAGE_BACKEND=local` 并重启即可（若本地媒体已删除，可用
+  `storage_migrate --from s3 --to local --apply` 反向迁移）。
+
+### 10.4 健康状态与降级
+
+- `GET /api/system/health` 增加 `storage` 状态：`ok` / `degraded`（具体字段以 v0.3.0 镜像实际输出为准；
+  也可通过 `GET /api/system/features` 的 `storage.backend` 或 `GET /api/system/info` 查看当前后端）；
+- bucket 缺失、连接失败或凭据错误时：健康检查显示 degraded，上传接口返回中文错误；
+- `ECHOIC_S3_PRESIGN_REDIRECT=true` 时媒体接口返回 307 预签名 URL——要求对象存储地址对**最终用户浏览器**可达，
+  若 MinIO 仅内网可达请保持 `false`（同源代理 Range）。
+
+---
+
+## 11. 实时转写 Beta（R-19，v0.3.0 默认关闭）
+
+> **Beta 说明**：实时字幕用于录音过程中的即时参考，**处理完成后的离线转写仍是最终稿**；
+> 实时转写不做说话人分离，且为单进程设计（多副本部署不支持共享实时会话）。
+
+### 11.1 开启方式
+
+```bash
+# .env（或启动环境变量）
+ECHOIC_LIVE_ENABLED=true          # 总开关（kill switch）
+ECHOIC_LIVE_PROVIDER=auto         # auto / mock / dashscope_realtime
+ECHOIC_LIVE_MAX_MINUTES=60        # 单次会话上限（成本护栏）
+ECHOIC_LIVE_MERGE_MODE=replace    # replace（默认）/ promote
+docker compose up -d              # 重启生效
+```
+
+- 开启后录音页出现「实时字幕（Beta）」入口（前端通过 `GET /api/system/features` 探测）；
+- `ECHOIC_LIVE_PROVIDER=auto`：mock ASR → mock 实时（零 Key 演示）；DashScope ASR → `dashscope_realtime`；
+- 使用 DashScope 实时时需先在「设置 → AI 服务」配置 ASR（provider/base_url/Key/model）；
+- 需要浏览器麦克风权限：非 localhost 必须 HTTPS（与普通网页录音相同）。
+
+### 11.2 能力与接口
+
+| 接口 | 说明 |
+|---|---|
+| `POST /api/live/sessions` | 创建实时会话（`LIVE_ENABLED=false` → 403 `LIVE_DISABLED`） |
+| `GET /api/live/sessions/{id}` / `.../segments` | 会话状态 / 已确定片段 |
+| `POST /api/live/sessions/{id}/stop` / `cancel` | 结束（幂等）/ 取消并丢弃 |
+| `WS /api/live/sessions/{id}/stream` | 实时音频流：Cookie/`?token=` 鉴权；PCM16LE 16kHz mono；事件 `ready/partial/final/error/done` |
+| `GET /api/recordings/{id}/live` | 查看绑定到录音的实时稿 |
+
+- WS 关闭码：未启用/无权限 → `4403`；会话不存在 → `4404`；非 active / 重复生产者 → `4409`；音频积压（约 10s 队列）→ `4413`；正常结束 → `1000`；
+- `merge_mode=replace`：保留离线 ASR 转录（含说话人）为最终稿，实时稿另存可查；
+- `merge_mode=promote`：用实时稿（单说话人）作为最终转录并重算 AI 分析；离线 ASR 失败时也会自动回退 promote。
+
+### 11.3 限制、成本与容量
+
+- **Beta**：无说话人分离、无实时 AI 分析，最终以离线转写为准；
+- **单进程**：实时会话状态在内存中，多副本/多 worker 部署不支持会话共享（文档与 UI 均已标注）；
+- **成本护栏**：`ECHOIC_LIVE_MAX_MINUTES` 到时会发送 error + done 并结束；实时 ASR 按音频时长计费，
+  建议仅按需开启并关注服务商计费；
+- **背压**：服务端队列有上限（约 10s 音频），超出会返回 error 并关闭连接；
+- 关闭开关后旧会话不可继续；已有录音的离线处理不受影响。
+
+---
+
+## 12. 向量 / 混合检索（R-20，v0.3.0）
+
+### 12.1 概念与配置
+
+- 处理完成时按 TranscriptSegment 生成 chunks；配置 Embedding 后将向量写入 `chunks.embedding`（记录 `embedding_model`）；
+- 搜索/问答支持 **关键词 / 混合（RRF）/ 语义** 三种模式；无向量或索引为空时自动降级关键词并返回原因（`fallback_reason`）；
+- Embedding provider（设置页「AI 服务」或环境变量）：`mock`（演示/测试）、`dashscope`（text-embedding-v3）、
+  `openai`（任何 OpenAI 兼容 embedding 服务）。
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `ECHOIC_VECTOR_BACKEND` | `auto` | `auto`（优先 pgvector，不可用自动降级 numpy）/ `numpy` / `pgvector` |
+| `ECHOIC_VECTOR_TOP_K` | 8 | 语义/混合检索返回条数上限 |
+| `ECHOIC_VECTOR_MIN_SCORE` | 0.2 | 语义命中最低相似度 |
+
+### 12.2 索引构建 / 重建
+
+- **设置页 → 系统 → 检索索引**（admin）：查看后端/模型/已索引/过期数量，一键重建（支持 dry-run 提示）；
+- API：
+  - `GET /api/vector/status`（admin）：`{backend,available,embeddings_configured,embedding_model,dim,chunks_total,chunks_indexed,stale_chunks,fallback_reason}`；
+  - `POST /api/vector/reindex`（admin，同步执行）：`{recording_ids?, force?, dry_run?}`，单次 ≤200 录音；
+  - `GET /api/vector/search?q=&mode=hybrid|semantic&limit=`（登录用户，ACL：admin 全部 / member 仅自己）。
+- CLI：`python -m app.tools.vector_reindex --all [--dry-run] [--recording-id ID] [--force]`
+  （容器内：`docker compose exec echoic python -m app.tools.vector_reindex --all`）。
+- 更换 Embedding 模型/维度后需 `--force` 全量重建；`embedding_model` 不一致的 chunks 计为 stale。
+
+### 12.3 后端选择与降级
+
+| 后端 | 说明 |
+|---|---|
+| `numpy`（默认/auto 回退） | 进程内加载可见录音的 chunks 矩阵做余弦相似度；单进程内存，适合个人/小团队 |
+| `pgvector`（experimental） | 仅 PostgreSQL + pgvector 扩展可用；启动时尝试 `CREATE EXTENSION` 与建表；不可用自动降级 numpy 并记录原因 |
+
+- 未配置 Embedding 时：语义/混合搜索禁用（前端置灰并展示原因），问答行为与 v0.2 等价（字面/关键词检索）；
+- 索引 stale（模型变更/未建索引）时：搜索结果可能只覆盖部分录音，建议先 reindex；
+- 存储占用：向量以 float32 BLOB 存在 DB；每 1 万 chunk × 1024 维约 40MB（另加索引开销）。
+
+---
+
+## 13. 回收站与数据保留（R-23，v0.3.0）
+
+### 13.1 软删除语义
+
+- `DELETE /api/recordings/{id}` 默认**软删除**（移入回收站），返回 `{ok,id,deleted_at,restore_before}`；
+- 默认的列表 / 详情 / 搜索 / 仪表盘 / 标签计数 / 分享 / 聊天 / 媒体等**全部排除**已删除录音（访问 → 404）；
+- 已删除录音的公开分享自动失效（404）；删除后分享被软撤销，**恢复后不会自动恢复分享**，需要重新创建；
+- 回收站入口：资料库筛选「回收站」；支持恢复 / 彻底删除（二次确认）；批量操作见 §13.3。
+
+### 13.2 保留期与自动清理
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `ECHOIC_TRASH_RETENTION_DAYS` | 30 | 回收站保留天数；过期后由后台 worker **每小时**彻底清理 |
+| `ECHOIC_BATCH_MAX_ITEMS` | 100 | 批量操作单次最大条目数（超限 400） |
+
+- 恢复窗口：删除后 `restore_before` 之前可恢复；超过保留期的录音会被自动彻底删除；
+- 彻底删除会清理 DB 行 + 本地媒体目录 / S3 对象前缀 + 分享关系，**不可恢复**；
+- 回收站中的录音仍占用磁盘/对象存储，并包含在备份中；若需立即释放空间，可在回收站执行「彻底删除」。
+
+### 13.3 批量操作
+
+- 支持动作：`trash`（默认，移入回收站）/ `restore` / `purge` / `reprocess` / `tag_add` / `tag_remove`；
+- 权限逐条校验、**部分成功**（返回 `succeeded/failed/results`，失败项带原因）；tag 操作为 admin-only；
+- 前端仅对当前筛选页选中项生效（文案会提示）；批量删除一律走回收站，不提供批量直接彻底删除。
+
+---
+
+## 14. 本地开发与类生产运行（不经 Docker）
 
 > 适用：没有 Docker 的开发机 / WSL / 只想快速跑通验收。
 
@@ -421,7 +693,7 @@ ECHOIC_DATA_DIR=/tmp/echoic-e2e ECHOIC_DEMO_SEED=true ECHOIC_SECRET_KEY=e2e-secr
 
 ---
 
-## 11. 故障排查
+## 15. 故障排查
 
 | 现象 | 排查与解决 |
 |---|---|
@@ -436,6 +708,15 @@ ECHOIC_DATA_DIR=/tmp/echoic-e2e ECHOIC_DEMO_SEED=true ECHOIC_SECRET_KEY=e2e-secr
 | 任务 `failed` 且提示 ASR/LLM 连接失败 | 「设置 → AI 服务」点「测试连接」；检查 base_url / Key / 出站网络；日志中不含明文 Key |
 | 放入 consume 目录的文件未自动导入（v0.2） | 确认 `ECHOIC_CONSUME_ENABLED=true`、目录在容器内可写（默认 `/data/consume`）、扩展名受支持；查看日志 `consume`；修改 `ECHOIC_CONSUME_INTERVAL_SEC` 可调整扫描间隔；归属用户由 `ECHOIC_CONSUME_OWNER_USERNAME` 指定（空=首个管理员） |
 | 公开分享链接无法解锁 | 检查 `ECHOIC_SHARE_COOKIE_HOURS`（默认 2 小时）与链接是否过期；分享解锁 Cookie 仅对该分享记录有效 |
+| v0.3 S3：`/api/system/health` 显示 storage degraded / 上传中文报错 | 检查 `ECHOIC_S3_ENDPOINT` 可达性、bucket 是否存在（`minio-init` 日志/`mcli ls local/echoic`）、`ECHOIC_S3_ACCESS_KEY/SECRET_KEY` 与 MinIO 账号是否一致、`ECHOIC_S3_PATH_STYLE=true`；容器内用服务名 `minio`，本机进程用 `localhost` |
+| v0.3 S3：返回 403 / SignatureDoesNotMatch | 访问密钥不匹配或含 URL 特殊字符；确认 MinIO `ECHOIC_MINIO_ROOT_USER/PASSWORD` 与应用 `ECHOIC_S3_ACCESS_KEY/SECRET_KEY` 完全一致，口令使用 URL 安全字符 |
+| v0.3 MinIO：`docker compose --profile minio pull` 404 / 无法拉取 | 官方社区镜像已停止公开分发（2026-10）；使用 compose 默认的 `pgsty/silo` 固定 tag，或通过 `ECHOIC_MINIO_IMAGE` 指定你有权访问的 MinIO 镜像仓库 |
+| v0.3 媒体：浏览器 307 跳转到对象存储后打不开 | 设置了 `ECHOIC_S3_PRESIGN_REDIRECT=true` 但 MinIO/S3 地址对用户浏览器不可达；改回 `false`（同源代理 Range）或为对象存储配置公网 HTTPS/反代 |
+| v0.3 实时：录音页没有实时字幕入口 / WS 连接失败 | 确认 `ECHOIC_LIVE_ENABLED=true` 并重启；`GET /api/system/features` 查看 live.enabled/provider；WS 关闭码 4403=未启用/无权限、4404=会话不存在、4409=非 active、4413=音频积压；检查浏览器麦克风权限与 HTTPS、DashScope ASR 配置与出站网络 |
+| v0.3 实时：实时稿与最终稿不一致 / 没有说话人 | 预期行为：实时稿仅作参考（无说话人分离），处理完成后以离线转写为最终稿；如需用实时稿作为最终转录，设置 `ECHOIC_LIVE_MERGE_MODE=promote` 后重新处理 |
+| v0.3 向量：语义搜索被禁用 / 结果不全 | 设置页配置 Embedding 后执行全量重建（§12）；`GET /api/vector/status` 查看 `embeddings_configured/stale_chunks/fallback_reason`；`ECHOIC_VECTOR_BACKEND=auto` 在 PG 无 pgvector 扩展时会自动降级 numpy |
+| v0.3 回收站：删除的录音想找回 / 空间未释放 | 在资料库「回收站」中恢复（`restore_before` 之前）；彻底删除或超过 `ECHOIC_TRASH_RETENTION_DAYS` 后不可恢复；回收站录音仍占用磁盘/对象存储，可执行「彻底删除」立即释放 |
+| v0.3 批量操作返回 400 | 单次条目数超过 `ECHOIC_BATCH_MAX_ITEMS`（默认 100）或条目非法；批量结果为部分成功（见返回 `results`） |
 | 登录 429 | 登录限速 5 次/分钟/IP；等待 1 分钟，或确认反向代理传递了真实 `X-Forwarded-For` |
 | 麦克风无法录音 | 非 HTTPS 且非 localhost 时浏览器禁止 `getUserMedia`；配置 HTTPS 或改用文件上传 |
 | 忘记管理员密码 | 停止服务 → 用 sqlite 删除/重置用户后重启会重建管理员：`docker compose exec echoic python -c "..."`（或恢复备份）；更简单：删除空库重来仅适用于演示数据场景 |
@@ -455,7 +736,7 @@ docker stats echoic                           # 资源占用
 
 ---
 
-## 12. 安全建议清单
+## 16. 安全建议清单
 
 - [ ] 修改默认管理员密码（`admin/admin123` 仅用于首次登录）；
 - [ ] 生产环境通过 HTTPS 暴露（反向代理），不要直接裸奔公网 8000；
@@ -466,10 +747,14 @@ docker stats echoic                           # 资源占用
 - [ ] 关注上传上限与磁盘水位，防止磁盘写满导致 SQLite 损坏；
 - [ ] v0.2 多用户 / 分享能力默认关闭或受限：保持 `ECHOIC_ALLOW_REGISTRATION=false`（禁止匿名注册），按需在用户管理创建账号；公开分享链接只在需要时创建，并注意 `ECHOIC_SHARE_COOKIE_HOURS` 时效；
 - [ ] 定期 `docker compose pull` 获取安全更新（或固定语义化版本并关注 [CHANGELOG](../CHANGELOG.md)）。
+- [ ] v0.3 对象存储：修改 MinIO 默认账号口令；MinIO S3 API/Console 端口不要直接暴露公网（反代 + HTTPS + 防火墙）；外部 S3 使用仅授权单 bucket 的独立密钥，并妥善备份 bucket 数据；
+- [ ] v0.3 实时转写：按需开启 `ECHOIC_LIVE_ENABLED`，用 `ECHOIC_LIVE_MAX_MINUTES` 限制单次时长以控制第三方计费；
+- [ ] v0.3 回收站：`ECHOIC_TRASH_RETENTION_DAYS` 到期会不可恢复地清理数据，回收站内容一并纳入备份策略；
+- [ ] v0.3 向量检索：Embedding API Key 同样加密存储与掩码显示；更换 Embedding 模型/维度后需全量 reindex（旧向量会被判定 stale）。
 
 ---
 
-## 13. 构建与镜像说明
+## 17. 构建与镜像说明
 
 ### 13.1 官方镜像（推荐）
 
@@ -503,13 +788,14 @@ Stage 2  python:3.12-slim    runtime
 ```
 
 - 入口脚本负责：数据目录可写校验、可选等待数据库、`exec` 主进程（信号直达）；
+- v0.3.0 镜像内已包含 `boto3`（S3 对象存储）与 numpy 等依赖，无需额外构建参数；MinIO 为独立 compose profile，不进入 Echoic 镜像；
 - 可自定义构建参数：`NODE_VERSION`、`PYTHON_VERSION`、`NPM_REGISTRY`、`PIP_INDEX_URL`；
 - 镜像内以非 root（uid 1000）运行；bind mount 宿主机目录时需 `sudo chown -R 1000:1000 <目录>`；
 - 本仓库开发机无 Docker CLI，本地未运行过容器；但官方镜像已由 GitHub Actions 在真实 Docker 环境**成功构建并推送 GHCR**（多架构），首次 Actions 运行记录见 GitHub Actions 页面。
 
 ---
 
-## 14. 验证部署是否成功
+## 18. 验证部署是否成功
 
 ```bash
 # 1) 健康检查（无需登录）
@@ -523,8 +809,21 @@ curl -fsS -c /tmp/echoic.cookie -X POST http://localhost:8000/api/auth/login \
 # 3) 资料库列表（应看到演示录音）
 curl -fsS -b /tmp/echoic.cookie 'http://localhost:8000/api/recordings?page=1&page_size=5' | python3 -m json.tool
 
-# 4) 完整自动化验收（本地环境）
-./scripts/verify.sh            # 依赖齐全时包含 e2e/smoke.py
+# 4) v0.3.0 新能力自检
+#    能力开关（需登录 Cookie 或 Bearer）
+curl -fsS -b /tmp/echoic.cookie http://localhost:8000/api/system/features | python3 -m json.tool
+#    对象存储（启用 S3 时）
+docker compose ps                     # minio healthy / minio-init exited(0)
+#    向量索引状态（admin）
+curl -fsS -b /tmp/echoic.cookie http://localhost:8000/api/vector/status | python3 -m json.tool
+#    回收站（admin）
+curl -fsS -b /tmp/echoic.cookie 'http://localhost:8000/api/recordings?trashed=true&page_size=5' | python3 -m json.tool
+#    实时转写（默认关闭应返回 403 LIVE_DISABLED）
+curl -fsS -o /dev/null -w '%{http_code}\n' -b /tmp/echoic.cookie -X POST \
+  -H 'Content-Type: application/json' -d '{}' http://localhost:8000/api/live/sessions
+
+# 5) 完整自动化验收（本地环境）
+./scripts/verify.sh            # 依赖齐全时包含 e2e/smoke.py / smoke_v02.py
 ```
 
 详细端到端用例与截图见 `e2e/REPORT.md`、`docs/screenshots/`。

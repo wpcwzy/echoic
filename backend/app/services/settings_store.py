@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_PROVIDERS: dict[str, set[str]] = {
     "asr": {"mock", "dashscope_realtime", "dashscope_file", "openai"},
     "llm": {"mock", "openai"},
-    "embeddings": {"none", "openai", "dashscope"},
+    "embeddings": {"none", "openai", "dashscope", "mock"},
 }
 
 DEFAULT_BASE_URLS: dict[str, dict[str, str]] = {
@@ -38,7 +38,11 @@ DEFAULT_MODELS: dict[str, dict[str, str]] = {
         "openai": "whisper-1",
     },
     "llm": {"openai": "qwen-plus"},
-    "embeddings": {"openai": "text-embedding-3-small", "dashscope": "text-embedding-v3"},
+    "embeddings": {
+        "openai": "text-embedding-3-small",
+        "dashscope": "text-embedding-v3",
+        "mock": "mock-embedding",
+    },
 }
 
 SETTING_KEYS = ("ai.asr", "ai.llm", "ai.embeddings", "prompts", "system")

@@ -165,6 +165,7 @@ class RecordingSummary(ORMModel):
     created_at: UTCDateTime
     updated_at: UTCDateTime
     processed_at: UTCDateTime | None = None
+    deleted_at: UTCDateTime | None = None
 
 
 class RecordingDetail(RecordingSummary):
@@ -400,11 +401,14 @@ class WorkerInfo(BaseModel):
 
 class HealthOut(BaseModel):
     status: str = "ok"
-    version: str = "0.2.0"
+    version: str = "0.3.0"
     db: str = "ok"
     media: str = "ok"
     ffmpeg: str = "ok"
     worker: str = "ok"
+    storage: str = "ok"
+    storage_backend: str = "local"
+    storage_detail: str = ""
     demo_mode: bool = False
     time: str = ""
 
@@ -502,3 +506,140 @@ class ConsumeScanOut(BaseModel):
     ok: bool = True
     result: ConsumeScanResult
     at: UTCDateTime | None = None
+
+
+# ---------------------------------------------------------------- v0.3 trash / batch (R-23)
+class BatchActionIn(BaseModel):
+    action: Literal["trash", "restore", "purge", "reprocess", "tag_add", "tag_remove"]
+    recording_ids: list[int] = Field(min_length=1, max_length=500)
+    tag_ids: list[int] | None = None
+    from_: Literal["all", "asr", "insights", "embeddings"] = Field(default="all", alias="from")
+
+
+class BatchItemResult(BaseModel):
+    id: int
+    ok: bool
+    error: str | None = None
+
+
+class BatchOut(BaseModel):
+    action: str
+    succeeded: int = 0
+    failed: int = 0
+    results: list[BatchItemResult] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------- v0.3 live transcription (R-19)
+class LiveSessionCreateIn(BaseModel):
+    language: str | None = Field(default=None, max_length=16)
+    merge_mode: Literal["replace", "promote"] | None = None
+
+
+class LiveSessionOut(BaseModel):
+    id: int
+    uuid: str
+    status: Literal["active", "ended", "merged", "failed", "cancelled"]
+    provider: str = ""
+    model: str = ""
+    language: str = "zh"
+    merge_mode: Literal["replace", "promote"] = "replace"
+    recording_id: int | None = None
+    started_at: UTCDateTime | None = None
+    ended_at: UTCDateTime | None = None
+    total_audio_ms: int = 0
+    error: str | None = None
+    ws_url: str | None = None
+
+
+class LiveSegmentOut(BaseModel):
+    id: int
+    idx: int
+    start_ms: int
+    end_ms: int
+    text: str
+    is_final: bool = True
+    speaker_label: str | None = None
+
+
+class LiveSessionDetailOut(BaseModel):
+    session: LiveSessionOut
+    segments: list[LiveSegmentOut] = Field(default_factory=list)
+
+
+class RecordingLiveOut(BaseModel):
+    session: LiveSessionOut
+    segments: list[LiveSegmentOut] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------- v0.3 vector / hybrid search (R-20)
+class VectorStatusOut(BaseModel):
+    backend: str = "numpy"
+    available: bool = True
+    embeddings_configured: bool = False
+    embedding_model: str | None = None
+    dim: int | None = None
+    chunks_total: int = 0
+    chunks_indexed: int = 0
+    stale_chunks: int = 0
+    fallback_reason: str | None = None
+
+
+class VectorReindexIn(BaseModel):
+    recording_ids: list[int] | None = None
+    force: bool = False
+    dry_run: bool = False
+
+
+class VectorReindexOut(BaseModel):
+    ok: bool = True
+    processed_recordings: int = 0
+    chunks: int = 0
+    skipped: int = 0
+    errors: list[str] = Field(default_factory=list)
+
+
+class VectorSearchHit(BaseModel):
+    recording_id: int
+    recording_title: str = ""
+    segment_id: int | None = None
+    speaker: str = ""
+    start_ms: int = 0
+    end_ms: int = 0
+    text: str = ""
+    score: float = 0.0
+
+
+class VectorSearchOut(BaseModel):
+    query: str
+    mode: str = "hybrid"
+    results: list[VectorSearchHit] = Field(default_factory=list)
+    fallback_reason: str | None = None
+
+
+# ---------------------------------------------------------------- v0.3 feature flags
+class LiveFeaturesOut(BaseModel):
+    enabled: bool = False
+    provider: str = "mock"
+    max_minutes: int = 60
+    merge_mode: Literal["replace", "promote"] = "replace"
+
+
+class VectorFeaturesOut(BaseModel):
+    backend: str = "numpy"
+    search_enabled: bool = True
+    embeddings_configured: bool = False
+
+
+class StorageFeaturesOut(BaseModel):
+    backend: str = "local"
+
+
+class TrashFeaturesOut(BaseModel):
+    retention_days: int = 30
+
+
+class FeaturesOut(BaseModel):
+    live: LiveFeaturesOut = Field(default_factory=LiveFeaturesOut)
+    vector: VectorFeaturesOut = Field(default_factory=VectorFeaturesOut)
+    storage: StorageFeaturesOut = Field(default_factory=StorageFeaturesOut)
+    trash: TrashFeaturesOut = Field(default_factory=TrashFeaturesOut)

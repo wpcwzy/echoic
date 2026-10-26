@@ -7,6 +7,7 @@ import {
   Input,
   InputNumber,
   Progress,
+  Segmented,
   Select,
   Skeleton,
   Switch,
@@ -25,9 +26,14 @@ import {
   InfoCircleOutlined,
   LogoutOutlined,
   ReloadOutlined,
+  BgColorsOutlined,
+  DesktopOutlined,
+  MoonOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
   ScanOutlined,
+  SunOutlined,
+  PartitionOutlined,
   SettingOutlined,
   ThunderboltOutlined,
   UserOutlined,
@@ -46,9 +52,18 @@ import {
   useTestProvider,
   useConsumeScan,
 } from '../api/queries'
+import { useVectorReindex, useVectorStatus } from '../api/vector'
 import { useAuthStore } from '../store/auth'
+import { useThemeStore, type ThemeMode } from '../store/theme'
 import { isAdminUser } from '../utils/roles'
-import type { AiKind, ConsumeScanResponse, ProviderSettings, ProviderTestResult, Settings } from '../types'
+import type {
+  AiKind,
+  ConsumeScanResponse,
+  ProviderSettings,
+  ProviderTestResult,
+  Settings,
+  VectorReindexResult,
+} from '../types'
 import { formatBytes, formatDate, humanizeError } from '../utils/format'
 import { confirmAction, toast, toastError } from '../utils/toast'
 import { ErrorState } from '../components/common/ErrorState'
@@ -76,6 +91,7 @@ const PROVIDER_OPTIONS: Record<AiKind, { label: string; value: string }[]> = {
   ],
   embeddings: [
     { label: '不启用', value: 'none' },
+    { label: '内置演示（Mock 向量，仅演示/测试）', value: 'mock' },
     { label: 'OpenAI 兼容接口', value: 'openai' },
     { label: '阿里云百炼', value: 'dashscope' },
   ],
@@ -127,6 +143,8 @@ export default function SettingsPage() {
   const user = useAuthStore((state) => state.user)
   const resetAuth = useAuthStore((state) => state.reset)
   const isAdmin = isAdminUser(user)
+  const themeMode = useThemeStore((state) => state.mode)
+  const setThemeMode = useThemeStore((state) => state.setMode)
 
   const tabParam = searchParams.get('tab')
   const activeTab: SettingsTab = TABS.some((tab) => tab.key === tabParam) ? (tabParam as SettingsTab) : 'ai'
@@ -141,6 +159,8 @@ export default function SettingsPage() {
   const healthQuery = useSystemHealth()
   const systemInfoQuery = useSystemInfo(activeTab === 'about' || activeTab === 'system')
   const consumeScan = useConsumeScan()
+  const vectorStatusQuery = useVectorStatus(activeTab === 'system')
+  const vectorReindex = useVectorReindex()
 
   const [aiDrafts, setAiDrafts] = useState<Settings['ai'] | null>(null)
   const [keys, setKeys] = useState<Record<AiKind, string>>({ asr: '', llm: '', embeddings: '' })
@@ -150,6 +170,7 @@ export default function SettingsPage() {
   const [testingKind, setTestingKind] = useState<AiKind | null>(null)
   const [savingKind, setSavingKind] = useState<AiKind | null>(null)
   const [scanResult, setScanResult] = useState<ConsumeScanResponse | null>(null)
+  const [reindexResult, setReindexResult] = useState<{ result: VectorReindexResult; dryRun: boolean } | null>(null)
   const [passwordForm] = Form.useForm<{ old_password: string; new_password: string; confirm: string }>()
 
   useEffect(() => {
@@ -495,6 +516,13 @@ export default function SettingsPage() {
                 </label>
               </div>
 
+              {kind === 'embeddings' && draft.provider === 'mock' && (
+                <div className="settings-inline-hint">
+                  <PartitionOutlined /> Mock 向量使用确定性哈希（dim 256），仅用于演示和功能测试；
+                  生产环境建议配置 OpenAI / 阿里云百炼 Embedding 并重建索引。
+                </div>
+              )}
+
               {result && (
                 <Alert
                   className="settings-test-result"
@@ -561,6 +589,21 @@ export default function SettingsPage() {
           </footer>
         </section>
       </div>
+    )
+  }
+
+  const handleReindex = (dryRun: boolean) => {
+    vectorReindex.mutate(
+      { dry_run: dryRun },
+      {
+        onSuccess: (result) => {
+          setReindexResult({ result, dryRun })
+          if (dryRun) toast.success(`试运行完成：将处理 ${result.processed_recordings} 条录音、${result.chunks} 个切片`)
+          else toast.success(`索引完成：${result.chunks} 个切片${result.errors.length ? `，${result.errors.length} 个错误` : ''}`)
+          void vectorStatusQuery.refetch()
+        },
+        onError: (error) => toastError(error, '重建索引失败'),
+      },
     )
   }
 
@@ -718,6 +761,122 @@ export default function SettingsPage() {
         <section className="settings-card">
           <header className="settings-card__head">
             <div className="settings-card__title">
+              <span className="settings-card__icon settings-card__icon--vector">
+                <PartitionOutlined />
+              </span>
+              <div>
+                <h3>检索索引（向量搜索）</h3>
+                <p>语义/混合检索依赖的切片向量索引；配置 Embedding 后可重建</p>
+              </div>
+            </div>
+            {vectorStatusQuery.data ? (
+              <Tag color={vectorStatusQuery.data.available ? 'success' : 'warning'}>
+                {vectorStatusQuery.data.backend} {vectorStatusQuery.data.available ? '可用' : '降级'}
+              </Tag>
+            ) : null}
+          </header>
+
+          {vectorStatusQuery.isLoading ? (
+            <Skeleton active paragraph={{ rows: 2 }} />
+          ) : vectorStatusQuery.isError ? (
+            <ErrorState
+              compact
+              title="索引状态加载失败"
+              description={vectorStatusQuery.error?.message || '请稍后重试。'}
+              onRetry={() => void vectorStatusQuery.refetch()}
+            />
+          ) : vectorStatusQuery.data ? (
+            <>
+              <div className="settings-info-grid">
+                <div>
+                  <span className="settings-info-grid__label">向量后端</span>
+                  <span className="settings-info-grid__value">{vectorStatusQuery.data.backend}</span>
+                </div>
+                <div>
+                  <span className="settings-info-grid__label">Embedding 模型</span>
+                  <span className="settings-info-grid__value">
+                    {vectorStatusQuery.data.embedding_model || (vectorStatusQuery.data.embeddings_configured ? '已配置' : '未配置')}
+                  </span>
+                </div>
+                <div>
+                  <span className="settings-info-grid__label">维度</span>
+                  <span className="settings-info-grid__value">{vectorStatusQuery.data.dim ?? '—'}</span>
+                </div>
+                <div>
+                  <span className="settings-info-grid__label">已索引 / 总切片</span>
+                  <span className="settings-info-grid__value">
+                    {vectorStatusQuery.data.chunks_indexed} / {vectorStatusQuery.data.chunks_total}
+                  </span>
+                </div>
+                <div>
+                  <span className="settings-info-grid__label">过期切片</span>
+                  <span className="settings-info-grid__value">{vectorStatusQuery.data.stale_chunks}</span>
+                </div>
+              </div>
+              {vectorStatusQuery.data.fallback_reason && (
+                <Alert
+                  className="settings-test-result"
+                  type="warning"
+                  showIcon
+                  message="向量后端已降级"
+                  description={vectorStatusQuery.data.fallback_reason}
+                />
+              )}
+              {!vectorStatusQuery.data.embeddings_configured && (
+                <Alert
+                  className="settings-test-result"
+                  type="info"
+                  showIcon
+                  message="尚未配置 Embedding 模型"
+                  description="可在上方「向量嵌入（Embedding）」中配置 OpenAI / 阿里云百炼，或使用内置 Mock 进行演示，然后重建索引。"
+                />
+              )}
+              {reindexResult && (
+                <Alert
+                  className="settings-test-result"
+                  type={reindexResult.result.errors.length ? 'warning' : 'success'}
+                  showIcon
+                  message={`${reindexResult.dryRun ? '试运行' : '重建'}完成：处理 ${reindexResult.result.processed_recordings} 条录音，${reindexResult.result.chunks} 个切片，跳过 ${reindexResult.result.skipped} 个`}
+                  description={
+                    reindexResult.result.errors.length
+                      ? `错误（前 3 条）：${reindexResult.result.errors.slice(0, 3).join('；')}`
+                      : undefined
+                  }
+                />
+              )}
+              <footer className="settings-card__actions">
+                <Tooltip title={vectorStatusQuery.data.embeddings_configured ? '' : '请先配置 Embedding 模型'}>
+                  <Button
+                    icon={<ExperimentOutlined />}
+                    disabled={!vectorStatusQuery.data.embeddings_configured || vectorReindex.isPending}
+                    loading={vectorReindex.isPending && vectorReindex.variables?.dry_run === true}
+                    onClick={() => handleReindex(true)}
+                  >
+                    试运行
+                  </Button>
+                </Tooltip>
+                <Tooltip title={vectorStatusQuery.data.embeddings_configured ? '' : '请先配置 Embedding 模型'}>
+                  <Button
+                    type="primary"
+                    icon={<ThunderboltOutlined />}
+                    disabled={!vectorStatusQuery.data.embeddings_configured || vectorReindex.isPending}
+                    loading={vectorReindex.isPending && vectorReindex.variables?.dry_run !== true}
+                    onClick={() => handleReindex(false)}
+                  >
+                    重建索引
+                  </Button>
+                </Tooltip>
+                <Button icon={<ReloadOutlined />} loading={vectorStatusQuery.isFetching} onClick={() => void vectorStatusQuery.refetch()}>
+                  刷新状态
+                </Button>
+              </footer>
+            </>
+          ) : null}
+        </section>
+
+        <section className="settings-card">
+          <header className="settings-card__head">
+            <div className="settings-card__title">
               <span className="settings-card__icon settings-card__icon--worker">
                 <CloudServerOutlined />
               </span>
@@ -794,6 +953,32 @@ export default function SettingsPage() {
             <div className="settings-account__name">{user?.display_name || '未登录'}</div>
             <div className="settings-account__meta">@{user?.username} · 注册于 {formatDate(user?.created_at)}</div>
           </div>
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <header className="settings-card__head">
+          <div className="settings-card__title">
+            <span className="settings-card__icon settings-card__icon--account">
+              <BgColorsOutlined />
+            </span>
+            <div>
+              <h3>外观主题</h3>
+              <p>选择浅色或深色界面，也可以跟随系统自动切换</p>
+            </div>
+          </div>
+        </header>
+        <div className="settings-appearance">
+          <Segmented
+            value={themeMode}
+            options={[
+              { label: '浅色', value: 'light', icon: <SunOutlined /> },
+              { label: '深色', value: 'dark', icon: <MoonOutlined /> },
+              { label: '跟随系统', value: 'system', icon: <DesktopOutlined /> },
+            ]}
+            onChange={(value) => setThemeMode(value as ThemeMode)}
+          />
+          <span className="muted-text">主题设置会保存在当前浏览器，不会同步到其他设备。</span>
         </div>
       </section>
 

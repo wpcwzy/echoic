@@ -19,6 +19,8 @@ import type {
   UpdateRecordingPayload,
   User,
   Segment,
+  SoftDeleteResponse,
+  SystemFeatures,
   ProviderTestResult,
   SearchResult,
 } from '../types'
@@ -39,6 +41,7 @@ export const qk = {
   search: (q: string) => ['search', q] as const,
   systemHealth: ['system', 'health'] as const,
   systemInfo: ['system', 'info'] as const,
+  features: ['system', 'features'] as const,
 }
 
 /* -------------------------------------------------------------------------- */
@@ -188,10 +191,11 @@ export function useUpdateRecording(id: number) {
 
 export function useDeleteRecording() {
   const queryClient = useQueryClient()
-  return useMutation<OkResponse, Error, number>({
-    mutationFn: (id) => api.delete<OkResponse>(`/api/recordings/${id}`),
-    onSuccess: () => {
+  return useMutation<SoftDeleteResponse, Error, number>({
+    mutationFn: (id) => api.delete<SoftDeleteResponse>(`/api/recordings/${id}`),
+    onSuccess: (_data, id) => {
       void queryClient.invalidateQueries({ queryKey: ['recordings'] })
+      void queryClient.invalidateQueries({ queryKey: qk.recording(id) })
     },
   })
 }
@@ -325,6 +329,16 @@ export function useSystemHealth() {
     queryFn: () => api.get<SystemHealth>('/api/system/health'),
     retry: false,
     staleTime: 60_000,
+  })
+}
+
+export function useSystemFeatures(enabled = true) {
+  return useQuery<SystemFeatures>({
+    queryKey: qk.features,
+    queryFn: () => api.get<SystemFeatures>('/api/system/features'),
+    enabled,
+    staleTime: 60_000,
+    retry: 1,
   })
 }
 

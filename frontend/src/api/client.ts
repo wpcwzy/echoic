@@ -154,3 +154,15 @@ export function streamChat(
   void run()
   return () => controller.abort()
 }
+
+
+/** Small helper for GET query strings (public/v3 modules). */
+export function buildQueryUrl(params: Record<string, string | number | boolean | null | undefined>): string {
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    search.set(key, String(value))
+  })
+  const qs = search.toString()
+  return qs ? `?${qs}` : ''
+}

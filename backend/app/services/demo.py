@@ -152,6 +152,24 @@ def _generate_demo_audio(recording: Recording, *, generate: bool) -> None:
         )
     except OSError as exc:  # pragma: no cover - disk issues should not break seeding
         logger.warning("demo audio bookkeeping failed for %r: %s", recording.title, exc)
+        return
+    try:
+        from ..core.storage_backend import get_storage, original_key, playback_key
+
+        backend = get_storage()
+        if getattr(backend, "name", "local") != "local":
+            storage_dir = recording.storage_dir
+            backend.save_file(playback, playback_key(storage_dir), content_type="audio/mp4")
+            backend.save_file(
+                original,
+                original_key(storage_dir, original_filename="original.mp3") ,
+                content_type="audio/mpeg",
+            )
+            recording.size_bytes = int(backend.size(playback_key(storage_dir))) + int(
+                backend.size(original_key(storage_dir, original_filename="original.mp3"))
+            )
+    except Exception:  # noqa: BLE001 - demo seeding must never fail because of storage
+        logger.warning("demo audio upload failed for %r", recording.title, exc_info=True)
 
 
 def _demo_owner_id(db: Session) -> int | None:

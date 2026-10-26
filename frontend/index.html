@@ -2,6 +2,31 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Apply the saved/system theme before first paint to avoid a light flash.
+      (function () {
+        try {
+          var mode = localStorage.getItem('echoic:theme-mode') || 'system'
+          var mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)')
+          var isPublic = location.pathname.indexOf('/s/') === 0
+          var resolved = isPublic
+            ? (mq && mq.matches ? 'dark' : 'light')
+            : (mode === 'dark' ? 'dark' : mode === 'light' ? 'light' : (mq && mq.matches ? 'dark' : 'light'))
+          document.documentElement.setAttribute('data-theme', resolved)
+          document.documentElement.style.colorScheme = resolved
+        } catch (error) {
+          document.documentElement.setAttribute('data-theme', 'light')
+        }
+      })()
+    </script>
+    <style>
+      html {
+        background: #f5f6f7;
+      }
+      html[data-theme='dark'] {
+        background: #0f1115;
+      }
+    </style>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#ffffff" />

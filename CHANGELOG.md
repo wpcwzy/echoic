@@ -2,6 +2,34 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.3.0] - 2026-10-27
+
+P1 收官版本：**暗色主题、回收站与批量操作、对象存储、实时转写 Beta、向量/混合检索**。docs/09 中 v0.2.1 与 v0.3.0 两个里程碑合并为 v0.3.0 交付。
+
+### 新增
+
+- **回收站与批量操作（R-23）**：删除改为软删除（进入回收站，默认保留 30 天，worker 每小时清理过期项）；回收站列表/恢复/彻底删除；彻底删除同时清理媒体（local 或对象存储）与分享；删除时自动撤销该录音的公开分享链接；批量操作 `trash/restore/purge/reprocess/tag_add/tag_remove`（部分成功、权限逐项校验、单次 ≤100）；全局软删除不变量覆盖列表/搜索/仪表盘/媒体/转录/问答/统计/公开分享；前端多选 + 批量操作条 + 撤销 Toast + 回收站视图。
+- **暗色主题（R-24）**：浅色/深色/跟随系统三态切换（用户菜单 + 设置），localStorage 持久化 + 无闪烁初始化；AntD 双算法 + 全站 CSS 变量化；覆盖登录、资料库、详情四 Tab、AI 面板、思维导图、设置、用户、搜索、回收站、公开分享页。
+- **对象存储（R-21）**：`StorageBackend` 抽象（local / S3 兼容）；S3/MinIO 模式下上传、管线 staging（下载原始文件、上传 playback）、Range 媒体同源代理（可选 307 预签名）、删除级联；`python -m app.tools.storage_migrate --from local --to s3 --dry-run|--apply|--verify` 迁移 CLI（保留源文件，可 prune）；health 增加 storage 状态；compose 新增可选 `--profile minio`（MinIO 兼容存储 + bucket 初始化）。
+- **实时转写 Beta（R-19）**：WebSocket 实时会话（`/api/live`）+ 增量字幕；Mock provider 离线可演示，DashScope paraformer-realtime-v2 provider（真实 Key 待联调）；录音页实时字幕（AudioWorklet 16k PCM）+ 停止后上传绑定 `live_session_id`；合并策略 `replace`（保留离线说话人转录，默认）/ `promote`（用实时单说话人稿作最终转录并重算分析，离线 ASR 失败自动回退）；详情页“实时稿 Beta”查看。
+- **向量 / 混合检索（R-20 Phase 1）**：`VectorStore`（numpy 默认 + 实验性 pgvector，自动降级）；mock embeddings（演示/测试）/ OpenAI 兼容 / DashScope；全局语义/混合（RRF）搜索 API + ACL；AI 问答 RAG 接入混合检索（无向量时与 v0.2 等价）；索引重建 API + CLI、状态/过期检测、设置页索引管理；chunks 记录 `embedding_model`。
+- **系统**：`/api/system/features` 能力探测；health 增加存储状态；启动迁移覆盖 v0.1/v0.2 数据目录（新增 trash 列、embedding_model、live 表）。
+- **文档/工程**：docs/10 v0.3.0 实现契约、docs/09 后续方案、API/DEPLOYMENT/README/CHANGELOG 更新；CI 通过（388 后端测试）、E2E v0.3 34 项、S3 moto 端到端测试、compose MinIO profile。
+
+### 迁移 / 兼容
+
+- v0.1 / v0.2 数据目录启动自动升级；无需手动迁移（建议升级前备份 data 卷）。
+- v0.2 API 向后兼容；`DELETE /api/recordings/{id}` 语义由“永久删除”改为“移入回收站”（彻底删除改用 `DELETE /{id}/purge`）。
+- 默认行为保持单容器 / SQLite / 无 Redis；S3、MinIO、pgvector、实时转写均为可选增强，关闭/缺失时自动降级。
+
+### 已知限制
+
+- 实时转写为 Beta：默认关闭；不支持实时说话人分离（完成后以离线转写为准）；无自动重连/长连接续传；单进程部署（不支持多副本 WS）；真实阿里云 Key 的实时链路待目标机验证。
+- 对象存储：S3/MinIO 运行时（真实网络、TLS、预签名、307+Range）未在本地 Docker 验证，代码路径由 moto 与单元测试覆盖；默认同源代理会占用 API 带宽。
+- 向量检索：pgvector 路径未在本地 PG 环境实测（自动降级 numpy）；numpy 后端全量加载到内存，Phase 1 适合中小库；sqlite-vec 未纳入本版本（v0.3.1）。
+- 暗色主题：截图由 QA 在 Chromium 验证；Firefox/Safari 未单独回归。
+- 回收站恢复不重新启用已撤销的分享链接；彻底删除不可恢复。
+
 ## [0.2.0] - 2026-10-27
 
 P1 第一批：**协作与分享**（多用户 / 角色 / 公开分享 / consume 导入）+ 发布工程（CI / GHCR）。

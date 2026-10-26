@@ -35,7 +35,7 @@ from ..schemas import (
     TagOut,
     TranscriptOut,
 )
-from ._common import pick_media, serve_media_file
+from ._common import serve_recording_media
 from .insights import build_insights
 from .transcript import build_transcript
 
@@ -95,7 +95,7 @@ def _share_or_404(db: Session, token: str) -> Share:
 
 def _recording_for_share(db: Session, share: Share) -> Recording:
     recording = db.get(Recording, share.recording_id)
-    if recording is None:
+    if recording is None or recording.deleted_at is not None:
         raise not_found("分享链接不存在或已失效")
     return recording
 
@@ -229,14 +229,7 @@ def get_public_media(
     if download and not share.allow_download:
         raise forbidden("该分享不允许下载原文件")
     _touch_view(db, share)
-    path, content_type, filename, attachment = pick_media(recording, download=bool(download))
-    return serve_media_file(
-        path,
-        request,
-        content_type=content_type,
-        filename=filename,
-        inline=not attachment,
-    )
+    return serve_recording_media(recording, request, download=bool(download))
 
 
 @router.get("/shares/{token}/download")
@@ -247,14 +240,7 @@ def download_public_media(token: str, request: Request, db: Session = Depends(ge
         raise forbidden("该分享不允许下载原文件")
     _touch_view(db, share)
     recording = _recording_for_share(db, share)
-    path, content_type, filename, _attachment = pick_media(recording, download=True)
-    return serve_media_file(
-        path,
-        request,
-        content_type=content_type,
-        filename=filename,
-        inline=False,
-    )
+    return serve_recording_media(recording, request, download=True)
 
 
 @router.get("/shares/{token}/transcript", response_model=TranscriptOut)

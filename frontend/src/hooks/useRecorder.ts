@@ -44,6 +44,8 @@ export interface UseRecorderResult {
   deviceId: string | undefined
   setDeviceId: (deviceId: string) => void
   analyserRef: RefObject<AnalyserNode | null>
+  /** Live MediaStream while recording (used by the live-caption PCM tap). */
+  getStream: () => MediaStream | null
   refreshDevices: () => Promise<void>
   start: () => Promise<void>
   pause: () => void
@@ -314,6 +316,8 @@ export function useRecorder(): UseRecorderResult {
     setDeviceIdState(next)
   }, [])
 
+  const getStream = useCallback(() => streamRef.current, [])
+
   return {
     status,
     elapsedMs,
@@ -324,6 +328,7 @@ export function useRecorder(): UseRecorderResult {
     deviceId,
     setDeviceId,
     analyserRef,
+    getStream,
     refreshDevices,
     start,
     pause,

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import time
 import wave
 from pathlib import Path
@@ -260,9 +261,40 @@ def _prepare(recording_id: int, progress: Callable[[int], None], check_cancel: C
         language = recording.language or cfg.asr.language
         directory = _recording_dir(recording)
 
-    source = _find_source(source_filename, source_ext, directory)
-    asr_wav = storage.asr_wav_path(storage_dir)
-    playback = storage.playback_path(storage_dir)
+    try:
+        from ..core.storage_backend import (
+            fetch_to_local as _fetch_to_local,
+            get_storage as _get_storage,
+            playback_key as _playback_storage_key,
+            recording_original_key as _recording_original_key,
+        )
+
+        _backend = _get_storage()
+        is_remote = getattr(_backend, "name", "local") == "s3"
+    except Exception:  # noqa: BLE001 - storage import/config problems degrade to local handling
+        _backend = None
+        is_remote = False
+
+    if is_remote:
+        stage_dir = settings.data_path / "tmp" / f"rec-{recording_id}"
+        stage_dir.mkdir(parents=True, exist_ok=True)
+        source = None
+        try:
+            source_key = _recording_original_key(_backend, storage_dir, source_ext)
+            if source_key:
+                source = _fetch_to_local(
+                    _backend, source_key, stage_dir / f"original{source_ext or '.bin'}"
+                )
+        except Exception as exc:  # noqa: BLE001 - convert to a friendly media error
+            raise media.MediaError(f"无法从对象存储读取原始媒体：{exc}") from exc
+        asr_wav = stage_dir / "asr.wav"
+        playback = stage_dir / "playback.m4a"
+        playback_storage_key = _playback_storage_key(storage_dir)
+    else:
+        source = _find_source(source_filename, source_ext, directory)
+        asr_wav = storage.asr_wav_path(storage_dir)
+        playback = storage.playback_path(storage_dir)
+        playback_storage_key = None
     ffmpeg_ready = media.ffmpeg_available(settings.ffmpeg) and media.ffprobe_available(settings.ffprobe)
     duration_ms = known_duration
     media_info: media.MediaInfo | None = None
@@ -280,6 +312,11 @@ def _prepare(recording_id: int, progress: Callable[[int], None], check_cancel: C
         if check_cancel():
             raise AnalysisCancelled()
         media.extract_asr_wav(source, asr_wav, settings.ffmpeg)
+        if is_remote and _backend is not None and playback_storage_key:
+            try:
+                _backend.save_file(playback, playback_storage_key, content_type="audio/mp4")
+            except Exception as exc:  # noqa: BLE001 - friendly failure
+                raise media.MediaError(f"无法将播放文件写入对象存储：{exc}") from exc
         progress(90)
     elif source is not None and not ffmpeg_ready:
         duration_ms = duration_ms or media.media_duration_ms(source, settings.ffprobe)
@@ -400,7 +437,15 @@ async def _transcribe(
         cfg = load_ai_config(db)
         storage_dir = recording.storage_dir
         language = recording.language or cfg.asr.language
-    asr_wav = storage.asr_wav_path(storage_dir)
+    try:
+        from ..core.storage_backend import get_storage as _get_storage
+
+        if getattr(_get_storage(), "name", "local") == "s3":
+            asr_wav = settings.data_path / "tmp" / f"rec-{recording_id}" / "asr.wav"
+        else:
+            asr_wav = storage.asr_wav_path(storage_dir)
+    except Exception:  # noqa: BLE001 - fall back to local path
+        asr_wav = storage.asr_wav_path(storage_dir)
     provider = build_asr_provider(cfg.asr)
     logger.info(
         "transcribing recording %s with %s (%s), audio=%s",
@@ -534,9 +579,20 @@ async def _embed(
                     text=payload["text"],
                     embedding=embedding_bytes,
                     dim=dim,
+                    embedding_model=(cfg.embeddings.model or None) if embedding_bytes is not None else None,
                 )
             )
         db.commit()
+        try:
+            from .vector_store import vector_index_chunks
+
+            vector_index_chunks(
+                db,
+                recording_id,
+                model=(cfg.embeddings.model or None) if vectors is not None else None,
+            )
+        except Exception:  # noqa: BLE001 - vector index sync must never fail processing
+            logger.warning("vector index sync failed for recording %s", recording_id, exc_info=True)
     progress(100)
     logger.info(
         "built %s chunks for recording %s (vectors=%s)",
@@ -560,11 +616,18 @@ def _finalize(recording_id: int, job_id: int) -> None:
             db.commit()
             return
         try:
-            asr_wav = storage.asr_wav_path(recording.storage_dir)
-            if asr_wav.exists():
-                asr_wav.unlink()
-        except OSError:
-            logger.warning("failed to remove asr.wav for recording %s", recording_id)
+            from ..core.storage_backend import get_storage as _get_storage
+
+            if getattr(_get_storage(), "name", "local") == "s3":
+                shutil.rmtree(
+                    settings.data_path / "tmp" / f"rec-{recording_id}", ignore_errors=True
+                )
+            else:
+                asr_wav = storage.asr_wav_path(recording.storage_dir)
+                if asr_wav.exists():
+                    asr_wav.unlink()
+        except Exception:  # noqa: BLE001 - cleanup must never fail finalization
+            logger.warning("failed to clean pipeline staging for recording %s", recording_id)
         now = utcnow()
         recording.status = RecordingStatus.READY
         recording.stage = Stage.DONE
@@ -614,7 +677,30 @@ async def _run(recording_id: int, from_: str) -> None:
                 return
             progress = _Progress(recording_id, job_id, Stage.TRANSCRIBING)
             _set_stage(recording_id, job_id, Stage.TRANSCRIBING, STAGE_RANGES[Stage.TRANSCRIBING][0])
-            await _transcribe(recording_id, job_id, progress, check_cancel)
+            transcribe_ok = True
+            try:
+                await _transcribe(recording_id, job_id, progress, check_cancel)
+            except Exception:  # noqa: BLE001 - a bound live transcript may rescue the recording
+                transcribe_ok = False
+                try:
+                    from .live_merge import merge_live_session_into_recording
+
+                    merged = merge_live_session_into_recording(recording_id)
+                except Exception:  # noqa: BLE001 - fall back to the original failure
+                    merged = None
+                if merged != "promote":
+                    raise
+                logger.info(
+                    "recording %s: offline ASR failed, promoted bound live transcript",
+                    recording_id,
+                )
+            if transcribe_ok:
+                try:
+                    from .live_merge import merge_live_session_into_recording
+
+                    merge_live_session_into_recording(recording_id)
+                except Exception:  # noqa: BLE001 - merge is best-effort
+                    logger.warning("live merge failed for recording %s", recording_id, exc_info=True)
             if check_cancel():
                 _mark_cancelled(recording_id, job_id)
                 return
@@ -664,6 +750,16 @@ async def process_recording(recording_id: int, from_: str = "all") -> None:
             ).first()
             job_id = int(job.id) if job is not None else 0
         _mark_failed(recording_id, job_id, message)
+    finally:
+        try:
+            from ..core.storage_backend import get_storage as _get_storage
+
+            if getattr(_get_storage(), "name", "local") == "s3":
+                shutil.rmtree(
+                    settings.data_path / "tmp" / f"rec-{recording_id}", ignore_errors=True
+                )
+        except Exception:  # noqa: BLE001 - best effort staging cleanup
+            logger.debug("staging cleanup failed for recording %s", recording_id, exc_info=True)
 
 
 __all__ = ["process_recording"]

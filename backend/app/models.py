@@ -140,6 +140,8 @@ class Recording(Base):
     llm_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    deleted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -242,6 +244,7 @@ class Chunk(Base):
     text: Mapped[str] = mapped_column(Text, default="")
     embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     recording: Mapped[Recording] = relationship(back_populates="chunks")
 
@@ -321,3 +324,51 @@ class ImportedFile(Base):
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class LiveSession(Base):
+    """Live (in-progress) transcription session (R-19, v0.3.0 beta)."""
+
+    __tablename__ = "live_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    recording_id: Mapped[int | None] = mapped_column(
+        ForeignKey("recordings.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    provider: Mapped[str] = mapped_column(String(40), default="mock")
+    model: Mapped[str] = mapped_column(String(120), default="")
+    language: Mapped[str] = mapped_column(String(16), default="zh")
+    merge_mode: Mapped[str] = mapped_column(String(16), default="replace")
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    total_audio_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    segments: Mapped[list["LiveSegment"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", order_by="LiveSegment.idx"
+    )
+
+
+class LiveSegment(Base):
+    __tablename__ = "live_segments"
+    __table_args__ = (UniqueConstraint("session_id", "idx", name="uq_live_segment_session_idx"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("live_sessions.id", ondelete="CASCADE"), index=True
+    )
+    idx: Mapped[int] = mapped_column(Integer, default=0)
+    start_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    end_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    text: Mapped[str] = mapped_column(Text, default="")
+    is_final: Mapped[bool] = mapped_column(Boolean, default=True)
+    speaker_label: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    session: Mapped[LiveSession] = relationship(back_populates="segments")

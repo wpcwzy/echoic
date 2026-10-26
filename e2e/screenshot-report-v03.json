@@ -1,0 +1,141 @@
+{
+  "baseUrl": "http://127.0.0.1:8100",
+  "viewport": {
+    "width": 1680,
+    "height": 1050
+  },
+  "savedShots": [
+    {
+      "filename": "07-light-library.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3/07-light-library.png",
+      "note": "资料库 · 浅色主题"
+    },
+    {
+      "filename": "01-library-dark.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3/01-library-dark.png",
+      "note": "资料库 · 深色主题"
+    },
+    {
+      "filename": "02-detail-dark.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3/02-detail-dark.png",
+      "note": "详情页 · 深色主题（观点树 + AI 面板）"
+    },
+    {
+      "filename": "03-trash.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3/03-trash.png",
+      "note": "资料库 · 回收站（保留期提示 / 恢复 / 彻底删除）"
+    },
+    {
+      "filename": "04-live-captions.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3/04-live-captions.png",
+      "note": "录音页 · 实时字幕（Beta，mock provider）"
+    },
+    {
+      "filename": "05-semantic-search.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3/05-semantic-search.png",
+      "note": "全局搜索 · 混合/语义模式（score + 高亮）"
+    },
+    {
+      "filename": "06-settings-index.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3/06-settings-index.png",
+      "note": "设置 · 检索索引（后端/模型/已索引/重建）"
+    },
+    {
+      "filename": "08-mobile-dark.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3/08-mobile-dark.png",
+      "note": "资料库 · 深色 · 移动端 390x844"
+    }
+  ],
+  "themeChecks": [
+    {
+      "page": "library-light",
+      "expected": "light",
+      "dataTheme": "light",
+      "colorScheme": "light",
+      "stored": "light",
+      "bodyBg": "rgb(245, 246, 247)",
+      "shellBg": "rgb(245, 246, 247)",
+      "bodyLum": 0.9641552941176472,
+      "shellLum": 0.9641552941176472
+    },
+    {
+      "page": "after-toggle",
+      "expected": "dark",
+      "dataTheme": "dark",
+      "colorScheme": "dark",
+      "stored": "dark",
+      "bodyBg": "rgb(15, 17, 21)",
+      "shellBg": "rgb(15, 17, 21)",
+      "bodyLum": 0.06613176470588235,
+      "shellLum": 0.06613176470588235
+    },
+    {
+      "page": "after-reload",
+      "expected": "dark",
+      "dataTheme": "dark",
+      "colorScheme": "dark",
+      "stored": "dark",
+      "bodyBg": "rgb(15, 17, 21)",
+      "shellBg": "rgb(15, 17, 21)",
+      "bodyLum": 0.06613176470588235,
+      "shellLum": 0.06613176470588235
+    },
+    {
+      "page": "detail-dark",
+      "expected": "dark",
+      "dataTheme": "dark",
+      "colorScheme": "dark",
+      "stored": "dark",
+      "bodyBg": "rgb(15, 17, 21)",
+      "shellBg": "rgb(15, 17, 21)",
+      "bodyLum": 0.06613176470588235,
+      "shellLum": 0.06613176470588235
+    },
+    {
+      "page": "settings-dark",
+      "expected": "dark",
+      "dataTheme": "dark",
+      "colorScheme": "dark",
+      "stored": "dark",
+      "bodyBg": "rgb(15, 17, 21)",
+      "shellBg": "rgb(15, 17, 21)",
+      "bodyLum": 0.06613176470588235,
+      "shellLum": 0.06613176470588235
+    },
+    {
+      "page": "mobile-dark",
+      "expected": "dark",
+      "dataTheme": "dark",
+      "colorScheme": "dark",
+      "stored": "dark",
+      "bodyBg": "rgb(15, 17, 21)",
+      "shellBg": "rgb(15, 17, 21)",
+      "bodyLum": 0.06613176470588235,
+      "shellLum": 0.06613176470588235
+    }
+  ],
+  "consoleErrors": [
+    {
+      "page": "admin",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "admin",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "page": "mobile-dark",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    }
+  ],
+  "pageErrors": [],
+  "failedRequests": [
+    {
+      "page": "admin",
+      "url": "http://127.0.0.1:8100/api/recordings/1/media",
+      "failure": "net::ERR_ABORTED"
+    }
+  ],
+  "overflowIssues": [],
+  "warnings": []
+}

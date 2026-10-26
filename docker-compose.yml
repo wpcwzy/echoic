@@ -17,12 +17,17 @@
 #   镜像会以 echoic:local 本地标签构建（不覆盖官方 latest）。
 #
 # 可选组件（按需启用，默认不启动）：
+#   docker compose --profile minio    up -d              # 自托管 MinIO（S3 兼容对象存储，v0.3.0）
 #   docker compose --profile postgres up -d              # 外置 PostgreSQL 16
 #   docker compose --profile worker   up -d              # 独立 worker（主服务不再跑内嵌线程）
 #   docker compose --profile postgres --profile worker up -d   # 两者同时
+#   docker compose --profile minio --profile worker   up -d    # MinIO + 独立 worker
 # 使用外部 PostgreSQL 时，需在 .env 中设置：
 #   ECHOIC_DATABASE_URL=postgresql+psycopg://echoic:<口令>@postgres:5432/echoic
 # 使用独立 worker 时，需在 .env 中设置 ECHOIC_EMBEDDED_WORKER=false。
+# 使用 MinIO（v0.3.0 对象存储）时，需在 .env 中设置：
+#   ECHOIC_STORAGE_BACKEND=s3、ECHOIC_S3_ENDPOINT=http://minio:9000、ECHOIC_S3_PATH_STYLE=true，
+#   以及与本文件 ECHOIC_MINIO_ROOT_USER/PASSWORD 一致的 ECHOIC_S3_ACCESS_KEY/SECRET_KEY。
 # ============================================================================
 
 name: echoic
@@ -104,9 +109,65 @@ services:
     # ports:
     #   - "127.0.0.1:5432:5432"
 
+  # ---------------------------- 可选：MinIO 对象存储（--profile minio，v0.3.0）----------------------------
+  # 用途：为对象存储抽象（R-21）提供自托管 S3 兼容存储；媒体可外置到 MinIO，数据卷只保留 DB/密钥。
+  #
+  # 启动步骤：
+  #   1) docker compose --profile minio up -d        # 拉起 minio + minio-init + echoic
+  #   2) .env 设置：
+  #        ECHOIC_STORAGE_BACKEND=s3
+  #        ECHOIC_S3_ENDPOINT=http://minio:9000      # 容器内互通；本机进程/宿主机用 http://localhost:9000
+  #        ECHOIC_S3_ACCESS_KEY / ECHOIC_S3_SECRET_KEY 必须与 ECHOIC_MINIO_ROOT_USER / PASSWORD 一致
+  #        ECHOIC_S3_PATH_STYLE=true                 # MinIO 必须 true
+  #   3) docker compose up -d                          # 重启 echoic 使配置生效
+  #
+  # 控制台：http://localhost:${ECHOIC_MINIO_CONSOLE_PORT:-9001}（S3 API 端口见 ECHOIC_MINIO_PORT）
+  # 镜像说明：MinIO 官方社区版镜像已停止公开分发（Docker Hub minio/minio 已 404、quay.io 需认证）。
+  #          默认使用活跃维护的 S3 兼容分支 pgsty/silo（MinIO 协议/数据兼容，镜像内置 mcli 客户端）；
+  #          如你有官方镜像访问权限，可用 ECHOIC_MINIO_IMAGE 覆盖（minio-init 复用同一镜像）。
+  # 生产提示：务必修改默认账号密码；公网暴露 Console/S3 端口时请配置 HTTPS/反代与防火墙。
+  minio:
+    profiles: ["minio"]
+    image: ${ECHOIC_MINIO_IMAGE:-docker.io/pgsty/silo:RELEASE.2026-10-26T00-00-00Z}
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${ECHOIC_MINIO_ROOT_USER:-echoic}
+      MINIO_ROOT_PASSWORD: ${ECHOIC_MINIO_ROOT_PASSWORD:-change-me-echoic-minio}
+      # 供容器内健康检查使用（mcli 通过 MC_HOST_local 访问本机 S3 API）
+      MC_HOST_local: http://${ECHOIC_MINIO_ROOT_USER:-echoic}:${ECHOIC_MINIO_ROOT_PASSWORD:-change-me-echoic-minio}@127.0.0.1:9000
+    ports:
+      - "${ECHOIC_MINIO_PORT:-9000}:9000"           # S3 API
+      - "${ECHOIC_MINIO_CONSOLE_PORT:-9001}:9001"   # Web Console
+    volumes:
+      - echoic-minio:/data
+    restart: unless-stopped
+    healthcheck:
+      # 镜像内置 mcli（MinIO 客户端），`mcli ready local` 可可靠探测服务就绪
+      test: ["CMD", "mcli", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  # 一次性初始化：创建 bucket（幂等）。minio 就绪后执行；失败自动重试，成功后容器退出 0。
+  minio-init:
+    profiles: ["minio"]
+    image: ${ECHOIC_MINIO_IMAGE:-docker.io/pgsty/silo:RELEASE.2026-10-26T00-00-00Z}
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["mcli"]
+    command: ["mb", "--ignore-existing", "local/${ECHOIC_S3_BUCKET:-echoic}"]
+    environment:
+      MC_HOST_local: http://${ECHOIC_MINIO_ROOT_USER:-echoic}:${ECHOIC_MINIO_ROOT_PASSWORD:-change-me-echoic-minio}@minio:9000
+    restart: on-failure
+
 volumes:
   # 备份这一个卷即可覆盖 SQLite 数据库、媒体文件、secret.key（详见 docs/DEPLOYMENT.md）
   echoic-data:
     name: echoic-data
   echoic-pgdata:
     name: echoic-pgdata
+  # v0.3.0：启用 --profile minio 时的对象存储数据卷（S3 模式下媒体数据在此卷）
+  echoic-minio:
+    name: echoic-minio

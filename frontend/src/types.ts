@@ -86,6 +86,7 @@ export interface RecordingSummary {
   created_at: string
   updated_at: string
   processed_at: string | null
+  deleted_at: string | null
 }
 
 export interface RecordingDetail extends RecordingSummary {
@@ -332,6 +333,8 @@ export interface RecordingListParams {
   sort?: 'recent' | 'oldest' | 'title' | 'duration'
   page?: number
   page_size?: number
+  /** v0.3 trash view: only soft-deleted recordings. */
+  trashed?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -460,5 +463,147 @@ export interface ConsumeScanResponse {
   at: string | null
 }
 
+// ---------------------------------------------------------------------------
+// v0.3 — trash & batch operations (R-23), feature flags
+// ---------------------------------------------------------------------------
+
+export interface SoftDeleteResponse {
+  ok: boolean
+  id: number
+  deleted_at: string
+  restore_before: string
+}
+
+export interface PurgeResponse {
+  ok: boolean
+  purged: boolean
+}
+
+export type BatchAction = 'trash' | 'restore' | 'purge' | 'reprocess' | 'tag_add' | 'tag_remove'
+
+export interface BatchActionPayload {
+  action: BatchAction
+  recording_ids: number[]
+  tag_ids?: number[]
+  from?: 'all' | 'asr' | 'insights' | 'embeddings'
+}
+
+export interface BatchItemResult {
+  id: number
+  ok: boolean
+  error: string | null
+}
+
+export interface BatchResponse {
+  action: string
+  succeeded: number
+  failed: number
+  results: BatchItemResult[]
+}
+
+export interface SystemFeatures {
+  live: { enabled: boolean; provider: string; max_minutes: number; merge_mode: 'replace' | 'promote' }
+  vector: { backend: string; search_enabled: boolean; embeddings_configured: boolean }
+  storage: { backend: string }
+  trash: { retention_days: number }
+}
+
 export type ListViewMode = 'grid' | 'list'
 export type DetailTabKey = 'transcript' | 'summary' | 'viewpoints' | 'chapters'
+
+// ---------------------------------------------------------------------------
+// v0.3 Phase 2 — live transcription (R-19) & vector/hybrid search (R-20)
+// ---------------------------------------------------------------------------
+
+export type LiveSessionStatus = 'active' | 'ended' | 'merged' | 'failed' | 'cancelled'
+
+export interface LiveSession {
+  id: number
+  uuid: string
+  status: LiveSessionStatus
+  provider: string
+  model: string
+  language: string
+  merge_mode: 'replace' | 'promote'
+  recording_id: number | null
+  started_at: string | null
+  ended_at: string | null
+  total_audio_ms: number
+  error: string | null
+  ws_url: string | null
+}
+
+export interface LiveSegment {
+  id: number
+  idx: number
+  start_ms: number
+  end_ms: number
+  text: string
+  is_final: boolean
+  speaker_label: string | null
+}
+
+export interface LiveSessionDetail {
+  session: LiveSession
+  segments: LiveSegment[]
+}
+
+export type RecordingLive = LiveSessionDetail
+
+export interface LiveSessionCreatePayload {
+  language?: string
+  merge_mode?: 'replace' | 'promote'
+}
+
+export type LiveWsEvent =
+  | { type: 'ready' }
+  | { type: 'partial'; text: string; start_ms: number; end_ms: number }
+  | { type: 'final'; text: string; start_ms: number; end_ms: number; speaker_label?: string | null }
+  | { type: 'error'; message: string; code?: string }
+  | { type: 'done'; total_ms: number; status?: string }
+
+export interface VectorStatus {
+  backend: string
+  available: boolean
+  embeddings_configured: boolean
+  embedding_model: string | null
+  dim: number | null
+  chunks_total: number
+  chunks_indexed: number
+  stale_chunks: number
+  fallback_reason: string | null
+}
+
+export interface VectorReindexPayload {
+  recording_ids?: number[]
+  force?: boolean
+  dry_run?: boolean
+}
+
+export interface VectorReindexResult {
+  ok: boolean
+  processed_recordings: number
+  chunks: number
+  skipped: number
+  errors: string[]
+}
+
+export interface VectorSearchHit {
+  recording_id: number
+  recording_title: string
+  segment_id: number | null
+  speaker: string
+  start_ms: number
+  end_ms: number
+  text: string
+  score: number
+}
+
+export interface VectorSearchResult {
+  query: string
+  mode: string
+  results: VectorSearchHit[]
+  fallback_reason: string | null
+}
+
+export type SearchMode = 'keyword' | 'hybrid' | 'semantic'
