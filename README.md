@@ -1,165 +1,169 @@
 # Echoic
 
+**English** | [简体中文](README.zh-CN.md)
+
 [![CI](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml/badge.svg)](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml)
 [![Docker Publish (GHCR)](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml)
 [![GHCR](https://img.shields.io/badge/ghcr.io-wpcwzy%2Fechoic-2496ED?logo=docker&logoColor=white)](https://github.com/wpcwzy/echoic/pkgs/container/echoic)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> 自托管的私人**会议 / 通话 / 录音 / 视频知识库**。
-> 上传或网页录制声音，自动获得**转录稿、AI 纪要、观点树 & 思维导图、章节、关键洞察、待办与 AI 问答**——所有数据都留在你自己的服务器上。
+> A self-hosted private knowledge base for **meetings, calls, voice recordings and videos**.
+> Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
-- 定位：paperless-ngx 之于纸质文档 = **Echoic 之于录音**
-- 风格参考：飞书妙记 / 钉钉闪记（详情页 1:1 神似）
-- 版本：**v0.2.0**（P1 第一批交付：多用户 / 角色 / 公开分享链接 / consume 目录导入 + GitHub CI + GHCR 多架构镜像）
-- 许可：MIT
+- Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
+- Version: **v0.2.0** — P1 batch 1 (multi-user & roles, share links, consume-directory import, CI/CD + multi-arch GHCR image)
+- License: MIT
 
-## 📸 界面预览
+## 📸 Screenshots
 
-> 以下截图来自本仓库真实运行的 Demo 数据（1680×1050，完整 6 张见 [`docs/screenshots/`](docs/screenshots/)）。
+> Captured from the built-in demo data. More in [`docs/screenshots/`](docs/screenshots/).
 
-| 资料库 | 详情页 · 观点树 |
+| Library | Recording detail · viewpoint tree |
 |---|---|
-| ![资料库](docs/screenshots/02-library.png) | ![详情页 · 观点树](docs/screenshots/03-detail-viewpoint.png) |
+| ![Library](docs/screenshots/02-library.png) | ![Recording detail](docs/screenshots/03-detail-viewpoint.png) |
 
-| AI 思维导图 | 设置 · AI 服务 |
+| AI mind map | Settings · AI providers |
 |---|---|
-| ![思维导图](docs/screenshots/05-mindmap.png) | ![设置](docs/screenshots/06-settings.png) |
+| ![Mind map](docs/screenshots/05-mindmap.png) | ![Settings](docs/screenshots/06-settings.png) |
 
-**v0.2 协作与分享**
+**v0.2 collaboration & sharing**
 
-| 用户与角色管理 | 分享链接创建 |
+| User & role management | Create a share link |
 |---|---|
-| ![用户管理](docs/screenshots/v0.2/01-users.png) | ![分享对话框](docs/screenshots/v0.2/02-share-dialog.png) |
+| ![Users](docs/screenshots/v0.2/01-users.png) | ![Share dialog](docs/screenshots/v0.2/02-share-dialog.png) |
 
-| 公开分享页（免登录） | 密码保护分享 |
+| Public share page (no login) | Password-protected share |
 |---|---|
-| ![公开分享页](docs/screenshots/v0.2/03-public-share.png) | ![密码门](docs/screenshots/v0.2/04-public-password.png) |
+| ![Public share](docs/screenshots/v0.2/03-public-share.png) | ![Password gate](docs/screenshots/v0.2/04-public-password.png) |
 
 ---
 
-## ✨ 功能特性
+## ✨ Features
 
-| 能力 | 说明 |
+| Capability | Details |
 |---|---|
-| 🎙 网页录音 + 上传 | 浏览器直接麦克风录音（计时/暂停/电平表）；支持 mp3/wav/m4a/aac/ogg/webm/mp4/mov/mkv，单文件 ≤ 2GB |
-| 📝 语音转写 | 可配置阿里云百炼 DashScope / OpenAI 兼容 Whisper / Mock；输出带说话人和时间戳的分段转录稿，可改名、可编辑 |
-| 🧠 AI 纪要 | Markdown 概述 + 关键结论 + 决议 + 待办；支持重新生成 |
-| 🌳 观点树 & 思维导图 | 结构化观点树，React Flow 思维导图可视化，点击节点跳转对应录音时间 |
-| 📑 智能章节 | 自动切分章节（标题/时间区间/摘要/bullets），点击跳播 |
-| 💬 AI 问答 | 基于转录稿 + 纪要的 RAG 问答，SSE 流式输出，答案带 `[12:05]` 时间戳引用，可点击定位 |
-| 📚 资料库 | 搜索 / 状态筛选 / 标签 / 排序 / 统计卡片；全局搜索定位到录音片段 |
-| 🎧 播放器 | 进度拖动、±15 秒、倍速、当前段落高亮自动滚动、HTTP Range 按需加载 |
-| 💾 数据自持 | SQLite（可选 PostgreSQL）+ 本地媒体目录；备份 = 打包一个数据卷 |
-| 🔐 安全 | HttpOnly Cookie JWT、bcrypt 密码、Fernet 加密 API Key（仅回掩码）、上传校验、登录限速 |
-| 🎭 演示模式 | 零 API Key、零外网也能完整跑通全流程（内置示例录音与全套 AI 结果） |
-| 👥 多用户与角色 | `admin`/`member` 两级角色；管理员用户管理（创建/编辑/停用/重置密码/删除）、开放注册开关；录音按所有者隔离，管理员可转移归属；账号停用即时失效会话 |
-| 🔗 公开分享链接 | 详情页一键分享：可选密码、有效期（1h–永久）、是否含转录/纪要、是否允许下载；免登录只读页 `/s/{token}`，支持撤销与访问计数 |
-| 📥 consume 目录导入 | 把音视频丢进 `data/consume/` 自动入库并处理（paperless 式）；sha256 去重、失败隔离到 `failed/`，设置页可查看状态并手动扫描 |
-| 📤 数据导出 | 转录稿导出 TXT / SRT / Markdown / JSON |
-| 🐳 一键部署 | **GHCR 预构建多架构镜像**（amd64/arm64，CI 自动发布）+ docker compose 镜像优先部署，`pull && up -d` 即用；亦可源码构建；可切独立 worker / PostgreSQL |
+| 🎙 Browser recording + upload | Record directly from the microphone (timer / pause / level meter); supports mp3/wav/m4a/aac/ogg/webm/mp4/mov/mkv up to 2 GB per file |
+| 📝 Speech-to-text | Plug-and-play providers: Alibaba Cloud DashScope / OpenAI-compatible Whisper / Mock; transcript with speaker labels and timestamps, renameable and editable |
+| 🧠 AI minutes | Markdown summary + key conclusions + decisions + action items; regenerable |
+| 🌳 Viewpoint tree & mind map | Structured viewpoint tree rendered as an interactive mind map; click any node to seek in the recording |
+| 📑 Smart chapters | Automatic chapter segmentation (title / time range / summary / bullets); click to jump |
+| 💬 AI Q&A | RAG over transcripts + minutes, streamed over SSE, answers cite `[12:05]` timestamps that seek the player |
+| 📚 Library | Search / status filters / tags / sorting / stats; global search jumps to the matching transcript segment |
+| 🎧 Player | Drag-to-seek, ±15 s, playback speed, chapter ticks, active-line highlighting, HTTP Range streaming |
+| 💾 Data ownership | SQLite (optional PostgreSQL) + local media directory; backup = archive one data volume |
+| 🔐 Security | HttpOnly cookie JWT, bcrypt passwords, Fernet-encrypted API keys (masked in responses), upload validation, login rate limiting |
+| 🎭 Demo mode | Full workflow with zero API keys and zero internet access (bundled demo recordings + complete AI results) |
+| 👥 Multi-user & roles | `admin` / `member`; admin user management (create / edit / disable / reset password / delete), registration switch; recordings are owner-scoped and admins can transfer ownership; disabled accounts lose sessions immediately |
+| 🔗 Share links | One-click sharing from the detail page: optional password, expiry (1 h – never), include transcript/minutes, allow download; public read-only page `/s/{token}` with revoke and view counters |
+| 📥 Consume directory | Drop audio/video into `data/consume/` and it is imported and processed automatically (paperless-style); sha256 dedupe, failures quarantined, status and manual scan in Settings |
+| 📤 Export | Transcript export as TXT / SRT / Markdown / JSON |
+| 🐳 One-command deploy | Prebuilt multi-arch **GHCR image** (amd64/arm64, published by CI) + image-first docker compose: `pull && up -d`; source builds supported; optional standalone worker / PostgreSQL |
 
 ---
 
-## 🏗 架构一览
+## 🏗 Architecture
 
 ```
-┌──────────────────────── 浏览器（React 18 + TS + Vite + AntD 5）────────────────────────┐
-│  资料库 · 录音上传 · 详情页(转写 | AI纪要 | 观点树 | 章节) · AI问答面板 · 思维导图 · 设置  │
-└───────────────────────────────────┬────────────────────────────────────────────────────┘
-                                    │ 同源 HTTPS · HttpOnly Cookie JWT · SSE
-┌───────────────────────────────────▼────────────────────────────────────────────────────┐
-│ FastAPI（单进程，uvicorn）                                                              │
-│  /api/auth /api/recordings /transcript /insights /chat(SSE) /search /tags /settings …  │
-│  ├─ core：config · security · crypto · storage · media(ffmpeg)                          │
-│  ├─ providers：ASR / LLM / Embedding 可插拔（mock / DashScope / OpenAI 兼容）             │
-│  ├─ services：pipeline 处理管线 · queue 任务队列 · chat RAG · analysis · demo             │
-│  └─ 内嵌 worker 线程（可切独立进程）；生产模式直接托管前端静态资源                         │
-└──────┬──────────────────────────────────────────────┬──────────────────────────────────┘
-       │ SQLAlchemy 2.0                               │ 本地文件系统（挂载卷 /data）
-┌──────▼──────────────┐                    ┌──────────▼────────────────────────────────┐
-│ SQLite (默认，WAL)   │                    │ echoic.db · secret.key · media/{uuid}/…   │
-│ PostgreSQL (可选)    │                    │ original.* · playback.m4a · asr.wav       │
-└─────────────────────┘                    └───────────────────────────────────────────┘
+┌──────────────────────── Browser (React 18 + TS + Vite + AntD 5) ────────────────────────┐
+│  Library · Record & upload · Detail (transcript | minutes | viewpoint tree | chapters)  │
+│  AI Q&A panel · Mind map · Settings · Users · Public share page                         │
+└───────────────────────────────────────┬─────────────────────────────────────────────────┘
+                                        │ same-origin HTTPS · HttpOnly cookie JWT · SSE
+┌───────────────────────────────────────▼─────────────────────────────────────────────────┐
+│ FastAPI (single process, uvicorn)                                                       │
+│  /api/auth /api/recordings /transcript /insights /chat(SSE) /search /tags /settings …   │
+│  /api/users /api/shares /api/public/shares /api/system/consume …                        │
+│  ├─ core: config · security · crypto · storage · media (ffmpeg)                         │
+│  ├─ providers: pluggable ASR / LLM / Embedding (mock / DashScope / OpenAI-compatible)   │
+│  ├─ services: pipeline · job queue · chat RAG · analysis · consume · demo               │
+│  └─ embedded worker thread (or standalone process); serves the built frontend           │
+└──────┬──────────────────────────────────────────────┬───────────────────────────────────┘
+       │ SQLAlchemy 2.0                               │ local filesystem (mounted volume /data)
+┌──────▼──────────────┐                    ┌──────────▼───────────────────────────────────┐
+│ SQLite (default,WAL)│                    │ echoic.db · secret.key · media/{uuid}/…      │
+│ PostgreSQL (opt.)   │                    │ original.* · playback.m4a · asr.wav          │
+└─────────────────────┘                    └──────────────────────────────────────────────┘
        │
-       ▼ 仅出站 HTTPS（可用自建/内网兼容端点替代）
-  阿里云百炼 DashScope（paraformer 实时 ASR / qwen LLM / embedding）
-  OpenAI 兼容 LLM（DeepSeek / Ollama / vLLM / LM Studio…）
-  Whisper 兼容 ASR（OpenAI / faster-whisper-server / FunASR…）
+       ▼ outbound HTTPS only (self-hosted / intranet-compatible endpoints also work)
+  Alibaba Cloud DashScope (paraformer ASR / qwen LLM / embeddings)
+  OpenAI-compatible LLM (DeepSeek / Ollama / vLLM / LM Studio…)
+  Whisper-compatible ASR (OpenAI / faster-whisper-server / FunASR…)
 ```
 
-处理管线：
+Processing pipeline:
 
 ```
-upload/record → 落盘 + ffprobe → [prepare] 标准化 16k wav + playback.m4a
-             → [transcribe] ASR（说话人分离）→ [analyze] LLM 纪要/章节/观点树/洞察/待办
-             → [embed] 切片+向量（可选）→ [finalize] status=ready
-失败 → status=failed + 中文 error_message，可重试；进度写 progress/stage 供前端轮询
+upload/record → store + ffprobe → [prepare] normalize 16k wav + playback.m4a
+             → [transcribe] ASR (speaker diarization)
+             → [analyze] LLM minutes/chapters/viewpoint tree/insights/action items
+             → [embed] chunks + vectors (optional) → [finalize] status=ready
+failure → status=failed + human-readable message, retryable; progress/stage exposed for polling
 ```
 
-更多设计细节：[ARCHITECTURE.md](docs/ARCHITECTURE.md) · [PIPELINE.md](docs/PIPELINE.md) · [API.md](docs/API.md) · [FRONTEND.md](docs/FRONTEND.md)
+More design docs: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [PIPELINE.md](docs/PIPELINE.md) · [API.md](docs/API.md) · [FRONTEND.md](docs/FRONTEND.md)
 
 ---
 
-## 🚀 快速开始（Docker 镜像，推荐）
+## 🚀 Quick start (prebuilt Docker image, recommended)
 
-无需本地构建：直接拉取 CI 自动发布的**多架构预构建镜像**（linux/amd64 + linux/arm64）。
+No local build required — pull the multi-arch image published by CI (linux/amd64 + linux/arm64).
 
 ```bash
-# 1. 准备环境变量（至少修改管理员口令）
+# 1. Prepare environment variables (at minimum change the admin password)
 cp .env.example .env
-vi .env                    # 修改 ECHOIC_ADMIN_PASSWORD（默认 admin123 仅用于首次体验）
+vi .env                    # set ECHOIC_ADMIN_PASSWORD (default admin123 is for first-run only)
 
-# 2. 拉取预构建镜像并启动（默认 ghcr.io/wpcwzy/echoic:latest）
+# 2. Pull the prebuilt image and start
 docker compose pull
 docker compose up -d
 
-# 3. 浏览器打开 http://localhost:8000，用 admin / <你设置的口令> 登录
+# 3. Open http://localhost:8000 and sign in with admin / your password
 ```
 
-- 镜像：`ghcr.io/wpcwzy/echoic`，标签 `latest`（main 最新）/ `v0.2.0` 等语义化版本 / `sha-xxxxxxx`；
-  在 `.env` 中用 `ECHOIC_IMAGE_TAG` 选择（生产建议固定版本，如 `v0.2.0`）；
-- **GHCR 包已设为 Public**（已验证匿名可拉取），`docker compose pull` 无需登录；
-  若仍遇到 403（例如镜像被重新设为私有），请先 `docker login ghcr.io` 或把包可见性改为 Public
-  （详见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) §3.2）；
-- 默认 **mock 演示模式**：无需任何 API Key，启动即有示例录音与全套 AI 结果；
-- 接入真实模型：在「设置 → AI 服务」填写 DashScope / OpenAI 兼容端点的 Key 与模型，点「测试连接」即可；
-- 数据/媒体/密钥全部落在 `echoic-data` 卷，备份该卷即可迁移；
+- Image: `ghcr.io/wpcwzy/echoic`, tags `latest` (newest main), semver tags such as `v0.2.0`, and `sha-xxxxxxx`;
+  choose one via `ECHOIC_IMAGE_TAG` in `.env` (pin a version in production, e.g. `v0.2.0`);
+- The GHCR package is **public** — `docker compose pull` works anonymously;
+  if you ever get a 403, run `docker login ghcr.io` or set the package visibility to Public
+  (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) §3.2);
+- **Mock demo mode** is enabled by default: no API keys required, example recordings and complete AI results ship with the app;
+- To use real models, open **Settings → AI providers**, enter your DashScope or OpenAI-compatible endpoint/key/model and click **Test connection**;
+- Data, media and secrets live in the `echoic-data` volume — back it up to migrate.
 
-### 从源码构建（可选）
+### Build from source (optional)
 
 ```bash
-# 适合开发 / 定制 / 离线环境；构建产物为本地镜像 echoic:local，不覆盖官方镜像标签
+# For development, customization or offline environments; builds a local tag echoic:local
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-完整部署（反向代理、备份恢复、升级、PostgreSQL、独立 worker、故障排查）见 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。
-
-> ⚠️ **验证边界**：v0.2.0 的本地 E2E / UI 验收在未启用 Docker CLI 的 WSL 环境中完成（Mock 模式，v0.1 基线 30/30 + v0.2 新增 34/34 PASS）；`Dockerfile` 与 compose 已做静态校验，且多架构镜像已由 GitHub Actions 在真实 Docker 环境**成功构建并推送 GHCR**（匿名可拉取）。但本仓库开发机仍**未本地运行过容器**，首次部署请按 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) 在目标机复跑；阿里云真实 Key 的端到端调用同样需在目标机验证（Mock / 离线路径已全量验证）。
+Full deployment guide (reverse proxy, backup/restore, upgrades, PostgreSQL, standalone worker, troubleshooting):
+**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
 ---
 
-## 🐳 容器镜像与 CI/CD
+## 🐳 Container images & CI/CD
 
-| 项目 | 说明 |
+| Item | Details |
 |---|---|
-| 镜像地址 | `ghcr.io/wpcwzy/echoic`（GitHub Container Registry） |
-| 架构 | `linux/amd64` + `linux/arm64` 多架构 manifest（x86 服务器 / Apple Silicon / ARM 云主机均可直接拉取） |
-| 标签 | `latest`（main 每次推送）、`vX.Y.Z` / `X.Y` / `X`（推送 git tag 时自动生成）、`sha-xxxxxxx`（每次构建，可复现 / 回滚） |
-| 发布流水线 | [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml)：QEMU + Buildx 多架构构建 → GHCR；BuildKit GHA 缓存 + provenance 构建证明 |
-| 持续集成 | [`.github/workflows/ci.yml`](.github/workflows/ci.yml)：后端 pytest（含 ffmpeg）+ 前端 tsc / vite 构建 + PR 镜像构建（amd64，不推送） |
-| 依赖更新 | [`.github/dependabot.yml`](.github/dependabot.yml)：pip / npm / GitHub Actions / Docker 基础镜像每周自动检查 |
+| Image | `ghcr.io/wpcwzy/echoic` (GitHub Container Registry) |
+| Architectures | `linux/amd64` + `linux/arm64` manifest (x86 servers, Apple Silicon and ARM cloud hosts) |
+| Tags | `latest` (each main push), `vX.Y.Z` / `X.Y` / `X` (git tags), `sha-xxxxxxx` (each build, for reproducibility/rollback) |
+| Publish pipeline | [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml): QEMU + Buildx multi-arch build → GHCR; BuildKit GHA cache + provenance |
+| CI | [`.github/workflows/ci.yml`](.github/workflows/ci.yml): backend pytest (with ffmpeg) + frontend tsc/vite build + PR image build (amd64, no push) |
+| Dependency updates | [`.github/dependabot.yml`](.github/dependabot.yml): weekly pip / npm / GitHub Actions / Docker base image checks |
 
-**发布新版本**（维护者）：
+**Releasing a new version** (maintainers):
 
 ```bash
-git tag -a v0.2.0 -m "Echoic v0.2.0" && git push origin v0.2.0   # 自动构建并发布 v0.2.0 / 0.2 / 0 标签
-docker pull ghcr.io/wpcwzy/echoic:v0.2.0                          # 发布后验证
+git tag -a v0.2.0 -m "Echoic v0.2.0" && git push origin v0.2.0   # builds v0.2.0 / 0.2 / 0 image tags
+docker pull ghcr.io/wpcwzy/echoic:v0.2.0                          # verify after publish
 ```
 
-**GHCR 包可见性（首次发布后做一次）**：GitHub 默认新包为私有，匿名 `docker pull` 会 403。发布流水线末尾会用 `GITHUB_TOKEN`
-尝试自动改为 public（`continue-on-error`，多数环境无此权限）；若未生效，请到
-<https://github.com/users/wpcwzy/packages/container/echoic/settings> → Danger Zone → Change visibility → **Public**，
-或使用具备 `write:packages` 权限的 PAT：
+**GHCR package visibility (once per package)**: new GitHub packages are private by default, so anonymous
+`docker pull` returns 403. The publish workflow attempts to switch the package to public via `GITHUB_TOKEN`
+(`continue-on-error`; this often lacks permission). If it did not work, go to
+<https://github.com/users/wpcwzy/packages/container/echoic/settings> → Danger Zone → Change visibility → **Public**,
+or use a PAT with `write:packages`:
 
 ```bash
 echo "<PAT>" | docker login ghcr.io -u wpcwzy --password-stdin
@@ -168,108 +172,107 @@ docker pull ghcr.io/wpcwzy/echoic:latest
 
 ---
 
-## ✅ 验证状态（v0.2.0）
+## ✅ Verification (v0.2.0)
 
-| 项目 | 结果 | 证据 |
+| Item | Result | Evidence |
 |---|---|---|
-| GitHub Actions CI | **通过**：后端 pytest + 前端 tsc/vite 构建；PR 额外验证 amd64 镜像构建 | [CI 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
-| 多架构镜像发布 | **成功**：linux/amd64 + linux/arm64 已推送 GHCR（`latest` / `sha-*`；tag 发布语义化版本） | [Publish 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR 包](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
-| 后端测试 | **179 passed**（v0.1 129 + v0.2 用户/权限/分享/consume/迁移 50） | `cd backend && .venv/bin/pytest -q` |
-| 前端构建 | **通过**（`tsc --noEmit` 零错误；gzip ≈ 599 KB JS + 18.5 KB CSS） | `cd frontend && npm run build` |
-| 端到端冒烟（Mock，全新数据库） | v0.1 基线 **30/30** + v0.2 **34/34 PASS**：角色权限矩阵、用户 CRUD、分享创建/密码/过期/撤销/公开访问、consume 导入/去重/失败隔离、注册开关、回归用例 | [`e2e/last-run.log`](e2e/last-run.log) · [`e2e/last-run-v02.log`](e2e/last-run-v02.log) · [`e2e/REPORT-v0.2.md`](e2e/REPORT-v0.2.md) |
-| UI 截图巡检 | v0.1 6/6 + v0.2 7/7，无布局溢出、无未捕获异常、无 5xx | [`docs/screenshots/`](docs/screenshots/) · [`docs/screenshots/v0.2/`](docs/screenshots/v0.2/) |
-| 容器运行 | 多架构镜像由 CI 在真实 Docker 构建成功、匿名可拉取；**本开发机无 Docker，容器运行待目标机验证**（见上方验证边界） | `docs/DEPLOYMENT.md` |
+| GitHub Actions CI | **Passing**: backend pytest + frontend tsc/vite build; PR also validates the amd64 image build | [CI runs](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
+| Multi-arch image publish | **Succeeded**: linux/amd64 + linux/arm64 pushed to GHCR (`latest` / `sha-*`; semver tags on releases) | [Publish runs](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR package](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
+| Backend tests | **179 passed** (v0.1 baseline 129 + v0.2 users/permissions/shares/consume/migrations 50) | `cd backend && .venv/bin/pytest -q` |
+| Frontend build | **Passing** (`tsc --noEmit` clean; ~599 KB JS + 18.5 KB CSS gzipped) | `cd frontend && npm run build` |
+| End-to-end smoke (mock, fresh database) | v0.1 baseline **30/30** + v0.2 **34/34 PASS**: permission matrix, user CRUD, share create/password/expiry/revoke/public access, consume import/dedupe/quarantine, registration switch, regression suite | [`e2e/last-run.log`](e2e/last-run.log) · [`e2e/last-run-v02.log`](e2e/last-run-v02.log) · [`e2e/REPORT-v0.2.md`](e2e/REPORT-v0.2.md) |
+| UI screenshot audit | v0.1 6/6 + v0.2 7/7, no overflow, no uncaught exceptions, no 5xx | [`docs/screenshots/`](docs/screenshots/) · [`docs/screenshots/v0.2/`](docs/screenshots/v0.2/) |
 
+---
 
+## 🛠 Development
 
-## 🛠 开发指南
-
-依赖：Python 3.11+（推荐 3.12）、Node.js 20+（推荐 22）、ffmpeg。
+Requirements: Python 3.11+ (3.12 recommended), Node.js 20+ (22 recommended), ffmpeg.
 
 ```bash
-# 后端 + 前端（热更新）：后端 http://127.0.0.1:8000，前端 http://localhost:5173
+# Backend + frontend (hot reload): backend http://127.0.0.1:8000, frontend http://localhost:5173
 ./scripts/dev.sh
 
-# 类生产本地运行：构建前端后由 FastAPI 同源托管，:8100
+# Production-like local run: build the frontend, serve it from FastAPI on :8100
 ./scripts/run-local.sh
 
-# 一键验证：pytest + 前端类型检查/构建 + 健康检查 + e2e 冒烟
+# One-shot verification: pytest + frontend typecheck/build + health + e2e smoke
 ./scripts/verify.sh
 ```
 
-手工方式：
+Manual setup:
 
 ```bash
-# 后端
+# Backend
 cd backend
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/uvicorn app.main:app --reload --port 8000
 
-# 前端（dev server 已代理 /api → :8000）
+# Frontend (Vite dev server proxies /api → :8000)
 cd frontend
-npm ci        # 或 npm install
+npm ci        # or npm install
 npm run dev
 ```
 
-目录结构：
+Repository layout:
 
 ```
-backend/app/{api,core,providers,services}   FastAPI 应用与插件式 AI provider
-backend/app/{main.py,config.py,models.py,…} 应用装配 / 配置 / ORM / DTO
-frontend/src/{pages,components,layouts,api}React 前端
-docker/{entrypoint.sh}                      容器入口脚本
-scripts/{dev.sh,run-local.sh,verify.sh}     本地开发 / 验收脚本
-docs/                                       架构、管线、API、前端、部署文档
-e2e/                                        端到端冒烟脚本与验收报告
+backend/app/{api,core,providers,services}   FastAPI app + pluggable AI providers
+backend/app/{main.py,config.py,models.py,…} app wiring / config / ORM / DTOs
+frontend/src/{pages,components,layouts,api} React frontend
+docker/{entrypoint.sh}                      container entrypoint
+scripts/{dev.sh,run-local.sh,verify.sh}     local dev / verification scripts
+docs/                                       architecture, pipeline, API, frontend, deployment
+e2e/                                        end-to-end smoke scripts and acceptance reports
 ```
 
 ---
 
-## ⚙️ 配置说明
+## ⚙️ Configuration
 
-所有配置均可通过环境变量 `ECHOIC_*` 或 `backend/.env` / 仓库根目录 `.env` 覆盖，完整清单与注释见 [.env.example](.env.example)。常改项：
+Everything is configurable through `ECHOIC_*` environment variables or `.env` (see [.env.example](.env.example) for the full annotated list). Common options:
 
-| 变量 | 默认 | 说明 |
+| Variable | Default | Description |
 |---|---|---|
-| `ECHOIC_ADMIN_USERNAME` / `ECHOIC_ADMIN_PASSWORD` | `admin` / `admin123` | 首次启动创建的管理员（之后请在设置页改密） |
-| `ECHOIC_SECRET_KEY` | 自动生成 | JWT / API Key 加密密钥；留空自动生成到数据目录 |
-| `ECHOIC_DATA_DIR` | `./data`（Docker 内 `/data`） | SQLite、媒体、密钥存放目录 |
-| `ECHOIC_DATABASE_URL` | 空（SQLite） | 可指向 PostgreSQL：`postgresql+psycopg://…` |
-| `ECHOIC_DEMO_SEED` | `true` | 空库时写入内置演示录音 |
-| `ECHOIC_EMBEDDED_WORKER` | `true` | 内嵌任务线程；独立 worker 部署时设 `false` |
-| `ECHOIC_MAX_UPLOAD_MB` | `2048` | 单文件上传上限 |
-| `ECHOIC_IMAGE_TAG` | `latest` | **部署**：GHCR 镜像标签（`latest` / `v0.2.0` / `sha-xxxxxxx`） |
-| `ECHOIC_ALLOW_REGISTRATION` | `false` | v0.2：开放网页注册（默认仅管理员建号） |
-| `ECHOIC_SHARE_COOKIE_HOURS` | `2` | v0.2：公开分享链接解锁 Cookie 有效期（小时） |
-| `ECHOIC_CONSUME_ENABLED` | `true` | v0.2：监听 consume 目录自动导入录音 |
-| `ECHOIC_CONSUME_DIR` | 空（`<data>/consume`） | v0.2：consume 目录（Docker 内即 `/data/consume`，随数据卷持久化） |
-| `ECHOIC_CONSUME_INTERVAL_SEC` | `15` | v0.2：consume 扫描间隔（秒） |
-| `ECHOIC_CONSUME_OWNER_USERNAME` | 空（首个管理员） | v0.2：导入录音归属用户 |
-| `ECHOIC_ASR_PROVIDER` / `ECHOIC_LLM_PROVIDER` | `mock` / `mock` | AI provider（mock / dashscope_realtime / openai …） |
-| `ECHOIC_ASR_API_KEY` / `ECHOIC_LLM_API_KEY` | 空 | 服务商密钥（首次启动写入数据库；网页设置优先） |
+| `ECHOIC_ADMIN_USERNAME` / `ECHOIC_ADMIN_PASSWORD` | `admin` / `admin123` | Admin account created on first start (change it afterwards in Settings) |
+| `ECHOIC_SECRET_KEY` | auto-generated | JWT / API-key encryption secret; if empty, generated into the data directory |
+| `ECHOIC_DATA_DIR` | `./data` (`/data` in Docker) | SQLite, media and secrets directory |
+| `ECHOIC_DATABASE_URL` | empty (SQLite) | e.g. `postgresql+psycopg://…` for PostgreSQL |
+| `ECHOIC_DEMO_SEED` | `true` | Seed bundled demo recordings into an empty library |
+| `ECHOIC_EMBEDDED_WORKER` | `true` | In-process worker thread; set `false` for a standalone worker |
+| `ECHOIC_MAX_UPLOAD_MB` | `2048` | Per-file upload limit |
+| `ECHOIC_IMAGE_TAG` | `latest` | **Deployment**: GHCR image tag (`latest` / `v0.2.0` / `sha-xxxxxxx`) |
+| `ECHOIC_ALLOW_REGISTRATION` | `false` | v0.2: allow self-service registration (default: admins create accounts) |
+| `ECHOIC_SHARE_COOKIE_HOURS` | `2` | v0.2: public-share unlock cookie lifetime (hours) |
+| `ECHOIC_CONSUME_ENABLED` | `true` | v0.2: watch the consume directory and import recordings automatically |
+| `ECHOIC_CONSUME_DIR` | empty (`<data>/consume`) | v0.2: consume directory (`/data/consume` in Docker, persisted with the data volume) |
+| `ECHOIC_CONSUME_INTERVAL_SEC` | `15` | v0.2: consume scan interval (seconds) |
+| `ECHOIC_CONSUME_OWNER_USERNAME` | empty (first admin) | v0.2: owner of imported recordings |
+| `ECHOIC_ASR_PROVIDER` / `ECHOIC_LLM_PROVIDER` | `mock` / `mock` | AI providers (`mock` / `dashscope_realtime` / `openai` …) |
+| `ECHOIC_ASR_API_KEY` / `ECHOIC_LLM_API_KEY` | empty | Provider keys (seeded into the database on first start; settings UI takes precedence) |
 
-> 提示：`.env` 中的 `ECHOIC_*AI*` 配置**只在首次启动写入数据库**，之后请在「设置」页面修改（即时生效、Key 加密存储）。
+> Note: `ECHOIC_*AI*` values from `.env` are written into the database **only on first start**. Change them later in **Settings** (effective immediately, keys encrypted at rest).
 
 ---
 
 ## 🗺 Roadmap
 
-### v0.2.0（P1 batch 1，已交付）
+### v0.2.0 (P1 batch 1, shipped)
 
-- [x] 多架构容器镜像 + GHCR 自动发布 + GitHub Actions CI/CD（镜像优先 compose 部署）
-- [x] 多用户 / 角色权限（管理员 / 成员）+ 用户管理 + 开放注册开关
-- [x] 公开分享链接（密码 / 有效期 / 权限开关 / 只读分享页 / 撤销 / 访问计数）
-- [x] consume 目录自动导入（监听文件夹自动建录音并处理 + 去重 + 失败隔离）
-- [x] 数据库迁移机制与 v0.1 升级兼容
+- [x] Multi-arch container image + automated GHCR publishing + GitHub Actions CI/CD (image-first compose)
+- [x] Multi-user / roles (admin / member) + user management + registration switch
+- [x] Public share links (password / expiry / permission flags / read-only page / revoke / view counts)
+- [x] Consume directory auto-import (watch folder, auto-create recordings, dedupe, failure quarantine)
+- [x] Database migration mechanism with v0.1 upgrade compatibility
 
-### v0.2.1 / v0.3（规划中，详见 docs/09）
+### v0.2.1 / v0.3 (planned, see docs/09)
 
-- [ ] 暗色主题、回收站与批量操作（v0.2.1）
-- [ ] 对象存储（S3/MinIO）存储抽象、扩展名清理（v0.2.1 / v0.3）
-- [ ] 实时转写与实时字幕（边录边出字，v0.3）
-- [ ] 向量检索（sqlite-vec / pgvector）与混合检索（v0.3）
-- [ ] 自助注册页面、成员个人资料/改密页
-- [ ] 视频画面 PPT / 场景抽取、移动 App / 浏览器扩展、OAuth/LDAP、审计日志
+- [ ] Dark theme and trash / batch operations (v0.2.1)
+- [ ] Object storage (S3/MinIO) abstraction, extension cleanup (v0.2.1 / v0.3)
+- [ ] Live transcription and live captions (v0.3)
+- [ ] Vector search (sqlite-vec / pgvector) and hybrid retrieval (v0.3)
+- [ ] Self-service registration page, member profile / password page
+- [ ] Video slide/scene extraction, mobile app / browser extension, OAuth/LDAP, audit logs
 
 ---
 
@@ -279,20 +282,16 @@ e2e/                                        端到端冒烟脚本与验收报告
 
 ---
 
-## 🔗 文档索引
+## 🔗 Documentation
 
-| 文档 | 内容 |
+| Document | Contents |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 目标/非目标、总体架构、数据模型、安全设计 |
-| [docs/PIPELINE.md](docs/PIPELINE.md) | 处理管线、任务队列、provider 接口、mock 行为 |
-| [docs/API.md](docs/API.md) | REST + SSE 接口契约（前后端唯一事实来源） |
-| [docs/FRONTEND.md](docs/FRONTEND.md) | 页面/路由/组件/视觉规范 |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | 中文部署指南（Docker、备份、升级、排障） |
-| [docs/01-需求与竞品分析.md](docs/01-需求与竞品分析.md) | 需求基线、竞品对比、NFR、风险 |
-| [docs/05-产品与UX设计.md](docs/05-产品与UX设计.md) | 信息架构、用户旅程、页面交互、设计规范 |
-| [docs/07-实施计划与验收.md](docs/07-实施计划与验收.md) | WBS、里程碑、测试策略、发布验收清单 |
-| [docs/research/dashscope-api.md](docs/research/dashscope-api.md) | 阿里云百炼 ASR/LLM/Embedding API 调研与集成建议 |
-| [docs/08-P1-协作与分享设计.md](docs/08-P1-协作与分享设计.md) | v0.2 契约：角色权限、分享链接、consume、迁移 |
-| [docs/09-P1-后续能力技术方案.md](docs/09-P1-后续能力技术方案.md) | 后续 P1 技术方案：实时转写 / 向量检索 / 对象存储 / 回收站 / 暗色主题 |
-| [e2e/REPORT.md](e2e/REPORT.md) · [e2e/REPORT-v0.2.md](e2e/REPORT-v0.2.md) | 端到端验收报告（v0.1 / v0.2） |
-| [CHANGELOG.md](CHANGELOG.md) | 版本变更记录与已知限制 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Goals/non-goals, architecture, data model, security design |
+| [docs/PIPELINE.md](docs/PIPELINE.md) | Processing pipeline, job queue, provider interfaces, mock behavior |
+| [docs/API.md](docs/API.md) | REST + SSE contract (single source of truth) |
+| [docs/FRONTEND.md](docs/FRONTEND.md) | Pages, routes, components, visual guidelines |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deployment guide: Docker, backups, upgrades, troubleshooting (Chinese) |
+| [docs/08-P1-协作与分享设计.md](docs/08-P1-协作与分享设计.md) | v0.2 contract: roles/permissions, share links, consume, migrations |
+| [docs/09-P1-后续能力技术方案.md](docs/09-P1-后续能力技术方案.md) | Remaining P1 technical plan: live transcription, vector search, object storage, trash, dark theme |
+| [e2e/REPORT.md](e2e/REPORT.md) · [e2e/REPORT-v0.2.md](e2e/REPORT-v0.2.md) | End-to-end acceptance reports (v0.1 / v0.2) |
+| [CHANGELOG.md](CHANGELOG.md) | Release notes and known limitations |

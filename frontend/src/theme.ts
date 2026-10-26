@@ -2,7 +2,7 @@ import type { ThemeConfig } from 'antd'
 import type { Insight, RecordingStatus } from './types'
 
 /**
- * Ant Design theme — light, airy, Feishu-esque.
+ * Ant Design theme — light, airy, meeting-app inspired.
  * The visual contract lives in docs/FRONTEND.md and styles/app.css.
  */
 export const theme: ThemeConfig = {

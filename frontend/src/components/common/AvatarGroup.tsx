@@ -6,7 +6,7 @@ interface AvatarGroupProps {
   speakers: Speaker[]
   max?: number
   size?: number
-  /** Render a leading "发言人" label pill like the Feishu player card. */
+  /** Render a leading "发言人" label pill like the reference player card. */
   label?: string
   className?: string
 }

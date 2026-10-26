@@ -22,7 +22,7 @@ interface AudioPlayerCardProps {
 }
 
 /**
- * Feishu-Miaoji style player card: custom seekable progress bar (with chapter
+ * Reference-style player card: custom seekable progress bar (with chapter
  * ticks), speaker avatars, ±15s / play, playback rate and more menu.
  */
 export function AudioPlayerCard({ recording, speakers, chapters }: AudioPlayerCardProps) {
