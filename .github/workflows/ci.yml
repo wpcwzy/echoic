@@ -46,18 +46,18 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements*.txt
 
-      - name: Ensure ffmpeg
-        # ubuntu-latest 运行器通常已自带 ffmpeg；仅在缺失时安装。
-        # 使用 shell timeout 兜底：防止 apt 源不可达时步骤长时间挂起（首次 CI 曾出现 >20min 卡住）。
+      - name: Set up ffmpeg
+        # 使用预编译静态版 ffmpeg（工具缓存命中后秒级完成），避免 apt 源慢/挂起问题：
+        # 首次 CI 曾因 apt 下载卡住 >20min，随后 180s 超时；runner 镜像未必预装 ffmpeg。
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: release
+          architecture: x64
+
+      - name: Verify ffmpeg
         run: |
-          if command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; then
-            echo "ffmpeg 已预装，跳过安装"
-          else
-            echo "ffmpeg 缺失，安装中（最多 180s）..."
-            sudo timeout --kill-after=10 120 apt-get update -qq || true
-            sudo timeout --kill-after=10 180 apt-get install -y --no-install-recommends ffmpeg
-          fi
           ffmpeg -version | head -1
+          ffprobe -version | head -1
 
       - name: Install Python dependencies
         run: |
