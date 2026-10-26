@@ -8,6 +8,7 @@ import {
   QuestionCircleOutlined,
   SearchOutlined,
   SettingOutlined,
+  TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -15,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useLogout } from '../api/queries'
 import { useAuthStore } from '../store/auth'
 import { colorFromString, initials } from '../utils/format'
+import { isAdminUser, roleLabel } from '../utils/roles'
 import { toast } from '../utils/toast'
 import { BrandMark } from '../components/common/BrandMark'
 
@@ -25,16 +27,30 @@ interface NavItem {
   match: (pathname: string) => boolean
 }
 
-const NAV_ITEMS: NavItem[] = [
+const PRIMARY_NAV: NavItem[] = [
   { to: '/', label: '资料库', icon: <AppstoreOutlined />, match: (pathname) => pathname === '/' || pathname.startsWith('/r/') },
   { to: '/record', label: '录音', icon: <AudioOutlined />, match: (pathname) => pathname.startsWith('/record') },
   { to: '/search', label: '搜索', icon: <SearchOutlined />, match: (pathname) => pathname.startsWith('/search') },
-  { to: '/settings', label: '设置', icon: <SettingOutlined />, match: (pathname) => pathname.startsWith('/settings') },
 ]
+
+const USERS_NAV: NavItem = {
+  to: '/users',
+  label: '用户管理',
+  icon: <TeamOutlined />,
+  match: (pathname) => pathname.startsWith('/users'),
+}
+
+const SETTINGS_NAV: NavItem = {
+  to: '/settings',
+  label: '设置',
+  icon: <SettingOutlined />,
+  match: (pathname) => pathname.startsWith('/settings'),
+}
 
 const SECTION_TITLES: { match: (path: string) => boolean; title: string }[] = [
   { match: (path) => path.startsWith('/record'), title: '录音与上传' },
   { match: (path) => path.startsWith('/search'), title: '全局搜索' },
+  { match: (path) => path.startsWith('/users'), title: '用户管理' },
   { match: (path) => path.startsWith('/settings'), title: '设置' },
   { match: () => true, title: '资料库' },
 ]
@@ -42,6 +58,7 @@ const SECTION_TITLES: { match: (path: string) => boolean; title: string }[] = [
 /**
  * Application shell: 64px icon rail + top bar + routed content.
  * The detail page (`/r/:id`) renders its own top bar and uses the full height.
+ * Admin-only entries (用户管理 / 设置) are hidden for member accounts.
  */
 export default function AppShell() {
   const location = useLocation()
@@ -51,10 +68,17 @@ export default function AppShell() {
   const user = useAuthStore((state) => state.user)
   const reset = useAuthStore((state) => state.reset)
 
+  const isAdmin = isAdminUser(user)
   const isDetail = location.pathname.startsWith('/r/')
   const sectionTitle = useMemo(
     () => SECTION_TITLES.find((entry) => entry.match(location.pathname))?.title ?? 'Echoic',
     [location.pathname],
+  )
+
+  const railNav = useMemo<NavItem[]>(() => (isAdmin ? [...PRIMARY_NAV, USERS_NAV] : PRIMARY_NAV), [isAdmin])
+  const mobileNav = useMemo<NavItem[]>(
+    () => (isAdmin ? [...PRIMARY_NAV, USERS_NAV, SETTINGS_NAV] : PRIMARY_NAV),
+    [isAdmin],
   )
 
   // Reset the content scroll position when the route changes.
@@ -88,22 +112,27 @@ export default function AppShell() {
 
   const displayName = user?.display_name || user?.username || '未登录'
   const avatarColor = colorFromString(displayName)
+  const currentRole = roleLabel(user?.role)
 
   const userMenu: MenuProps['items'] = [
     {
       key: 'account',
       label: (
         <div className="user-menu__header">
-          <div className="user-menu__name">{displayName}</div>
+          <div className="user-menu__name">
+            {displayName}
+            <span className={`role-chip role-chip--${user?.role ?? 'member'}`}>{currentRole}</span>
+          </div>
           <div className="user-menu__meta">
-            @{user?.username ?? '—'} {user?.is_admin ? '· 管理员' : ''}
+            @{user?.username ?? '—'}
+            {user?.email ? ` · ${user.email}` : ''}
           </div>
         </div>
       ),
       disabled: true,
     },
     { type: 'divider' },
-    { key: 'settings', icon: <UserOutlined />, label: '账户与设置' },
+    ...(isAdmin ? [{ key: 'settings', icon: <UserOutlined />, label: '账户与设置' } as const] : []),
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
   ]
 
@@ -136,10 +165,10 @@ export default function AppShell() {
           </NavLink>
         </div>
         <nav className="app-rail__nav">
-          {NAV_ITEMS.slice(0, 3).map((item) => navLink(item, 'app-rail__item'))}
+          {railNav.map((item) => navLink(item, 'app-rail__item'))}
         </nav>
         <div className="app-rail__bottom">
-          {navLink(NAV_ITEMS[3], 'app-rail__item')}
+          {isAdmin && navLink(SETTINGS_NAV, 'app-rail__item')}
           <Dropdown menu={{ items: userMenu, onClick: onUserMenuClick }} trigger={['click']} placement="topRight">
             <button type="button" className="app-rail__user" aria-label="账户菜单">
               <Avatar size={32} style={{ background: avatarColor, fontSize: 13 }}>
@@ -162,16 +191,18 @@ export default function AppShell() {
                 <span className="topbar-search__text">搜索录音、转录或提问</span>
                 <kbd className="topbar-search__kbd">⌘K</kbd>
               </button>
-              <Tooltip title="帮助与关于">
-                <button
-                  type="button"
-                  className="topbar-icon-btn"
-                  aria-label="帮助"
-                  onClick={() => navigate('/settings?tab=about')}
-                >
-                  <QuestionCircleOutlined />
-                </button>
-              </Tooltip>
+              {isAdmin && (
+                <Tooltip title="帮助与关于">
+                  <button
+                    type="button"
+                    className="topbar-icon-btn"
+                    aria-label="帮助"
+                    onClick={() => navigate('/settings?tab=about')}
+                  >
+                    <QuestionCircleOutlined />
+                  </button>
+                </Tooltip>
+              )}
               <Dropdown menu={{ items: userMenu, onClick: onUserMenuClick }} trigger={['click']} placement="bottomRight">
                 <button type="button" className="topbar-user" aria-label="账户菜单">
                   <Avatar size={28} style={{ background: avatarColor, fontSize: 12 }}>
@@ -189,7 +220,7 @@ export default function AppShell() {
       </div>
 
       <nav className="mobile-nav" aria-label="移动端导航">
-        {NAV_ITEMS.map((item) => navLink(item, 'mobile-nav__item'))}
+        {mobileNav.map((item) => navLink(item, 'mobile-nav__item'))}
       </nav>
     </div>
   )

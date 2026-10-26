@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { App as AntdApp, Spin } from 'antd'
-import { bindFeedback } from './utils/toast'
+import { bindFeedback, toast } from './utils/toast'
 import { useMe } from './api/queries'
 import { useAuthStore } from './store/auth'
+import { isAdminUser } from './utils/roles'
 import AppShell from './layouts/AppShell'
 import LoginPage from './pages/LoginPage'
 import LibraryPage from './pages/LibraryPage'
@@ -11,6 +12,8 @@ import RecordPage from './pages/RecordPage'
 import RecordingDetailPage from './pages/RecordingDetailPage'
 import SearchPage from './pages/SearchPage'
 import SettingsPage from './pages/SettingsPage'
+import UsersPage from './pages/UsersPage'
+import PublicSharePage from './pages/PublicSharePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { BrandMark } from './components/common/BrandMark'
 
@@ -68,6 +71,27 @@ function RequireAuth() {
   return <Outlet />
 }
 
+/**
+ * Guards admin-only pages (用户管理 / 设置) for member accounts:
+ * redirects to the library and explains why once.
+ */
+function RequireAdmin() {
+  const status = useAuthStore((state) => state.status)
+  const user = useAuthStore((state) => state.user)
+  const notifiedRef = useRef(false)
+
+  useEffect(() => {
+    if (status !== 'loading' && user && !isAdminUser(user) && !notifiedRef.current) {
+      notifiedRef.current = true
+      toast.warning('该页面仅管理员可访问')
+    }
+  }, [status, user])
+
+  if (status === 'loading') return <BootSplash />
+  if (!isAdminUser(user)) return <Navigate to="/" replace />
+  return <Outlet />
+}
+
 export default function App() {
   return (
     <>
@@ -75,13 +99,18 @@ export default function App() {
       <AuthBootstrap />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* Public share page: no AppShell, no login required, never redirects to /login. */}
+        <Route path="/s/:token" element={<PublicSharePage />} />
         <Route element={<RequireAuth />}>
           <Route element={<AppShell />}>
             <Route path="/" element={<LibraryPage />} />
             <Route path="/record" element={<RecordPage />} />
             <Route path="/r/:id" element={<RecordingDetailPage />} />
             <Route path="/search" element={<SearchPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route element={<RequireAdmin />}>
+              <Route path="users" element={<UsersPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+            </Route>
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>

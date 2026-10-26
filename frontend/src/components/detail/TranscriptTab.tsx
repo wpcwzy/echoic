@@ -30,6 +30,8 @@ interface TranscriptTabProps {
   playing: boolean
   onSeek: (ms: number) => void
   onRetry: () => void
+  /** Public share page mode: hide editing / renaming / exports. */
+  readOnly?: boolean
 }
 
 function triggerDownload(url: string): void {
@@ -130,6 +132,7 @@ export function TranscriptTab({
   playing,
   onSeek,
   onRetry,
+  readOnly = false,
 }: TranscriptTabProps) {
   const [query, setQuery] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -233,7 +236,11 @@ export function TranscriptTab({
       <EmptyState
         icon={<TeamOutlined />}
         title="转录尚未生成"
-        description="处理完成后，这里会显示按说话人分组的逐字稿，支持搜索、编辑、导出与点击跳转播放。"
+        description={
+          readOnly
+            ? '这份分享暂未包含转录内容，或录音仍在处理中。'
+            : '处理完成后，这里会显示按说话人分组的逐字稿，支持搜索、编辑、导出与点击跳转播放。'
+        }
       />
     )
   }
@@ -254,20 +261,22 @@ export function TranscriptTab({
             {query.trim() ? `匹配 ${filtered.length} / ${segments.length} 段` : `共 ${segments.length} 段 · ${speakerCount} 位发言人`}
           </span>
         </div>
-        <div className="transcript-toolbar__right">
-          <Button icon={<TeamOutlined />} onClick={openSpeakerModal}>
-            说话人
-          </Button>
-          <Dropdown
-            menu={{
-              items: exportItems,
-              onClick: ({ key }) => triggerDownload(exportUrl(recordingId, key as 'txt' | 'srt' | 'md' | 'json')),
-            }}
-            trigger={['click']}
-          >
-            <Button icon={<DownloadOutlined />}>导出</Button>
-          </Dropdown>
-        </div>
+        {!readOnly && (
+          <div className="transcript-toolbar__right">
+            <Button icon={<TeamOutlined />} onClick={openSpeakerModal}>
+              说话人
+            </Button>
+            <Dropdown
+              menu={{
+                items: exportItems,
+                onClick: ({ key }) => triggerDownload(exportUrl(recordingId, key as 'txt' | 'srt' | 'md' | 'json')),
+              }}
+              trigger={['click']}
+            >
+              <Button icon={<DownloadOutlined />}>导出</Button>
+            </Dropdown>
+          </div>
+        )}
       </div>
 
       <div className="transcript-stream">
@@ -299,31 +308,37 @@ export function TranscriptTab({
               <div className="transcript-segment__body">
                 {showSpeaker && (
                   <div className="transcript-segment__head">
-                    <SpeakerRenamePopover
-                      speaker={
-                        speaker ?? {
-                          id: -1,
-                          label: displayName,
-                          display_name: displayName,
-                          color,
-                          is_auto: true,
+                    {readOnly ? (
+                      <span className="transcript-speaker__name transcript-speaker__name--static" style={{ color }}>
+                        {displayName}
+                      </span>
+                    ) : (
+                      <SpeakerRenamePopover
+                        speaker={
+                          speaker ?? {
+                            id: -1,
+                            label: displayName,
+                            display_name: displayName,
+                            color,
+                            is_auto: true,
+                          }
                         }
-                      }
-                      disabled={!speaker || recordingId <= 0}
-                      saving={updateSpeaker.isPending}
-                      onSave={(name) => {
-                        if (!speaker) return
-                        updateSpeaker.mutate(
-                          { speakerId: speaker.id, display_name: name },
-                          {
-                            onSuccess: () => {
-                              toast.success('说话人名称已更新')
+                        disabled={!speaker || recordingId <= 0}
+                        saving={updateSpeaker.isPending}
+                        onSave={(name) => {
+                          if (!speaker) return
+                          updateSpeaker.mutate(
+                            { speakerId: speaker.id, display_name: name },
+                            {
+                              onSuccess: () => {
+                                toast.success('说话人名称已更新')
+                              },
+                              onError: (mutationError) => toastError(mutationError, '更新说话人失败'),
                             },
-                            onError: (mutationError) => toastError(mutationError, '更新说话人失败'),
-                          },
-                        )
-                      }}
-                    />
+                          )
+                        }}
+                      />
+                    )}
                     <Tooltip title="点击时间戳跳转播放">
                       <button type="button" className="transcript-segment__time" onClick={() => onSeek(segment.start_ms)}>
                         {formatMs(segment.start_ms)}
@@ -366,14 +381,16 @@ export function TranscriptTab({
                     <p className="transcript-segment__text" onClick={() => onSeek(segment.start_ms)}>
                       {segment.text}
                     </p>
-                    <button
-                      type="button"
-                      className="transcript-segment__edit"
-                      aria-label="编辑这段转录"
-                      onClick={() => startEdit(segment)}
-                    >
-                      <EditOutlined />
-                    </button>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        className="transcript-segment__edit"
+                        aria-label="编辑这段转录"
+                        onClick={() => startEdit(segment)}
+                      >
+                        <EditOutlined />
+                      </button>
+                    )}
                   </div>
                 )}
                 {!showSpeaker && (
@@ -400,9 +417,11 @@ export function TranscriptTab({
         />
       )}
 
-      <div className="transcript-footer">
-        <ExportOutlined /> 导出文件名：{recordingTitle || '转录稿'}.txt
-      </div>
+      {!readOnly && (
+        <div className="transcript-footer">
+          <ExportOutlined /> 导出文件名：{recordingTitle || '转录稿'}.txt
+        </div>
+      )}
 
       <Modal
         open={speakerModalOpen}

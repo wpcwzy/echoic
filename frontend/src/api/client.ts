@@ -43,7 +43,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     } catch {
       /* ignore non-json error */
     }
-    if (response.status === 401 && !window.location.pathname.startsWith('/login')) {
+    // Never bounce public share visitors to the login page: `/s/:token` is
+    // anonymous by design (401 = password required / expired grant).
+    const currentPath = window.location.pathname
+    const isPublicSharePage = currentPath.startsWith('/s/')
+    if (response.status === 401 && !isPublicSharePage && !currentPath.startsWith('/login')) {
       window.location.href = '/login'
     }
     throw new ApiError(response.status, message, code)

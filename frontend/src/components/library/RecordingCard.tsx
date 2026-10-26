@@ -6,6 +6,7 @@ import {
   PlayCircleFilled,
   RobotOutlined,
   TeamOutlined,
+  UserOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import type { RecordingStatus, RecordingSummary } from '../../types'
@@ -16,6 +17,20 @@ import { AvatarGroup } from '../common/AvatarGroup'
 
 interface RecordingCardProps {
   recording: RecordingSummary
+  /** Admin view: show which user owns the recording. */
+  showOwner?: boolean
+}
+
+function OwnerChip({ recording }: { recording: RecordingSummary }) {
+  if (!recording.owner) return null
+  const name = recording.owner.display_name || recording.owner.username
+  return (
+    <Tooltip title={`归属用户：${name}（@${recording.owner.username}）`}>
+      <span className="owner-chip">
+        <UserOutlined /> {name}
+      </span>
+    </Tooltip>
+  )
 }
 
 const ACTIVE_STATUS: RecordingStatus[] = ['uploaded', 'queued', 'processing']
@@ -39,7 +54,7 @@ function TagChips({ recording }: { recording: RecordingSummary }) {
 }
 
 /** Library grid card with hover play affordance. */
-export function RecordingCard({ recording }: RecordingCardProps) {
+export function RecordingCard({ recording, showOwner = false }: RecordingCardProps) {
   const navigate = useNavigate()
   const active = ACTIVE_STATUS.includes(recording.status)
   const failed = recording.status === 'failed'
@@ -93,6 +108,7 @@ export function RecordingCard({ recording }: RecordingCardProps) {
             <CalendarOutlined /> {formatDateShort(recording.recorded_at || recording.created_at)}
           </span>
         </Tooltip>
+        {showOwner && <OwnerChip recording={recording} />}
         <TagChips recording={recording} />
       </div>
 
@@ -129,7 +145,7 @@ export function RecordingCard({ recording }: RecordingCardProps) {
 }
 
 /** Compact list row for the list view. */
-export function RecordingRow({ recording }: RecordingCardProps) {
+export function RecordingRow({ recording, showOwner = false }: RecordingCardProps) {
   const navigate = useNavigate()
   const meta = statusMeta[recording.status] ?? statusMeta.uploaded
   const open = () => navigate(`/r/${recording.id}`)
@@ -156,11 +172,17 @@ export function RecordingRow({ recording }: RecordingCardProps) {
           <TagChips recording={recording} />
         </div>
         <div className="recording-row__meta">
-          <span>{formatDateShort(recording.created_at)}</span>
+          <span>{formatDateShort(recording.recorded_at || recording.created_at)}</span>
           <span>·</span>
           <span>
             <TeamOutlined /> {recording.speakers?.length ?? 0} 位发言人
           </span>
+          {showOwner && recording.owner && (
+            <>
+              <span>·</span>
+              <OwnerChip recording={recording} />
+            </>
+          )}
           {recording.description && (
             <>
               <span>·</span>

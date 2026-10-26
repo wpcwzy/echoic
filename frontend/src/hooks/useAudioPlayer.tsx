@@ -43,6 +43,8 @@ function readStoredRate(): number {
 interface AudioPlayerProviderProps {
   recordingId: number
   durationMs: number
+  /** Override the media URL (used by public share pages). */
+  src?: string
   children: ReactNode
 }
 
@@ -50,7 +52,8 @@ interface AudioPlayerProviderProps {
  * Wraps the native <audio> element and exposes a shared playback cursor so the
  * player card, transcript, viewpoint tree, chapters and AI citations stay in sync.
  */
-export function AudioPlayerProvider({ recordingId, durationMs: apiDuration, children }: AudioPlayerProviderProps) {
+export function AudioPlayerProvider({ recordingId, durationMs: apiDuration, src, children }: AudioPlayerProviderProps) {
+  const resolvedSrc = src ?? mediaUrl(recordingId)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const pendingSeekRef = useRef<number | null>(null)
   const [ready, setReady] = useState(false)
@@ -133,7 +136,7 @@ export function AudioPlayerProvider({ recordingId, durationMs: apiDuration, chil
 
   const value = useMemo<AudioPlayerContextValue>(
     () => ({
-      mediaUrl: mediaUrl(recordingId),
+      mediaUrl: resolvedSrc,
       ready,
       hasMedia,
       playing,
@@ -145,7 +148,7 @@ export function AudioPlayerProvider({ recordingId, durationMs: apiDuration, chil
       toggle,
       setRate,
     }),
-    [currentMs, durationMs, hasMedia, playing, rate, ready, recordingId, seekBy, seekTo, setRate, toggle],
+    [currentMs, durationMs, hasMedia, playing, rate, ready, resolvedSrc, seekBy, seekTo, setRate, toggle],
   )
 
   return (
@@ -153,7 +156,7 @@ export function AudioPlayerProvider({ recordingId, durationMs: apiDuration, chil
       {children}
       <audio
         ref={audioRef}
-        src={mediaUrl(recordingId)}
+        src={resolvedSrc}
         preload="metadata"
         className="echoic-audio-element"
         onLoadedMetadata={(event) => {

@@ -17,6 +17,8 @@ interface ChaptersTabProps {
   onSeek: (ms: number) => void
   onRegenerate: () => void
   onRetry: () => void
+  /** Public share page mode: hide regenerate affordances. */
+  readOnly?: boolean
 }
 
 export function ChaptersTab({
@@ -29,6 +31,7 @@ export function ChaptersTab({
   onSeek,
   onRegenerate,
   onRetry,
+  readOnly = false,
 }: ChaptersTabProps) {
   const chapters: Chapter[] = insights?.chapters ?? []
   const activeId = useMemo(() => {
@@ -43,11 +46,17 @@ export function ChaptersTab({
       <EmptyState
         icon={<ClockCircleOutlined />}
         title="章节尚未生成"
-        description="AI 会根据讨论内容自动划分章节，方便快速跳转到感兴趣的部分。"
+        description={
+          readOnly
+            ? '这份分享暂未包含 AI 章节，或录音仍在处理中。'
+            : 'AI 会根据讨论内容自动划分章节，方便快速跳转到感兴趣的部分。'
+        }
         actions={
-          <Button type="primary" ghost loading={regenerating} icon={<ReloadOutlined />} onClick={onRegenerate}>
-            生成章节
-          </Button>
+          readOnly ? undefined : (
+            <Button type="primary" ghost loading={regenerating} icon={<ReloadOutlined />} onClick={onRegenerate}>
+              生成章节
+            </Button>
+          )
         }
       />
     )

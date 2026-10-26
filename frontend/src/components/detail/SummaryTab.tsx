@@ -1,6 +1,6 @@
 import { Button, Tooltip } from 'antd'
 import { ReloadOutlined, RobotOutlined, ThunderboltOutlined, BulbOutlined, CheckSquareOutlined, TagsOutlined } from '@ant-design/icons'
-import type { Insights, RecordingDetail } from '../../types'
+import type { Insights, RecordingStatus } from '../../types'
 import { analysisKindLabel } from '../../theme'
 import { formatDate } from '../../utils/format'
 import { MarkdownView } from '../common/MarkdownView'
@@ -10,7 +10,7 @@ import { SummarySkeleton } from '../common/Skeletons'
 import { ActionItemList, InsightCards, KeywordCloud } from './InsightWidgets'
 
 interface SummaryTabProps {
-  recording: RecordingDetail
+  recording: { id: number; status: RecordingStatus }
   insights: Insights | undefined
   loading: boolean
   error: unknown
@@ -19,23 +19,29 @@ interface SummaryTabProps {
   onOpenInsights: () => void
   onSeek: (ms: number) => void
   onRetry: () => void
+  /** Public share page mode: hide all generate/regenerate affordances. */
+  readOnly?: boolean
 }
 
 function MissingBox({
   message,
   onGenerate,
   loading,
+  readOnly = false,
 }: {
   message: string
   onGenerate: () => void
   loading: boolean
+  readOnly?: boolean
 }) {
   return (
     <div className="missing-box">
       <span>{message}</span>
-      <Button size="small" type="primary" ghost icon={<ThunderboltOutlined />} loading={loading} onClick={onGenerate}>
-        立即生成
-      </Button>
+      {!readOnly && (
+        <Button size="small" type="primary" ghost icon={<ThunderboltOutlined />} loading={loading} onClick={onGenerate}>
+          立即生成
+        </Button>
+      )}
     </div>
   )
 }
@@ -50,6 +56,7 @@ export function SummaryTab({
   onOpenInsights,
   onSeek,
   onRetry,
+  readOnly = false,
 }: SummaryTabProps) {
   if (loading) return <SummarySkeleton />
   if (error) {
@@ -62,9 +69,11 @@ export function SummaryTab({
         title="AI 纪要尚未生成"
         description="录音处理完成后，将自动生成会议纪要、关键洞察与待办事项。"
         actions={
-          <Button type="primary" loading={regenerating} icon={<ThunderboltOutlined />} onClick={() => onRegenerate()}>
-            生成 AI 纪要
-          </Button>
+          readOnly ? undefined : (
+            <Button type="primary" loading={regenerating} icon={<ThunderboltOutlined />} onClick={() => onRegenerate()}>
+              生成 AI 纪要
+            </Button>
+          )
         }
       />
     )
@@ -95,7 +104,7 @@ export function SummaryTab({
             </div>
           </div>
           <div className="summary-card__actions">
-            {recording.status === 'ready' && (
+            {!readOnly && recording.status === 'ready' && (
               <Tooltip title="重新生成全部 AI 内容">
                 <Button
                   size="small"
@@ -116,6 +125,7 @@ export function SummaryTab({
           <MissingBox
             message={`${analysisKindLabel.summary}${missing.has('summary') ? '尚未生成' : '暂无内容'}`}
             loading={regenerating}
+            readOnly={readOnly}
             onGenerate={() => onRegenerate(['summary'])}
           />
         )}
@@ -128,9 +138,11 @@ export function SummaryTab({
             title="AI 分析结果尚未就绪"
             description={`缺少：${missingContentKinds.map((kind) => analysisKindLabel[kind] ?? kind).join('、')}`}
             actions={
-              <Button type="primary" loading={regenerating} onClick={() => onRegenerate()}>
-                生成本场纪要
-              </Button>
+              readOnly ? undefined : (
+                <Button type="primary" loading={regenerating} onClick={() => onRegenerate()}>
+                  生成本场纪要
+                </Button>
+              )
             }
           />
         </div>
@@ -155,6 +167,7 @@ export function SummaryTab({
           <MissingBox
             message="关键洞察尚未生成"
             loading={regenerating}
+            readOnly={readOnly}
             onGenerate={() => onRegenerate(['insights'])}
           />
         )}

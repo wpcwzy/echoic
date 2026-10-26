@@ -20,6 +20,7 @@ import {
   useTags,
 } from '../api/queries'
 import { useAuthStore } from '../store/auth'
+import { isAdminUser } from '../utils/roles'
 import { useDebouncedValue } from '../hooks/useDebounce'
 import { formatHours } from '../utils/format'
 import { toast, toastError } from '../utils/toast'
@@ -50,6 +51,7 @@ const SORT_OPTIONS = [
 export default function LibraryPage() {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
+  const isAdmin = isAdminUser(user)
   const [searchParams, setSearchParams] = useSearchParams()
   const [searchInput, setSearchInput] = useState(searchParams.get('q') ?? '')
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -98,13 +100,13 @@ export default function LibraryPage() {
 
   const recordingsQuery = useRecordings(params)
   const tagsQuery = useTags()
-  const settingsQuery = useSettings()
+  const settingsQuery = useSettings(isAdmin)
   const seedDemo = useSeedDemo()
   const stats = recordingsQuery.data?.stats
   const items = recordingsQuery.data?.items ?? []
   const total = recordingsQuery.data?.total ?? 0
   const hasFilter = Boolean(query || status || tagId)
-  const demoMode = settingsQuery.data?.system.demo_mode ?? false
+  const demoMode = isAdmin && (settingsQuery.data?.system.demo_mode ?? false)
 
   useEffect(() => {
     document.title = '资料库 · Echoic'
@@ -268,11 +270,13 @@ export default function LibraryPage() {
       ) : items.length === 0 ? (
         <EmptyState
           icon={<InboxOutlined />}
-          title={hasFilter ? '没有匹配的录音' : '还没有任何录音'}
+          title={hasFilter ? '没有匹配的录音' : isAdmin ? '还没有任何录音' : '还没有你自己的录音'}
           description={
             hasFilter
               ? '试试调整搜索关键词或筛选条件。'
-              : '上传一段会议录音，或直接使用浏览器开始录音。AI 会自动完成转写、纪要与观点整理。'
+              : isAdmin
+                ? '上传一段会议录音，或直接使用浏览器开始录音。AI 会自动完成转写、纪要与观点整理。'
+                : '上传或录制第一条录音吧。成员只能看到自己的录音，管理员可以访问全部内容。'
           }
           actions={
             hasFilter ? (
@@ -292,7 +296,7 @@ export default function LibraryPage() {
                 <Button icon={<AudioOutlined />} onClick={() => navigate('/record')}>
                   开始录音
                 </Button>
-                {demoMode && user?.is_admin && (
+                {demoMode && isAdmin && (
                   <Button icon={<ThunderboltOutlined />} loading={seedDemo.isPending} onClick={handleSeedDemo}>
                     载入演示数据
                   </Button>
@@ -304,13 +308,13 @@ export default function LibraryPage() {
       ) : view === 'grid' ? (
         <div className="recording-grid">
           {items.map((recording) => (
-            <RecordingCard key={recording.id} recording={recording} />
+            <RecordingCard key={recording.id} recording={recording} showOwner={isAdmin} />
           ))}
         </div>
       ) : (
         <div className="recording-list">
           {items.map((recording) => (
-            <RecordingRow key={recording.id} recording={recording} />
+            <RecordingRow key={recording.id} recording={recording} showOwner={isAdmin} />
           ))}
         </div>
       )}

@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons'
 import { api } from '../../api/client'
 import { useSettings } from '../../api/queries'
+import { useIsAdmin } from '../../utils/roles'
 import { humanizeError } from '../../utils/format'
 import { toast } from '../../utils/toast'
 import type { RecordingSummary } from '../../types'
@@ -62,7 +63,8 @@ export function FileUploader({
   hint,
   autoStart = true,
 }: FileUploaderProps) {
-  const { data: settings } = useSettings()
+  const isAdmin = useIsAdmin()
+  const { data: settings } = useSettings(isAdmin)
   const maxMb = settings?.system.max_upload_mb ?? 2048
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [items, setItems] = useState<UploadItem[]>([])
@@ -170,7 +172,12 @@ export function FileUploader({
           {dragging ? <InboxOutlined /> : <CloudUploadOutlined />}
         </div>
         <div className="file-uploader__title">点击或拖拽文件到此区域上传</div>
-        <div className="file-uploader__hint">{hint ?? `支持音频 / 视频文件，单文件不超过 ${maxMb} MB，可批量选择`}</div>
+        <div className="file-uploader__hint">
+          {hint ??
+            (isAdmin && settings
+              ? `支持音频 / 视频文件，单文件不超过 ${maxMb} MB，可批量选择`
+              : '支持音频 / 视频文件，可批量选择（大小限制以管理员配置为准）')}
+        </div>
         <input
           ref={inputRef}
           type="file"

@@ -11,12 +11,24 @@ export type AnalysisKind =
   | 'suggested_questions'
   | 'keywords'
 
+export type UserRole = 'admin' | 'member'
+
 export interface User {
   id: number
   username: string
   display_name: string
+  email: string | null
+  role: UserRole
   is_admin: boolean
-  created_at?: string
+  disabled: boolean
+  created_at?: string | null
+  last_login_at?: string | null
+}
+
+export interface UserBrief {
+  id: number
+  username: string
+  display_name: string
 }
 
 export interface Tag {
@@ -64,7 +76,9 @@ export interface RecordingSummary {
   duration_ms: number
   recorded_at: string
   language: string
-  source: 'upload' | 'browser_recording'
+  source: 'upload' | 'browser_recording' | 'consume'
+  owner_id: number | null
+  owner: UserBrief | null
   tags: Tag[]
   speakers: Speaker[]
   has_transcript: boolean
@@ -203,6 +217,8 @@ export interface Settings {
     auto_process: boolean
     max_upload_mb: number
     default_language: string
+    allow_registration: boolean
+    consume?: { enabled: boolean; dir: string; interval_sec: number }
     version: string
     worker: { embedded: boolean; running: boolean; queue_depth: number }
   }
@@ -288,6 +304,7 @@ export interface SystemInfo {
   segments: number
   chunks: number
   worker: { embedded?: boolean; running?: boolean; queue_depth?: number }
+  consume?: ConsumeInfo
 }
 
 export type AiKind = 'asr' | 'llm' | 'embeddings'
@@ -300,6 +317,8 @@ export interface UpdateRecordingPayload {
   language?: string
   tag_ids?: number[]
   speaker_names?: Record<number, string>
+  /** Admin only — reassign recording ownership. */
+  owner_id?: number
 }
 
 export interface ReprocessPayload {
@@ -313,6 +332,132 @@ export interface RecordingListParams {
   sort?: 'recent' | 'oldest' | 'title' | 'duration'
   page?: number
   page_size?: number
+}
+
+// ---------------------------------------------------------------------------
+// v0.2 — roles / user management (R-18), sharing (R-17), consume import (R-22)
+// ---------------------------------------------------------------------------
+
+export interface UserAdmin extends User {
+  recording_count: number
+  share_count: number
+}
+
+export interface UserListResponse {
+  items: UserAdmin[]
+  total: number
+}
+
+export interface UserListParams {
+  query?: string
+  role?: UserRole
+  include_disabled?: boolean
+  page?: number
+  page_size?: number
+}
+
+export interface UserCreatePayload {
+  username: string
+  password: string
+  display_name?: string
+  email?: string
+  role?: UserRole
+}
+
+export interface UserUpdatePayload {
+  display_name?: string
+  email?: string
+  role?: UserRole
+  disabled?: boolean
+}
+
+export interface ShareInfo {
+  id: number
+  recording_id: number
+  token: string
+  url_path: string
+  include_transcript: boolean
+  include_insights: boolean
+  allow_download: boolean
+  has_password: boolean
+  expires_at: string | null
+  expired: boolean
+  revoked_at: string | null
+  view_count: number
+  last_viewed_at: string | null
+  created_at: string | null
+  created_by: UserBrief | null
+}
+
+export interface ShareListResponse {
+  items: ShareInfo[]
+  total: number
+}
+
+export interface ShareCreatePayload {
+  password?: string | null
+  expires_at?: string | null
+  include_transcript?: boolean
+  include_insights?: boolean
+  allow_download?: boolean
+}
+
+export interface PublicShareInfo {
+  include_transcript: boolean
+  include_insights: boolean
+  allow_download: boolean
+  has_password: boolean
+  expires_at: string | null
+  created_at: string | null
+  view_count: number
+}
+
+export interface PublicRecording {
+  uuid: string
+  title: string
+  description: string | null
+  media_type: MediaType
+  duration_ms: number
+  recorded_at: string
+  language: string
+  speakers: Speaker[]
+  tags: Tag[]
+}
+
+export interface PublicShareResponse {
+  share: PublicShareInfo
+  recording: PublicRecording
+}
+
+export interface ShareUnlockResponse {
+  ok: boolean
+  expires_in: number
+}
+
+export interface ConsumeScanResult {
+  scanned: number
+  imported: number
+  duplicates: number
+  failed: number
+}
+
+export interface ConsumeLastScan extends ConsumeScanResult {
+  at: string | null
+}
+
+export interface ConsumeInfo {
+  enabled: boolean
+  dir: string
+  interval_sec: number
+  pending_files: number
+  failed_files: number
+  last_scan: ConsumeLastScan | null
+}
+
+export interface ConsumeScanResponse {
+  ok: boolean
+  result: ConsumeScanResult
+  at: string | null
 }
 
 export type ListViewMode = 'grid' | 'list'

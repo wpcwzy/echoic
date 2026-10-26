@@ -12,6 +12,7 @@ import type {
   Speaker,
   SystemHealth,
   SystemInfo,
+  ConsumeScanResponse,
   TagListResponse,
   Transcript,
   Insights,
@@ -334,6 +335,17 @@ export function useSystemInfo(enabled = true) {
     enabled,
     retry: false,
     staleTime: 60_000,
+  })
+}
+
+export function useConsumeScan() {
+  const queryClient = useQueryClient()
+  return useMutation<ConsumeScanResponse, Error, void>({
+    mutationFn: () => api.post<ConsumeScanResponse>('/api/system/consume/scan'),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.systemInfo })
+      void queryClient.invalidateQueries({ queryKey: ['recordings'] })
+    },
   })
 }
 

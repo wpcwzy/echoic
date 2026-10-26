@@ -21,11 +21,13 @@ import {
   DatabaseOutlined,
   DeleteOutlined,
   ExperimentOutlined,
+  FolderOpenOutlined,
   InfoCircleOutlined,
   LogoutOutlined,
   ReloadOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
+  ScanOutlined,
   SettingOutlined,
   ThunderboltOutlined,
   UserOutlined,
@@ -42,9 +44,11 @@ import {
   useSystemHealth,
   useSystemInfo,
   useTestProvider,
+  useConsumeScan,
 } from '../api/queries'
 import { useAuthStore } from '../store/auth'
-import type { AiKind, ProviderSettings, ProviderTestResult, Settings } from '../types'
+import { isAdminUser } from '../utils/roles'
+import type { AiKind, ConsumeScanResponse, ProviderSettings, ProviderTestResult, Settings } from '../types'
 import { formatBytes, formatDate, humanizeError } from '../utils/format'
 import { confirmAction, toast, toastError } from '../utils/toast'
 import { ErrorState } from '../components/common/ErrorState'
@@ -122,6 +126,7 @@ export default function SettingsPage() {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const resetAuth = useAuthStore((state) => state.reset)
+  const isAdmin = isAdminUser(user)
 
   const tabParam = searchParams.get('tab')
   const activeTab: SettingsTab = TABS.some((tab) => tab.key === tabParam) ? (tabParam as SettingsTab) : 'ai'
@@ -134,7 +139,8 @@ export default function SettingsPage() {
   const logout = useLogout()
   const seedDemo = useSeedDemo()
   const healthQuery = useSystemHealth()
-  const systemInfoQuery = useSystemInfo(activeTab === 'about')
+  const systemInfoQuery = useSystemInfo(activeTab === 'about' || activeTab === 'system')
+  const consumeScan = useConsumeScan()
 
   const [aiDrafts, setAiDrafts] = useState<Settings['ai'] | null>(null)
   const [keys, setKeys] = useState<Record<AiKind, string>>({ asr: '', llm: '', embeddings: '' })
@@ -143,6 +149,7 @@ export default function SettingsPage() {
   const [testResults, setTestResults] = useState<Partial<Record<AiKind, ProviderTestResult>>>({})
   const [testingKind, setTestingKind] = useState<AiKind | null>(null)
   const [savingKind, setSavingKind] = useState<AiKind | null>(null)
+  const [scanResult, setScanResult] = useState<ConsumeScanResponse | null>(null)
   const [passwordForm] = Form.useForm<{ old_password: string; new_password: string; confirm: string }>()
 
   useEffect(() => {
@@ -291,6 +298,7 @@ export default function SettingsPage() {
           auto_process: systemDraft.auto_process,
           default_language: systemDraft.default_language,
           max_upload_mb: systemDraft.max_upload_mb,
+          allow_registration: Boolean(systemDraft.allow_registration),
         },
       },
       {
@@ -556,9 +564,33 @@ export default function SettingsPage() {
     )
   }
 
+  const handleConsumeScan = () => {
+    consumeScan.mutate(undefined, {
+      onSuccess: (data) => {
+        setScanResult(data)
+        const result = data.result
+        toast.success(`扫描完成：导入 ${result.imported} 个，重复 ${result.duplicates} 个，失败 ${result.failed} 个`)
+        void systemInfoQuery.refetch()
+      },
+      onError: (error) => toastError(error, '触发扫描失败'),
+    })
+  }
+
   const renderSystemTab = () => {
     if (!systemDraft) return <Skeleton active />
     const worker = settingsQuery.data?.system.worker
+    const consumeInfo = systemInfoQuery.data?.consume
+    const consumeBasic = settingsQuery.data?.system.consume
+    const displayConsume = {
+      enabled: consumeInfo?.enabled ?? consumeBasic?.enabled ?? false,
+      dir: consumeInfo?.dir || consumeBasic?.dir || '—',
+      intervalSec: consumeInfo?.interval_sec ?? consumeBasic?.interval_sec ?? 15,
+      pending: consumeInfo?.pending_files,
+      failed: consumeInfo?.failed_files,
+    }
+    const lastScan = scanResult
+      ? { ...scanResult.result, at: scanResult.at }
+      : (consumeInfo?.last_scan ?? null)
     return (
       <div className="settings-tab">
         {demoMode && (
@@ -611,10 +643,74 @@ export default function SettingsPage() {
                 }
               />
             </div>
+            <div className="settings-field settings-field--switch">
+              <span className="settings-field__label">开放注册（成员自助注册）</span>
+              <Switch
+                checked={Boolean(systemDraft.allow_registration)}
+                onChange={(checked) =>
+                  setSystemDraft((prev) => (prev ? { ...prev, allow_registration: checked } : prev))
+                }
+              />
+            </div>
+          </div>
+          <div className="settings-field__hint settings-card__hint">
+            开放注册后，访客可以通过 <code>/api/auth/register</code> 自助注册为「成员」，仅能访问自己的录音；默认关闭。
           </div>
           <footer className="settings-card__actions">
             <Button type="primary" onClick={handleSaveSystem} loading={saveSettings.isPending}>
               保存系统设置
+            </Button>
+          </footer>
+        </section>
+
+        <section className="settings-card">
+          <header className="settings-card__head">
+            <div className="settings-card__title">
+              <span className="settings-card__icon settings-card__icon--consume">
+                <FolderOpenOutlined />
+              </span>
+              <div>
+                <h3>目录自动导入（Consume）</h3>
+                <p>把音视频文件放进监控目录，worker 会自动导入并跳过重复文件</p>
+              </div>
+            </div>
+            <Tag color={displayConsume.enabled ? 'success' : 'default'}>
+              {displayConsume.enabled ? '已启用' : '未启用'}
+            </Tag>
+          </header>
+          <div className="settings-info-grid">
+            <div className="settings-info-grid__wide">
+              <span className="settings-info-grid__label">监控目录</span>
+              <span className="settings-info-grid__value settings-info-grid__value--mono">{displayConsume.dir}</span>
+            </div>
+            <div>
+              <span className="settings-info-grid__label">扫描间隔</span>
+              <span className="settings-info-grid__value">{displayConsume.intervalSec} 秒</span>
+            </div>
+            <div>
+              <span className="settings-info-grid__label">待处理文件</span>
+              <span className="settings-info-grid__value">{displayConsume.pending ?? '—'}</span>
+            </div>
+            <div>
+              <span className="settings-info-grid__label">失败文件</span>
+              <span className="settings-info-grid__value">{displayConsume.failed ?? '—'}</span>
+            </div>
+          </div>
+          {lastScan && (
+            <Alert
+              className="settings-test-result"
+              type={lastScan.failed > 0 ? 'warning' : 'info'}
+              showIcon
+              message={`最近一次扫描${lastScan.at ? `：${formatDate(lastScan.at)}` : ''}`}
+              description={`扫描 ${lastScan.scanned} 个文件 · 导入 ${lastScan.imported} 个 · 重复 ${lastScan.duplicates} 个 · 失败 ${lastScan.failed} 个`}
+            />
+          )}
+          <footer className="settings-card__actions">
+            <Button icon={<ScanOutlined />} loading={consumeScan.isPending} onClick={handleConsumeScan}>
+              立即扫描
+            </Button>
+            <Button icon={<ReloadOutlined />} loading={systemInfoQuery.isFetching} onClick={() => void systemInfoQuery.refetch()}>
+              刷新状态
             </Button>
           </footer>
         </section>
@@ -651,7 +747,7 @@ export default function SettingsPage() {
               <Button
                 icon={<ThunderboltOutlined />}
                 loading={seedDemo.isPending}
-                disabled={!user?.is_admin}
+                disabled={!isAdmin}
                 onClick={() =>
                   seedDemo.mutate(undefined, {
                     onSuccess: (data) => toast.success(data.created > 0 ? '演示数据已创建' : '演示数据已存在'),
@@ -690,7 +786,7 @@ export default function SettingsPage() {
               <p>当前登录的账号</p>
             </div>
           </div>
-          <Tag color={user?.is_admin ? 'blue' : 'default'}>{user?.is_admin ? '管理员' : '普通用户'}</Tag>
+          <Tag color={isAdmin ? 'blue' : 'default'}>{isAdmin ? '管理员' : '成员'}</Tag>
         </header>
         <div className="settings-account">
           <div className="settings-account__avatar">{(user?.display_name || user?.username || 'U').slice(0, 1)}</div>

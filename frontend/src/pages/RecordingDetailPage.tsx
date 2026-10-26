@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Button, Drawer, Dropdown, Modal, Skeleton, Tooltip } from 'antd'
+import { Button, Drawer, Dropdown, Modal, Select, Skeleton, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -11,9 +11,11 @@ import {
   InfoCircleOutlined,
   LikeOutlined,
   MoreOutlined,
+  LinkOutlined,
   ReloadOutlined,
   RobotOutlined,
   ShareAltOutlined,
+  SwapOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
 import { useQueryClient } from '@tanstack/react-query'
@@ -28,12 +30,16 @@ import {
   useRegenerateInsights,
   useReprocessRecording,
   useTranscript,
+  useUpdateRecording,
 } from '../api/queries'
+import { useUsers } from '../api/users'
 import { AudioPlayerProvider, findActiveSegmentId, useAudioPlayer } from '../hooks/useAudioPlayer'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 import { useUiStore } from '../store/ui'
+import { useAuthStore } from '../store/auth'
 import type { DetailTabKey, RecordingDetail } from '../types'
 import { parseMsParam } from '../utils/format'
+import { isAdminUser } from '../utils/roles'
 import { confirmAction, toast, toastError } from '../utils/toast'
 import { AudioPlayerCard } from '../components/player/AudioPlayerCard'
 import { StatusBadge } from '../components/common/StatusBadge'
@@ -48,6 +54,7 @@ import { ChaptersTab } from '../components/detail/ChaptersTab'
 import { AIPanel } from '../components/detail/AIPanel'
 import { MindMapModal } from '../components/detail/MindMapModal'
 import { InsightsModal } from '../components/detail/InsightsModal'
+import { ShareDialog } from '../components/detail/ShareDialog'
 
 const TABS: { key: DetailTabKey; label: string }[] = [
   { key: 'transcript', label: '转写' },
@@ -143,6 +150,9 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   const [cancelOpen, setCancelOpen] = useState(false)
   const [highlightSegmentId, setHighlightSegmentId] = useState<number | null>(null)
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [transferUserId, setTransferUserId] = useState<number | null>(null)
   const [pollInsights, setPollInsights] = useState(false)
   const pollTimerRef = useRef<number | null>(null)
 
@@ -153,6 +163,10 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   const cancelRecording = useCancelRecording(id)
   const deleteRecording = useDeleteRecording()
   const regenerate = useRegenerateInsights(id)
+  const updateRecording = useUpdateRecording(id)
+  const currentUser = useAuthStore((state) => state.user)
+  const isAdmin = isAdminUser(currentUser)
+  const transferUsersQuery = useUsers({ page_size: 100, include_disabled: false }, isAdmin && transferOpen)
 
   const insights = insightsQuery.data
   const transcript = transcriptQuery.data
@@ -272,6 +286,9 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   }
 
   const moreItems: MenuProps['items'] = [
+    { key: 'copy_link', icon: <LinkOutlined />, label: '复制页面链接' },
+    ...(isAdmin ? [{ key: 'transfer', icon: <SwapOutlined />, label: '转移归属' } as const] : []),
+    { type: 'divider' },
     { key: 'reprocess_asr', icon: <ReloadOutlined />, label: '重新转录' },
     { key: 'reprocess_insights', icon: <ThunderboltOutlined />, label: '重新生成 AI 分析' },
     {
@@ -290,6 +307,15 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   ]
 
   const onMoreClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'copy_link') {
+      void copyShareLink()
+      return
+    }
+    if (key === 'transfer') {
+      setTransferUserId(recording.owner_id ?? null)
+      setTransferOpen(true)
+      return
+    }
     if (key === 'reprocess_asr') {
       reprocess.mutate('asr', {
         onSuccess: () => toast.success('已提交重新转录任务'),
@@ -321,6 +347,25 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
       },
       onError: (error) => toastError(error, '取消失败'),
     })
+  }
+
+  const handleTransferOwner = () => {
+    if (!transferUserId) {
+      toast.warning('请选择新的归属用户')
+      return
+    }
+    updateRecording.mutate(
+      { owner_id: transferUserId },
+      {
+        onSuccess: (data) => {
+          toast.success(`录音已转移给 ${data.owner?.display_name || data.owner?.username || '新用户'}`)
+          setTransferOpen(false)
+          setTransferUserId(null)
+          void queryClient.invalidateQueries({ queryKey: ['recordings'] })
+        },
+        onError: (error) => toastError(error, '转移归属失败'),
+      },
+    )
   }
 
   const aiInline = breakpoint.isWide && !aiCollapsed
@@ -363,7 +408,21 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
               <span className="detail-breadcrumb__current" title={recording.title}>
                 {recording.title}
               </span>
-              <Tooltip title={recording.description || '这场录音暂无描述'}>
+              <Tooltip
+                title={
+                  <div className="detail-info-tooltip">
+                    <div>{recording.description || '这场录音暂无描述'}</div>
+                    <div className="detail-info-tooltip__meta">
+                      录音时间：{recording.recorded_at ? recording.recorded_at.slice(0, 16).replace('T', ' ') : '—'}
+                    </div>
+                    {recording.owner && (
+                      <div className="detail-info-tooltip__meta">
+                        归属：{recording.owner.display_name || recording.owner.username}
+                      </div>
+                    )}
+                  </div>
+                }
+              >
                 <InfoCircleOutlined className="detail-breadcrumb__info" />
               </Tooltip>
               <StatusBadge
@@ -380,7 +439,7 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
                 <span className="detail-pill-btn__text">下载</span>
               </Button>
             </Tooltip>
-            <Button type="primary" icon={<ShareAltOutlined />} onClick={() => void copyShareLink()}>
+            <Button type="primary" icon={<ShareAltOutlined />} onClick={() => setShareOpen(true)}>
               分享
             </Button>
             <Dropdown menu={{ items: moreItems, onClick: onMoreClick }} trigger={['click']} placement="bottomRight">
@@ -564,6 +623,41 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
         insights={insights}
         recordingId={id}
       />
+
+      <ShareDialog open={shareOpen} onClose={() => setShareOpen(false)} recording={recording} />
+
+      <Modal
+        open={transferOpen}
+        title="转移录音归属"
+        okText="确认转移"
+        cancelText="取消"
+        confirmLoading={updateRecording.isPending}
+        onOk={handleTransferOwner}
+        onCancel={() => {
+          setTransferOpen(false)
+          setTransferUserId(null)
+        }}
+        destroyOnClose
+      >
+        <p className="muted-text">
+          转移后该录音及其转录、AI 分析结果将归属新用户，并出现在对方的资料库中（需要管理员权限）。
+        </p>
+        <Select
+          className="transfer-owner-select"
+          showSearch
+          optionFilterProp="label"
+          placeholder="选择新的归属用户"
+          loading={transferUsersQuery.isLoading}
+          value={transferUserId ?? undefined}
+          options={(transferUsersQuery.data?.items ?? [])
+            .filter((candidate) => candidate.id !== recording.owner_id)
+            .map((candidate) => ({
+              label: `${candidate.display_name || candidate.username}（@${candidate.username}）`,
+              value: candidate.id,
+            }))}
+          onChange={(value) => setTransferUserId(value)}
+        />
+      </Modal>
 
       <Modal
         open={cancelOpen}

@@ -15,6 +15,8 @@ interface ViewpointTreeTabProps {
   onSeek: (ms: number) => void
   onRegenerate: () => void
   onRetry: () => void
+  /** Public share page mode: hide regenerate affordances. */
+  readOnly?: boolean
 }
 
 function countNodes(node: ViewpointNode | null | undefined): number {
@@ -196,6 +198,7 @@ export function ViewpointTreeTab({
   onSeek,
   onRegenerate,
   onRetry,
+  readOnly = false,
 }: ViewpointTreeTabProps) {
   const root = insights?.viewpoint_tree?.root
   const total = useMemo(() => countNodes(root), [root])
@@ -207,11 +210,17 @@ export function ViewpointTreeTab({
       <EmptyState
         icon={<ReloadOutlined />}
         title="观点树尚未生成"
-        description="观点树会把会议中的主题、观点、待办与风险整理成结构化脉络，支持点击节点跳转播放。"
+        description={
+          readOnly
+            ? '这份分享暂未包含 AI 观点树，或录音仍在处理中。'
+            : '观点树会把会议中的主题、观点、待办与风险整理成结构化脉络，支持点击节点跳转播放。'
+        }
         actions={
-          <Button type="primary" ghost loading={regenerating} icon={<ReloadOutlined />} onClick={onRegenerate}>
-            生成观点树
-          </Button>
+          readOnly ? undefined : (
+            <Button type="primary" ghost loading={regenerating} icon={<ReloadOutlined />} onClick={onRegenerate}>
+              生成观点树
+            </Button>
+          )
         }
       />
     )

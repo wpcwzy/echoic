@@ -2,6 +2,7 @@ import { CloseOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { Link } from 'react-router-dom'
 import { useSettings } from '../../api/queries'
 import { useUiStore } from '../../store/ui'
+import { useIsAdmin } from '../../utils/roles'
 
 interface DemoModeBannerProps {
   className?: string
@@ -9,11 +10,13 @@ interface DemoModeBannerProps {
 
 /** Thin dismissible banner shown when the backend runs with demo_mode enabled. */
 export function DemoModeBanner({ className }: DemoModeBannerProps) {
-  const { data } = useSettings()
+  const isAdmin = useIsAdmin()
+  const { data } = useSettings(isAdmin)
   const dismissed = useUiStore((state) => state.demoBannerDismissed)
   const dismiss = useUiStore((state) => state.dismissDemoBanner)
 
-  if (!data?.system?.demo_mode || dismissed) return null
+  // Settings are admin-only in v0.2 — members don't see the demo-mode banner.
+  if (!isAdmin || !data?.system?.demo_mode || dismissed) return null
 
   return (
     <div className={`demo-banner ${className ?? ''}`} role="status">
