@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Button, Drawer, Dropdown, Modal, Select, Skeleton, Tooltip } from 'antd'
+import { Button, Drawer, Dropdown, Input, Modal, Select, Skeleton, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   ArrowLeftOutlined,
   DeleteOutlined,
   DislikeOutlined,
   DownloadOutlined,
+  EditOutlined,
   ExportOutlined,
   InfoCircleOutlined,
   LikeOutlined,
@@ -167,6 +168,8 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   const [shareOpen, setShareOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferUserId, setTransferUserId] = useState<number | null>(null)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [renameTitle, setRenameTitle] = useState('')
   const [pollInsights, setPollInsights] = useState(false)
   const pollTimerRef = useRef<number | null>(null)
 
@@ -303,6 +306,7 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   }
 
   const moreItems: MenuProps['items'] = [
+    { key: 'rename', icon: <EditOutlined />, label: '重命名录音' },
     { key: 'copy_link', icon: <LinkOutlined />, label: '复制页面链接' },
     ...(isAdmin ? [{ key: 'transfer', icon: <SwapOutlined />, label: '转移归属' } as const] : []),
     { type: 'divider' },
@@ -324,6 +328,11 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   ]
 
   const onMoreClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'rename') {
+      setRenameTitle(recording.title || '')
+      setRenameOpen(true)
+      return
+    }
     if (key === 'copy_link') {
       void copyShareLink()
       return
@@ -364,6 +373,25 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
       },
       onError: (error) => toastError(error, '取消失败'),
     })
+  }
+
+  const handleRename = () => {
+    const title = renameTitle.trim()
+    if (!title) {
+      toast.warning('请输入录音名称')
+      return
+    }
+    updateRecording.mutate(
+      { title },
+      {
+        onSuccess: () => {
+          toast.success('录音已重命名')
+          setRenameOpen(false)
+          void queryClient.invalidateQueries({ queryKey: ['recordings'] })
+        },
+        onError: (error) => toastError(error, '重命名失败'),
+      },
+    )
   }
 
   const handleTransferOwner = () => {
@@ -425,6 +453,19 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
               <span className="detail-breadcrumb__current" title={recording.title}>
                 {recording.title}
               </span>
+              <Tooltip title="重命名录音">
+                <button
+                  type="button"
+                  className="detail-title-edit"
+                  aria-label="重命名录音"
+                  onClick={() => {
+                    setRenameTitle(recording.title || '')
+                    setRenameOpen(true)
+                  }}
+                >
+                  <EditOutlined />
+                </button>
+              </Tooltip>
               <Tooltip
                 title={
                   <div className="detail-info-tooltip">
@@ -674,6 +715,28 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
               value: candidate.id,
             }))}
           onChange={(value) => setTransferUserId(value)}
+        />
+      </Modal>
+
+      <Modal
+        open={renameOpen}
+        title="重命名录音"
+        okText="保存"
+        cancelText="取消"
+        confirmLoading={updateRecording.isPending}
+        onOk={handleRename}
+        onCancel={() => setRenameOpen(false)}
+        destroyOnClose
+      >
+        <p className="muted-text">名称仅用于资料库展示、下载文件名与分享页标题，不会改变服务器上的原始音频数据。</p>
+        <Input
+          autoFocus
+          value={renameTitle}
+          maxLength={255}
+          showCount
+          placeholder="请输入录音名称"
+          onChange={(event) => setRenameTitle(event.target.value)}
+          onPressEnter={handleRename}
         />
       </Modal>
 

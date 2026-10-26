@@ -7889,3 +7889,30 @@ mark {
     max-width: none;
   }
 }
+
+
+/* v0.3.2: inline rename affordance in the detail breadcrumb */
+.detail-title-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary, var(--text-secondary));
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.detail-breadcrumb:hover .detail-title-edit,
+.detail-title-edit:focus-visible {
+  opacity: 1;
+}
+
+.detail-title-edit:hover {
+  color: var(--brand, #1677ff);
+  background: var(--brand-soft, rgba(22, 119, 255, 0.1));
+}

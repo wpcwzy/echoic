@@ -461,7 +461,10 @@ def pick_media(recording: Recording, *, download: bool) -> tuple[Path, str, str,
         filename = f"{recording.title or 'recording'}.m4a"
     else:
         content_type = recording.mime_type or guess_mime(path.suffix)
-        filename = recording.original_filename or f"{recording.title or 'recording'}{path.suffix}"
+        # Use the (editable) recording title for downloads so renaming a recording
+        # also changes the downloaded/original media filename.
+        suffix = path.suffix or recording.original_ext or ""
+        filename = f"{recording.title or 'recording'}{suffix}"
     return path, content_type, filename, download
 
 

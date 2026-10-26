@@ -3,6 +3,7 @@ import {
   CalendarOutlined,
   ClockCircleOutlined,
   DeleteOutlined,
+  EditOutlined,
   FileTextOutlined,
   PlayCircleFilled,
   RobotOutlined,
@@ -30,6 +31,7 @@ export interface RecordingCardProps {
   retentionDays?: number
   onRestore?: (recording: RecordingSummary) => void
   onPurge?: (recording: RecordingSummary) => void
+  onRename?: (recording: RecordingSummary) => void
   restoring?: boolean
   purging?: boolean
 }
@@ -107,6 +109,7 @@ export function RecordingCard({
   retentionDays = 30,
   onRestore,
   onPurge,
+  onRename,
   restoring = false,
   purging = false,
 }: RecordingCardProps) {
@@ -211,6 +214,20 @@ export function RecordingCard({
                   <RobotOutlined className="recording-card__ai-icon" />
                 </Tooltip>
               )}
+              {onRename && (
+                <Tooltip title="重命名录音">
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<EditOutlined />}
+                    aria-label="重命名录音"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onRename(recording)
+                    }}
+                  />
+                </Tooltip>
+              )}
               <Tooltip title="打开并播放">
                 <button
                   type="button"
@@ -243,6 +260,7 @@ export function RecordingRow({
   retentionDays = 30,
   onRestore,
   onPurge,
+  onRename,
   restoring = false,
   purging = false,
 }: RecordingCardProps) {
@@ -350,18 +368,34 @@ export function RecordingRow({
           </Tooltip>
         </div>
       ) : (
-        <Tooltip title="打开">
-          <Button
-            type="text"
-            shape="circle"
-            icon={<PlayCircleFilled />}
-            aria-label="打开并播放"
-            onClick={(event) => {
-              event.stopPropagation()
-              navigate(`/r/${recording.id}?autoplay=1`)
-            }}
-          />
-        </Tooltip>
+        <>
+          {onRename && (
+            <Tooltip title="重命名录音">
+              <Button
+                type="text"
+                shape="circle"
+                icon={<EditOutlined />}
+                aria-label="重命名录音"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onRename(recording)
+                }}
+              />
+            </Tooltip>
+          )}
+          <Tooltip title="打开">
+            <Button
+              type="text"
+              shape="circle"
+              icon={<PlayCircleFilled />}
+              aria-label="打开并播放"
+              onClick={(event) => {
+                event.stopPropagation()
+                navigate(`/r/${recording.id}?autoplay=1`)
+              }}
+            />
+          </Tooltip>
+        </>
       )}
     </div>
   )

@@ -21,6 +21,7 @@ import {
   useSettings,
   useSystemFeatures,
   useTags,
+  useUpdateRecording,
 } from '../api/queries'
 import {
   useBatchCancel,
@@ -77,8 +78,35 @@ export default function LibraryPage() {
   const [undoState, setUndoState] = useState<UndoState | null>(null)
   const [restoringId, setRestoringId] = useState<number | null>(null)
   const [purgingId, setPurgingId] = useState<number | null>(null)
+  const [renameTarget, setRenameTarget] = useState<RecordingSummary | null>(null)
+  const [renameTitle, setRenameTitle] = useState('')
   const undoTimers = useRef<{ timeout: number | null; interval: number | null }>({ timeout: null, interval: null })
   const debouncedSearch = useDebouncedValue(searchInput, 300)
+  const renameRecording = useUpdateRecording(renameTarget?.id ?? 0)
+
+  const openRenameDialog = (recording: RecordingSummary) => {
+    setRenameTarget(recording)
+    setRenameTitle(recording.title || '')
+  }
+
+  const submitRename = () => {
+    if (!renameTarget) return
+    const title = renameTitle.trim()
+    if (!title) {
+      toast.warning('请输入录音名称')
+      return
+    }
+    renameRecording.mutate(
+      { title },
+      {
+        onSuccess: () => {
+          toast.success('录音已重命名')
+          setRenameTarget(null)
+        },
+        onError: (error) => toastError(error, '重命名失败'),
+      },
+    )
+  }
 
   const status = searchParams.get('status') ?? ''
   const tagId = searchParams.get('tag_id') ? Number(searchParams.get('tag_id')) : null
@@ -619,6 +647,7 @@ export default function LibraryPage() {
               retentionDays={retentionDays}
               onRestore={handleRestoreOne}
               onPurge={handlePurgeOne}
+              onRename={trashView ? undefined : openRenameDialog}
               restoring={restoringId === recording.id}
               purging={purgingId === recording.id}
             />
@@ -638,6 +667,7 @@ export default function LibraryPage() {
               retentionDays={retentionDays}
               onRestore={handleRestoreOne}
               onPurge={handlePurgeOne}
+              onRename={trashView ? undefined : openRenameDialog}
               restoring={restoringId === recording.id}
               purging={purgingId === recording.id}
             />
@@ -711,6 +741,27 @@ export default function LibraryPage() {
           onDismiss={dismissUndo}
         />
       )}
+
+      <Modal
+        title="重命名录音"
+        open={renameTarget !== null}
+        onCancel={() => setRenameTarget(null)}
+        onOk={submitRename}
+        confirmLoading={renameRecording.isPending}
+        okText="保存"
+        cancelText="取消"
+        destroyOnClose
+      >
+        <Input
+          autoFocus
+          value={renameTitle}
+          maxLength={255}
+          showCount
+          placeholder="请输入录音名称"
+          onChange={(event) => setRenameTitle(event.target.value)}
+          onPressEnter={submitRename}
+        />
+      </Modal>
     </div>
   )
 }

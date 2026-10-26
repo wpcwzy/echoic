@@ -463,3 +463,26 @@ def test_list_recording_jobs(auth_client, db):
     assert items[0]["id"] == latest.id
     assert items[0]["status"] == "done"
     assert items[1]["error"] == "LLM 超时"
+
+
+def test_rename_recording_updates_title_and_download_filename(auth_client, db):
+    from urllib.parse import unquote
+
+    recording = make_recording(db, title="旧名称")
+    write_media(recording, original=b"ORIGINAL-BYTES", playback=b"PLAYBACK-BYTES")
+
+    response = auth_client.patch(f"/api/recordings/{recording.id}", json={"title": "新名称-复盘"})
+    assert response.status_code == 200, response.text
+    assert response.json()["title"] == "新名称-复盘"
+
+    detail = auth_client.get(f"/api/recordings/{recording.id}")
+    assert detail.json()["title"] == "新名称-复盘"
+
+    download = auth_client.get(f"/api/recordings/{recording.id}/media?download=1")
+    assert download.status_code == 200
+    disposition = download.headers["content-disposition"]
+    assert "filename*=UTF-8''" in disposition
+    assert unquote(disposition).find("新名称-复盘.mp3") >= 0
+
+    # title-only update must not affect unrelated fields
+    assert detail.json()["duration_ms"] == recording.duration_ms
