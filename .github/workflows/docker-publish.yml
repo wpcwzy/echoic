@@ -65,7 +65,7 @@ jobs:
 
       - name: Extract metadata (tags & labels)
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ steps.image.outputs.name }}
           # latest 仅 main 分支；v* tag 生成语义化版本；每次构建附加 sha 标签
