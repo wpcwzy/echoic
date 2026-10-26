@@ -6,8 +6,9 @@
 #   1) 后端单元 + 集成测试（pytest）
 #   2) 前端类型检查 + 生产构建（tsc + vite build）
 #   3) 生产式启动服务（临时数据目录）并检查 /api/system/health
-#   4) 若存在 e2e/smoke.py，则以生产式临时服务运行端到端冒烟（30 项用例，日志写入临时目录，
-#      不会覆盖 e2e/last-run.log）
+#   4) 若存在 e2e/smoke.py / e2e/smoke_v02.py，则以生产式临时服务运行端到端冒烟
+#      （v0.1 30 项 + v0.2 34 项：角色/权限、分享、consume），日志写入临时目录，
+#      不会覆盖 e2e/last-run*.log
 #
 # 用法：
 #   ./scripts/verify.sh                 # 全量
@@ -136,6 +137,10 @@ else
   export ECHOIC_DEMO_SEED="${ECHOIC_DEMO_SEED:-true}"
   export ECHOIC_EMBEDDED_WORKER="${ECHOIC_EMBEDDED_WORKER:-true}"
   export ECHOIC_SECRET_KEY="${ECHOIC_SECRET_KEY:-verify-secret-key}"
+  # v0.2 consume 自动导入：隔离目录（与脚本同 shell，e2e 可直接投放文件）
+  export ECHOIC_CONSUME_ENABLED="${ECHOIC_CONSUME_ENABLED:-true}"
+  export ECHOIC_CONSUME_DIR="${ECHOIC_CONSUME_DIR:-$DATA_DIR/consume}"
+  mkdir -p "$ECHOIC_CONSUME_DIR"
   (
     cd "$BACKEND_DIR" && exec "$VENV/bin/uvicorn" app.main:app \
       --host 127.0.0.1 --port "$PORT" --proxy-headers
@@ -171,12 +176,27 @@ else
     step "E2E 冒烟（e2e/smoke.py）"
     if ( cd "$REPO_ROOT" && ECHOIC_E2E_BASE_URL="http://127.0.0.1:${PORT}" \
            ECHOIC_E2E_LOG="$DATA_DIR/smoke.log" "$VENV/bin/python" e2e/smoke.py ); then
-      ok "E2E 冒烟"
+      ok "E2E v0.1 冒烟（30 项）"
     else
-      fail "E2E 冒烟（详情见 e2e/last-run.log）"
+      fail "E2E v0.1 冒烟（详情见 $DATA_DIR/smoke.log）"
     fi
   else
-    skip "E2E 冒烟（e2e/smoke.py 不存在或服务未就绪）"
+    skip "E2E v0.1 冒烟（e2e/smoke.py 不存在或服务未就绪）"
+  fi
+
+  # ---- 可选：v0.2 e2e（角色/权限、分享、consume）----
+  if [ "$READY" = 1 ] && [ -f "$REPO_ROOT/e2e/smoke_v02.py" ]; then
+    step "E2E v0.2 冒烟（e2e/smoke_v02.py）"
+    if ( cd "$REPO_ROOT" && ECHOIC_E2E_BASE_URL="http://127.0.0.1:${PORT}" \
+           ECHOIC_E2E_LOG_V02="$DATA_DIR/smoke-v02.log" \
+           ECHOIC_E2E_CONSUME_DIR="$ECHOIC_CONSUME_DIR" \
+           "$VENV/bin/python" e2e/smoke_v02.py ); then
+      ok "E2E v0.2 冒烟（34 项）"
+    else
+      fail "E2E v0.2 冒烟（详情见 $DATA_DIR/smoke-v02.log）"
+    fi
+  else
+    skip "E2E v0.2 冒烟（e2e/smoke_v02.py 不存在或服务未就绪）"
   fi
 fi
 
@@ -188,5 +208,5 @@ if [ "$FAIL" -gt 0 ]; then
   exit 1
 fi
 printf '\033[1;32m全部检查通过 ✔\033[0m\n'
-printf 'e2e 冒烟日志（如已运行）：%s/smoke.log\n' "$DATA_DIR"
+printf 'e2e 冒烟日志（如已运行）：%s/smoke.log（v0.1）、%s/smoke-v02.log（v0.2）\n' "$DATA_DIR" "$DATA_DIR"
 exit 0

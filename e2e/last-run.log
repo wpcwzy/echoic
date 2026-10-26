@@ -1,19 +1,19 @@
-Echoic E2E Smoke — 2026-10-26 23:44:02
+Echoic E2E Smoke — 2026-10-27 01:47:22
 目标服务: http://127.0.0.1:8100
 Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
-临时目录: /tmp/echoic-e2e-bouftyd5
+临时目录: /tmp/echoic-e2e-1jhg44fj
 ==============================================================================
 
 [1;36m━━━ 0. 环境与健康检查 ━━━[0m
 [1;32m[PASS][0m health (0.01s)
-        version=0.1.0 demo_mode=True worker=ok db=ok ffmpeg=ok
+        version=0.2.0 demo_mode=True worker=ok db=ok ffmpeg=ok
 
 [1;36m━━━ 1. 鉴权 ━━━[0m
 [1;32m[PASS][0m auth.unauthorized (0.01s)
         未登录访问受保护接口返回 401
-[1;32m[PASS][0m auth.login-reject-bad-password (0.20s)
+[1;32m[PASS][0m auth.login-reject-bad-password (0.21s)
         错误密码返回 401
-[1;32m[PASS][0m auth.login (0.24s)
+[1;32m[PASS][0m auth.login (0.20s)
         user=管理员 cookie 标志齐全
 [1;32m[PASS][0m auth.me (0.00s)
         cookie 会话有效：admin
@@ -23,7 +23,7 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
 [1;36m━━━ 2. 系统与资料库 ━━━[0m
 [1;32m[PASS][0m system.info (0.00s)
         recordings=4 segments=138 chunks=138 worker={'embedded': True, 'running': True, 'queue_depth': 0, 'last_error': None}
-[1;32m[PASS][0m dashboard (0.01s)
+[1;32m[PASS][0m dashboard (0.02s)
         total=4 ready=4 processing=0 hours=1.5
 [1;32m[PASS][0m library.demo-recording (0.01s)
         total=4 demo_id=1 title='TraceOpt paper discussion' demo_status=ready
@@ -37,7 +37,7 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
 [1;36m━━━ 3. 上传与 mock 管线处理 ━━━[0m
 [1;32m[PASS][0m upload.invalid-media-415 (0.00s)
         不支持的扩展名返回 415
-[1;32m[PASS][0m upload.audio (0.19s)
+[1;32m[PASS][0m upload.audio (0.15s)
         id=5 status=queued size=800078 文件=e2e-tone-25s.wav
 [1;32m[PASS][0m pipeline.process-ready (1.52s)
         耗时 1.5s；状态阶段序列=['preparing', 'done']
@@ -50,7 +50,7 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
 [1;32m[PASS][0m transcript.segment-edit (0.01s)
         segment_id=139 文本已更新（【E2E已编辑】文档这块我负责整理，周五之前把初…）
 [1;32m[PASS][0m transcript.export (0.01s)
-        格式全部可导出：srt=585B, txt=410B, json=1261B, md=477B
+        格式全部可导出：srt=581B, txt=406B, json=1262B, md=473B
 [1;32m[PASS][0m search.global (0.01s)
         片段命中 1 条（本次录音 1 条），标题命中 2 条
 
@@ -85,25 +85,25 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
 ==============================================================================
 [1mPASS/FAIL 矩阵[0m
 ------------------------------------------------------------------------------
-[1;32mPASS[0m health                                   0.01s  version=0.1.0 demo_mode=True worker=ok db=ok ffmpeg=ok
+[1;32mPASS[0m health                                   0.01s  version=0.2.0 demo_mode=True worker=ok db=ok ffmpeg=ok
 [1;32mPASS[0m auth.unauthorized                        0.01s  未登录访问受保护接口返回 401
-[1;32mPASS[0m auth.login-reject-bad-password           0.20s  错误密码返回 401
-[1;32mPASS[0m auth.login                               0.24s  user=管理员 cookie 标志齐全
+[1;32mPASS[0m auth.login-reject-bad-password           0.21s  错误密码返回 401
+[1;32mPASS[0m auth.login                               0.20s  user=管理员 cookie 标志齐全
 [1;32mPASS[0m auth.me                                  0.00s  cookie 会话有效：admin
 [1;32mPASS[0m auth.bearer                              0.01s  Authorization: Bearer <jwt> 鉴权有效
 [1;32mPASS[0m system.info                              0.00s  recordings=4 segments=138 chunks=138 worker={'embedded': True, 'running': True, 'queue_depth': 0, 'last_error': None}
-[1;32mPASS[0m dashboard                                0.01s  total=4 ready=4 processing=0 hours=1.5
+[1;32mPASS[0m dashboard                                0.02s  total=4 ready=4 processing=0 hours=1.5
 [1;32mPASS[0m library.demo-recording                   0.01s  total=4 demo_id=1 title='TraceOpt paper discussion' demo_status=ready
 [1;32mPASS[0m library.recording-detail                 0.01s  id=1 duration_ms=2437000 insights=['action_items', 'chapters', 'insights', 'keywords', 'suggested_questions', 'summary', 'viewpoint_tree'] job=None
 [1;32mPASS[0m insights.demo                            0.00s  chapters=7 insights=6 questions=5 missing=[] model=mock-llm
 [1;32mPASS[0m transcript.demo                          0.01s  speakers=4 segments=73 language=zh
 [1;32mPASS[0m upload.invalid-media-415                 0.00s  不支持的扩展名返回 415
-[1;32mPASS[0m upload.audio                             0.19s  id=5 status=queued size=800078 文件=e2e-tone-25s.wav
+[1;32mPASS[0m upload.audio                             0.15s  id=5 status=queued size=800078 文件=e2e-tone-25s.wav
 [1;32mPASS[0m pipeline.process-ready                   1.52s  耗时 1.5s；状态阶段序列=['preparing', 'done']
 [1;32mPASS[0m pipeline.artifacts                       0.02s  segments=8 speakers=2 analysis_kinds=['summary', 'chapters', 'viewpoint_tree', 'insights', 'action_items', 'keywords'] chunks=138->139
 [1;32mPASS[0m transcript.speaker-rename                0.01s  speaker_id=15 display_name -> E2E说话人
 [1;32mPASS[0m transcript.segment-edit                  0.01s  segment_id=139 文本已更新（【E2E已编辑】文档这块我负责整理，周五之前把初…）
-[1;32mPASS[0m transcript.export                        0.01s  格式全部可导出：srt=585B, txt=410B, json=1261B, md=477B
+[1;32mPASS[0m transcript.export                        0.01s  格式全部可导出：srt=581B, txt=406B, json=1262B, md=473B
 [1;32mPASS[0m search.global                            0.01s  片段命中 1 条（本次录音 1 条），标题命中 2 条
 [1;32mPASS[0m chat.sse-stream                          0.23s  事件=['start', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta']… 回答长度=262 预览='这场会围绕 ICPE 投稿倒排了时间：**摘要两周内投出，正文再三周**，五周后'
 [1;32mPASS[0m chat.history                             0.01s  历史消息 2 条，最后回答长度=262，引用=5

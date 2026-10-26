@@ -2,6 +2,30 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.2.0] - 2026-10-27
+
+P1 第一批：**协作与分享**（多用户 / 角色 / 公开分享 / consume 导入）+ 发布工程（CI / GHCR）。
+
+### 新增
+
+- **多用户与角色（R-18）**：`admin` / `member` 两种角色；管理员可在「用户管理」页创建/编辑/停用/重置密码/删除用户（最后管理员、自锁、拥有录音等边界有保护）；开放注册开关（默认关闭，`POST /api/auth/register`）；录音按 `owner_id` 隔离，成员只能访问自己的录音（不可见资源返回 404），管理员可查看全部并转移录音归属；成员会话在账号停用后立即失效；启动时自动迁移 v0.1 数据库（新增 users.role/email/disabled/last_login_at）。
+- **公开分享链接（R-17）**：详情页「分享」对话框创建/撤销分享；可选密码保护、有效期（1h/24h/7d/30d/永久/自定义）、是否包含转录 / AI 纪要、是否允许下载；公开只读页 `/s/{token}`（无需登录，独立布局与播放器，按开关展示转写/AI纪要/观点树/章节，移动端适配）；密码门 + HttpOnly 路径级 Cookie（2h）、解锁限速、访问计数；撤销/过期链接失效。
+- **consume 目录自动导入（R-22）**：`ECHOIC_CONSUME_DIR`（默认 `<data>/consume`）投递即入库；稳定文件扫描、sha256 去重、ffprobe 校验、失败隔离到 `consume/failed/`、worker 自动扫描与管理端「立即扫描」；系统信息展示待处理/失败/最近扫描。
+- **发布工程**：GitHub Actions CI（pytest + 前端构建 + PR 镜像构建）；多架构（amd64/arm64）镜像自动发布到 `ghcr.io/wpcwzy/echoic`（main→latest + sha，tag v*→语义化版本；GHA 缓存 + provenance）；GHCR 包公开、匿名可拉取；**docker compose 改为镜像优先**（`docker compose pull && up -d` 无需本地构建），保留 `docker-compose.build.yml` 源码构建；Dependabot 每周依赖更新（忽略 major）。
+- **文档**：`docs/08-P1-协作与分享设计.md`（v0.2 契约）、`docs/09-P1-后续能力技术方案.md`（实时转写 / 向量检索 / 对象存储 / 回收站 / 暗色主题技术方案与 WBS）；API.md / DEPLOYMENT.md / README 更新（镜像部署、GHCR、consume、角色与分享）。
+
+### 迁移 / 兼容
+
+- v0.1 数据目录直接启动即可自动升级（SQLite/PostgreSQL 均适配）；`is_admin` 保留并与 `role` 同步，旧管理员自动回填 `role=admin`。
+- v0.1 API 兼容（`/api/auth/me` 仍返回 `{user}` 包装）；新增字段均为增量。
+
+### 已知限制
+
+- 自助注册仅有开关与 API，暂未提供 `/register` 页面（v0.2.1）。
+- 分享页明确不包含 AI 问答（避免公开匿名消耗 API 额度）；成员暂无个人资料/改密页面（设置页仅管理员）。
+- consume 重复内容会留在目录中（计数提示），需人工清理；多实例共用目录时去重锁为进程内。
+- Docker 镜像已在 GitHub runners 真实构建（amd64+arm64）并匿名拉取验证；本开发机仍未本地运行容器；真实阿里云 Key 的联网链路待目标机验证。
+
 ## [0.1.0] - 2026-10-26
 
 首个可私有化部署的 MVP。

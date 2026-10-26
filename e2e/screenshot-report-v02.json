@@ -1,0 +1,99 @@
+{
+  "baseUrl": "http://127.0.0.1:8100",
+  "viewport": {
+    "width": 1680,
+    "height": 1050
+  },
+  "savedShots": [
+    {
+      "filename": "01-users.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.2/01-users.png",
+      "note": "用户管理：表格 + 角色 + 操作"
+    },
+    {
+      "filename": "01b-user-create-dialog.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.2/01b-user-create-dialog.png",
+      "note": "用户管理：创建用户对话框"
+    },
+    {
+      "filename": "02-share-dialog.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.2/02-share-dialog.png",
+      "note": "详情页：分享弹窗（创建链接 + 已有分享列表）"
+    },
+    {
+      "filename": "03-public-share.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.2/03-public-share.png",
+      "note": "公开分享页（未登录：播放器 + 只读页签）"
+    },
+    {
+      "filename": "04-public-password.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.2/04-public-password.png",
+      "note": "公开分享：密码解锁页"
+    },
+    {
+      "filename": "05-consume-settings.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.2/05-consume-settings.png",
+      "note": "设置 · 系统：开放注册 + consume 自动导入（含扫描结果）"
+    },
+    {
+      "filename": "06-member-library.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.2/06-member-library.png",
+      "note": "成员视角资料库（无管理入口；仅自己的录音）"
+    },
+    {
+      "filename": "07-public-expired.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.2/07-public-expired.png",
+      "note": "公开分享：过期/失效提示页"
+    }
+  ],
+  "consoleErrors": [
+    {
+      "page": "admin",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "public",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "public",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "public",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "member",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "public",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "public",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+  ],
+  "pageErrors": [],
+  "failedRequests": [
+    {
+      "page": "admin",
+      "url": "http://127.0.0.1:8100/api/recordings/1/media",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "page": "public",
+      "url": "http://127.0.0.1:8100/api/public/shares/6BY1SQVDH7NV1CQtVhiNr_Cw4VX618im/media",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "page": "public",
+      "url": "http://127.0.0.1:8100/api/public/shares/p7uUe6LTt6msywFZjK00Fky2AT03ZILY/media",
+      "failure": "net::ERR_ABORTED"
+    }
+  ],
+  "overflowIssues": [],
+  "warnings": []
+}

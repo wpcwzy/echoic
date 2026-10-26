@@ -10,7 +10,7 @@
 
 - 定位：paperless-ngx 之于纸质文档 = **Echoic 之于录音**
 - 风格参考：飞书妙记 / 钉钉闪记（详情页 1:1 神似）
-- 版本：**v0.2.0 开发中**（P1 batch 1：多用户 / 角色、公开分享链接、consume 目录导入正在开发；v0.1.0 已发布）
+- 版本：**v0.2.0**（P1 第一批交付：多用户 / 角色 / 公开分享链接 / consume 目录导入 + GitHub CI + GHCR 多架构镜像）
 - 许可：MIT
 
 ## 📸 界面预览
@@ -24,6 +24,16 @@
 | AI 思维导图 | 设置 · AI 服务 |
 |---|---|
 | ![思维导图](docs/screenshots/05-mindmap.png) | ![设置](docs/screenshots/06-settings.png) |
+
+**v0.2 协作与分享**
+
+| 用户与角色管理 | 分享链接创建 |
+|---|---|
+| ![用户管理](docs/screenshots/v0.2/01-users.png) | ![分享对话框](docs/screenshots/v0.2/02-share-dialog.png) |
+
+| 公开分享页（免登录） | 密码保护分享 |
+|---|---|
+| ![公开分享页](docs/screenshots/v0.2/03-public-share.png) | ![密码门](docs/screenshots/v0.2/04-public-password.png) |
 
 ---
 
@@ -42,6 +52,9 @@
 | 💾 数据自持 | SQLite（可选 PostgreSQL）+ 本地媒体目录；备份 = 打包一个数据卷 |
 | 🔐 安全 | HttpOnly Cookie JWT、bcrypt 密码、Fernet 加密 API Key（仅回掩码）、上传校验、登录限速 |
 | 🎭 演示模式 | 零 API Key、零外网也能完整跑通全流程（内置示例录音与全套 AI 结果） |
+| 👥 多用户与角色 | `admin`/`member` 两级角色；管理员用户管理（创建/编辑/停用/重置密码/删除）、开放注册开关；录音按所有者隔离，管理员可转移归属；账号停用即时失效会话 |
+| 🔗 公开分享链接 | 详情页一键分享：可选密码、有效期（1h–永久）、是否含转录/纪要、是否允许下载；免登录只读页 `/s/{token}`，支持撤销与访问计数 |
+| 📥 consume 目录导入 | 把音视频丢进 `data/consume/` 自动入库并处理（paperless 式）；sha256 去重、失败隔离到 `failed/`，设置页可查看状态并手动扫描 |
 | 📤 数据导出 | 转录稿导出 TXT / SRT / Markdown / JSON |
 | 🐳 一键部署 | **GHCR 预构建多架构镜像**（amd64/arm64，CI 自动发布）+ docker compose 镜像优先部署，`pull && up -d` 即用；亦可源码构建；可切独立 worker / PostgreSQL |
 
@@ -121,7 +134,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 完整部署（反向代理、备份恢复、升级、PostgreSQL、独立 worker、故障排查）见 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。
 
-> ⚠️ **验证边界**：v0.1.0 的本地 E2E / UI 验收在未启用 Docker CLI 的 WSL 环境中完成（Mock 模式，30/30 PASS）；`Dockerfile` 与 compose 已做静态校验，且镜像已由 GitHub Actions 在真实 Docker 环境**成功构建并推送多架构 GHCR 镜像**。但本仓库开发机仍**未本地运行过容器**，请首次部署时按 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) 在目标机复跑；阿里云真实 Key 的端到端调用同样需在目标机验证（Mock / 离线路径已全量验证）。
+> ⚠️ **验证边界**：v0.2.0 的本地 E2E / UI 验收在未启用 Docker CLI 的 WSL 环境中完成（Mock 模式，v0.1 基线 30/30 + v0.2 新增 34/34 PASS）；`Dockerfile` 与 compose 已做静态校验，且多架构镜像已由 GitHub Actions 在真实 Docker 环境**成功构建并推送 GHCR**（匿名可拉取）。但本仓库开发机仍**未本地运行过容器**，首次部署请按 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) 在目标机复跑；阿里云真实 Key 的端到端调用同样需在目标机验证（Mock / 离线路径已全量验证）。
 
 ---
 
@@ -155,17 +168,17 @@ docker pull ghcr.io/wpcwzy/echoic:latest
 
 ---
 
-## ✅ 验证状态（v0.1.0 基线 + v0.2 CI 流水线）
+## ✅ 验证状态（v0.2.0）
 
 | 项目 | 结果 | 证据 |
 |---|---|---|
-| GitHub Actions CI | **通过**：后端 pytest + 前端构建；PR 额外验证 amd64 镜像构建 | [CI 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
-| 多架构镜像发布 | **成功**：linux/amd64 + linux/arm64 已推送 GHCR（`latest` + `sha-*`） | [Publish 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR 包](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
-| 后端测试（v0.1.0 基线） | **129 passed**（pytest，含 API 102 + 管线/Provider/演示数据 27；v0.2 P1 功能测试随开发补充） | `cd backend && .venv/bin/pytest -q` |
-| 前端构建（v0.1.0 基线） | **通过**（`tsc --noEmit` 零错误；vite 产物 gzip ≈ 499 KB JS + 16 KB CSS） | `cd frontend && npm run build` |
-| 端到端冒烟（Mock 模式，全新数据库） | **30 / 30 PASS**：登录/权限、演示数据、转录/分析、真实上传→管线就绪、改说话人/改段落、导出、搜索、SSE 问答、设置、Range 媒体、重算、删除 | [`e2e/last-run.log`](e2e/last-run.log) · [`e2e/REPORT.md`](e2e/REPORT.md) |
-| UI 截图巡检 | **6 / 6 张**，无布局溢出、无未捕获异常、无 5xx | [`docs/screenshots/`](docs/screenshots/) |
-| 容器运行 | 官方镜像由 CI 在真实 Docker 构建成功；**本开发机无 Docker，容器运行待目标机验证**（见上方验证边界） | `docs/DEPLOYMENT.md` |
+| GitHub Actions CI | **通过**：后端 pytest + 前端 tsc/vite 构建；PR 额外验证 amd64 镜像构建 | [CI 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
+| 多架构镜像发布 | **成功**：linux/amd64 + linux/arm64 已推送 GHCR（`latest` / `sha-*`；tag 发布语义化版本） | [Publish 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR 包](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
+| 后端测试 | **179 passed**（v0.1 129 + v0.2 用户/权限/分享/consume/迁移 50） | `cd backend && .venv/bin/pytest -q` |
+| 前端构建 | **通过**（`tsc --noEmit` 零错误；gzip ≈ 599 KB JS + 18.5 KB CSS） | `cd frontend && npm run build` |
+| 端到端冒烟（Mock，全新数据库） | v0.1 基线 **30/30** + v0.2 **34/34 PASS**：角色权限矩阵、用户 CRUD、分享创建/密码/过期/撤销/公开访问、consume 导入/去重/失败隔离、注册开关、回归用例 | [`e2e/last-run.log`](e2e/last-run.log) · [`e2e/last-run-v02.log`](e2e/last-run-v02.log) · [`e2e/REPORT-v0.2.md`](e2e/REPORT-v0.2.md) |
+| UI 截图巡检 | v0.1 6/6 + v0.2 7/7，无布局溢出、无未捕获异常、无 5xx | [`docs/screenshots/`](docs/screenshots/) · [`docs/screenshots/v0.2/`](docs/screenshots/v0.2/) |
+| 容器运行 | 多架构镜像由 CI 在真实 Docker 构建成功、匿名可拉取；**本开发机无 Docker，容器运行待目标机验证**（见上方验证边界） | `docs/DEPLOYMENT.md` |
 
 
 
@@ -241,22 +254,22 @@ e2e/                                        端到端冒烟脚本与验收报告
 
 ## 🗺 Roadmap
 
-### v0.2.0（P1 batch 1，开发中）
+### v0.2.0（P1 batch 1，已交付）
 
-- [x] 多架构容器镜像 + GHCR 自动发布 + GitHub Actions CI/CD
-- [ ] 多用户 / 角色权限（管理员 / 普通用户）
-- [ ] 公开分享链接（解锁 Cookie、只读访问）
-- [ ] consume 目录自动导入（监听文件夹自动建录音并处理）
-- [ ] 数据库迁移机制与升级兼容
+- [x] 多架构容器镜像 + GHCR 自动发布 + GitHub Actions CI/CD（镜像优先 compose 部署）
+- [x] 多用户 / 角色权限（管理员 / 成员）+ 用户管理 + 开放注册开关
+- [x] 公开分享链接（密码 / 有效期 / 权限开关 / 只读分享页 / 撤销 / 访问计数）
+- [x] consume 目录自动导入（监听文件夹自动建录音并处理 + 去重 + 失败隔离）
+- [x] 数据库迁移机制与 v0.1 升级兼容
 
-### 后续版本
+### v0.2.1 / v0.3（规划中，详见 docs/09）
 
-- [ ] 实时转写与实时字幕（边录边出字）
-- [ ] 视频画面 PPT / 场景抽取
-- [ ] 移动 App / 浏览器扩展
-- [ ] 向量数据库（pgvector / Qdrant）与混合检索增强
-- [ ] 回收站 / 审计日志 / OAuth / LDAP
-- [ ] 回收站与批量操作、跨录音主题聚合
+- [ ] 暗色主题、回收站与批量操作（v0.2.1）
+- [ ] 对象存储（S3/MinIO）存储抽象、扩展名清理（v0.2.1 / v0.3）
+- [ ] 实时转写与实时字幕（边录边出字，v0.3）
+- [ ] 向量检索（sqlite-vec / pgvector）与混合检索（v0.3）
+- [ ] 自助注册页面、成员个人资料/改密页
+- [ ] 视频画面 PPT / 场景抽取、移动 App / 浏览器扩展、OAuth/LDAP、审计日志
 
 ---
 
@@ -279,5 +292,7 @@ e2e/                                        端到端冒烟脚本与验收报告
 | [docs/05-产品与UX设计.md](docs/05-产品与UX设计.md) | 信息架构、用户旅程、页面交互、设计规范 |
 | [docs/07-实施计划与验收.md](docs/07-实施计划与验收.md) | WBS、里程碑、测试策略、发布验收清单 |
 | [docs/research/dashscope-api.md](docs/research/dashscope-api.md) | 阿里云百炼 ASR/LLM/Embedding API 调研与集成建议 |
-| [e2e/REPORT.md](e2e/REPORT.md) | 端到端验收报告（PASS/FAIL、截图、已知问题） |
+| [docs/08-P1-协作与分享设计.md](docs/08-P1-协作与分享设计.md) | v0.2 契约：角色权限、分享链接、consume、迁移 |
+| [docs/09-P1-后续能力技术方案.md](docs/09-P1-后续能力技术方案.md) | 后续 P1 技术方案：实时转写 / 向量检索 / 对象存储 / 回收站 / 暗色主题 |
+| [e2e/REPORT.md](e2e/REPORT.md) · [e2e/REPORT-v0.2.md](e2e/REPORT-v0.2.md) | 端到端验收报告（v0.1 / v0.2） |
 | [CHANGELOG.md](CHANGELOG.md) | 版本变更记录与已知限制 |
