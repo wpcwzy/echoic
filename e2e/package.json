@@ -1,0 +1,14 @@
+{
+  "name": "echoic-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Echoic 端到端与截图验收（Playwright）",
+  "scripts": {
+    "smoke": "../backend/.venv/bin/python smoke.py",
+    "screenshots": "node screenshots.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}

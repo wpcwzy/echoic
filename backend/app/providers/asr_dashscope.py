@@ -1,0 +1,577 @@
+"""Aliyun DashScope ASR providers.
+
+Two real paths (see docs/research/dashscope-api.md):
+
+``dashscope_file`` (primary for private deployments)
+    Upload the local audio through the temporary upload-policy endpoint
+    (``GET /api/v1/uploads?action=getPolicy`` + multipart OSS POST), then submit
+    an async transcription task with ``file_urls=[oss://...]``, poll
+    ``GET /api/v1/tasks/{task_id}`` and immediately download the 24h-TTL result
+    JSON (``transcripts[].sentences[]``, includes diarization + timestamps).
+
+``dashscope_realtime`` (fallback, no diarization)
+    Stream a local 16 kHz mono PCM WAV over the Paraformer realtime WebSocket
+    (``paraformer-realtime-v2``).  The realtime model does not support speaker
+    diarization, so everything is attributed to a single speaker (logged).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import uuid
+import wave
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+from ..core.errors import ProviderError
+from ._shared import api_url, auth_headers, json_or_error, redact, request
+from .base import ASRResult, ASRSegment
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_FILE_BASE_URL = "https://dashscope.aliyuncs.com"
+DEFAULT_REALTIME_URL = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+FINAL_STATUSES = {"SUCCEEDED", "FAILED", "CANCELED", "UNKNOWN"}
+POLL_INTERVAL_S = 2.0
+POLL_TIMEOUT_S = 1800.0
+SINGLE_SPEAKER = "说话人1"
+
+
+def _safe_error(payload: Any) -> str:
+    try:
+        return redact(json.dumps(payload, ensure_ascii=False))
+    except (TypeError, ValueError):
+        return redact(str(payload))
+
+
+def _media_content_type(path: Path) -> str:
+    from .asr_openai import _content_type
+
+    return _content_type(path)
+
+
+class DashScopeRealtimeASRProvider:
+    name = "dashscope_realtime"
+    supports_diarization = False
+
+    def __init__(self, base_url: str, model: str, api_key: str, *, language: str = "zh", diarization: bool = True) -> None:
+        self.base_url = base_url or DEFAULT_REALTIME_URL
+        self.model = model or "paraformer-realtime-v2"
+        self.api_key = api_key
+        self.language = language or "zh"
+        self.diarization = diarization
+
+    # ------------------------------------------------------------------ helpers
+    def _run_task_message(self, task_id: str, language: str) -> dict:
+        parameters: dict[str, Any] = {
+            "format": "pcm",
+            "sample_rate": 16000,
+            "language_hints": [language or self.language or "zh"],
+            "semantic_punctuation_enabled": True,
+            "max_sentence_silence": 1300,
+        }
+        return {
+            "header": {"action": "run-task", "task_id": task_id, "streaming": "duplex"},
+            "payload": {
+                "task_group": "audio",
+                "task": "asr",
+                "function": "recognition",
+                "model": self.model,
+                "input": {},
+                "parameters": parameters,
+            },
+        }
+
+    def _finish_task_message(self, task_id: str) -> dict:
+        return {
+            "header": {"action": "finish-task", "task_id": task_id, "streaming": "duplex"},
+            "payload": {"input": {}},
+        }
+
+    @staticmethod
+    def parse_event(raw: str | bytes) -> dict:
+        if isinstance(raw, (bytes, bytearray)):
+            raw = raw.decode("utf-8", "replace")
+        try:
+            event = json.loads(raw)
+        except (TypeError, ValueError):
+            return {}
+        return event if isinstance(event, dict) else {}
+
+    @staticmethod
+    def _sentence_timestamps(sentence: dict) -> tuple[int, int]:
+        try:
+            start = max(0, int(sentence.get("begin_time") or 0))
+        except (TypeError, ValueError):
+            start = 0
+        try:
+            end = max(0, int(sentence.get("end_time") or 0))
+        except (TypeError, ValueError):
+            end = 0
+        return start, max(start + 200, end)
+
+    def _validate_wav(self, audio_path: Path) -> tuple[int, int]:
+        try:
+            with wave.open(str(audio_path), "rb") as wav:
+                channels = wav.getnchannels()
+                sample_width = wav.getsampwidth()
+                rate = wav.getframerate()
+                frames = wav.getnframes()
+        except (wave.Error, OSError, EOFError) as exc:
+            raise ProviderError(
+                f"无法读取音频文件（需 16kHz 单声道 PCM WAV）：{exc}；请确认 ffmpeg 已安装并重试",
+                provider=self.name,
+            ) from exc
+        if channels != 1 or sample_width != 2 or rate != 16000:
+            raise ProviderError(
+                f"DashScope 实时转写要求 16kHz 单声道 16bit PCM WAV（当前 {rate}Hz/{channels}声道/{sample_width * 8}bit）",
+                provider=self.name,
+            )
+        return frames, rate
+
+    # ------------------------------------------------------------------- public
+    async def transcribe(
+        self,
+        audio_path: Path,
+        *,
+        language: str = "zh",
+        diarization: bool = True,
+        progress=None,
+    ) -> ASRResult:
+        import websockets
+
+        audio_path = Path(audio_path)
+        if not audio_path.exists():
+            raise ProviderError(f"找不到待转写的音频文件：{audio_path.name}", provider=self.name)
+        if not self.api_key:
+            raise ProviderError("未配置 DashScope API Key，请在设置中填写阿里云百炼 API Key", provider=self.name)
+        if diarization and not self.supports_diarization:
+            logger.info(
+                "%s（%s）不支持说话人分离，已降级为单说话人「%s」",
+                self.name,
+                self.model,
+                SINGLE_SPEAKER,
+            )
+        frames, rate = self._validate_wav(audio_path)
+        duration_ms = int(frames / rate * 1000) if rate else 0
+        task_id = uuid.uuid4().hex
+        sentences: list[dict] = []
+        failure: list[str] = []
+        finished = asyncio.Event()
+        started = asyncio.Event()
+
+        async def reader(ws) -> None:
+            try:
+                async for raw in ws:
+                    event = self.parse_event(raw)
+                    header = event.get("header") or {}
+                    event_name = header.get("event")
+                    if event_name == "task-started":
+                        started.set()
+                    elif event_name == "result-generated":
+                        output = (event.get("payload") or {}).get("output") or {}
+                        sentence = output.get("sentence") or {}
+                        if not sentence or sentence.get("heartbeat"):
+                            continue
+                        if sentence.get("sentence_end") is False:
+                            continue  # intermediate hypothesis, ignore
+                        if sentence.get("text"):
+                            sentences.append(sentence)
+                    elif event_name == "task-failed":
+                        failure.append(str(header.get("error_message") or "task-failed"))
+                        finished.set()
+                        return
+                    elif event_name == "task-finished":
+                        finished.set()
+                        return
+            except Exception as exc:  # connection closed etc.
+                failure.append(type(exc).__name__)
+                finished.set()
+
+        headers = auth_headers(self.api_key)
+        logger.info("connecting DashScope realtime ASR (%s, %.1fs audio)", self.model, duration_ms / 1000)
+        try:
+            async with websockets.connect(
+                self.base_url,
+                additional_headers=headers,
+                max_size=None,
+                ping_interval=20,
+                open_timeout=30,
+                close_timeout=10,
+            ) as ws:
+                await ws.send(json.dumps(self._run_task_message(task_id, language), ensure_ascii=False))
+                try:
+                    await asyncio.wait_for(started.wait(), timeout=30)
+                except asyncio.TimeoutError:
+                    raise ProviderError("DashScope 实时转写握手超时（未收到 task-started）", provider=self.name) from None
+                reader_task = asyncio.create_task(reader(ws))
+                total_bytes = frames * 2
+                sent_bytes = 0
+                frame_size = int(rate * 0.1)  # 100 ms
+                try:
+                    with wave.open(str(audio_path), "rb") as wav:
+                        while True:
+                            chunk = wav.readframes(frame_size)
+                            if not chunk:
+                                break
+                            await ws.send(chunk)
+                            sent_bytes += len(chunk)
+                            if progress and total_bytes:
+                                progress(min(99, int(sent_bytes * 100 / total_bytes)))
+                            await asyncio.sleep(0)
+                    await ws.send(json.dumps(self._finish_task_message(task_id), ensure_ascii=False))
+                    final_timeout = max(60.0, min(900.0, duration_ms / 1000 * 0.5 + 60))
+                    await asyncio.wait_for(finished.wait(), timeout=final_timeout)
+                finally:
+                    reader_task.cancel()
+                    try:
+                        await reader_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+        except ProviderError:
+            raise
+        except asyncio.TimeoutError:
+            raise ProviderError("DashScope 实时转写等待最终结果超时，请稍后重试", provider=self.name) from None
+        except Exception as exc:  # websockets / network errors
+            raise ProviderError(
+                f"DashScope 实时转写连接失败（{type(exc).__name__}），请检查网络与 API Key 地域配置",
+                provider=self.name,
+            ) from exc
+
+        if failure:
+            raise ProviderError(f"DashScope 实时转写失败：{redact(failure[0])}", provider=self.name)
+        if progress:
+            progress(100)
+
+        segments: list[ASRSegment] = []
+        for sentence in sorted(sentences, key=lambda item: item.get("begin_time") or 0):
+            start, end = self._sentence_timestamps(sentence)
+            segments.append(
+                ASRSegment(
+                    start_ms=start,
+                    end_ms=end,
+                    text=str(sentence.get("text") or "").strip(),
+                    speaker_label=SINGLE_SPEAKER,
+                )
+            )
+        text = "".join(segment.text for segment in segments)
+        return ASRResult(
+            text=text,
+            segments=segments,
+            speakers=[SINGLE_SPEAKER],
+            language=language or self.language,
+            provider=self.name,
+            model=self.model,
+        )
+
+    async def check(self) -> str:
+        """Lightweight connectivity/credential check without transcribing audio."""
+        import websockets
+
+        if not self.api_key:
+            raise ProviderError("未配置 DashScope API Key", provider=self.name)
+        task_id = uuid.uuid4().hex
+        started = False
+        try:
+            async with websockets.connect(
+                self.base_url,
+                additional_headers=auth_headers(self.api_key),
+                max_size=None,
+                ping_interval=20,
+                open_timeout=15,
+                close_timeout=5,
+            ) as ws:
+                await ws.send(json.dumps(self._run_task_message(task_id, self.language), ensure_ascii=False))
+                deadline = asyncio.get_running_loop().time() + 20
+                while asyncio.get_running_loop().time() < deadline:
+                    event = self.parse_event(await ws.recv())
+                    header = event.get("header") or {}
+                    name = header.get("event")
+                    if name == "task-started":
+                        started = True
+                        break
+                    if name == "task-failed":
+                        raise ProviderError(
+                            f"DashScope 实时转写鉴权/启动失败：{redact(str(header.get('error_message') or ''))}",
+                            provider=self.name,
+                        )
+                try:
+                    await ws.send(json.dumps(self._finish_task_message(task_id), ensure_ascii=False))
+                except Exception:  # noqa: BLE001 - best-effort cleanup
+                    pass
+        except ProviderError:
+            raise
+        except Exception as exc:
+            raise ProviderError(
+                f"DashScope 实时转写连接失败（{type(exc).__name__}），请检查网络与 API Key 地域配置",
+                provider=self.name,
+            ) from exc
+        if not started:
+            raise ProviderError("DashScope 实时转写连接超时（未收到 task-started）", provider=self.name)
+        return "连接成功，DashScope 实时语音识别服务可用"
+
+
+class DashScopeFileASRProvider:
+    name = "dashscope_file"
+
+    def __init__(self, base_url: str, model: str, api_key: str, *, language: str = "zh", diarization: bool = True) -> None:
+        self.base_url = (base_url or DEFAULT_FILE_BASE_URL).rstrip("/")
+        self.model = model or "paraformer-v2"
+        self.api_key = api_key
+        self.language = language or "zh"
+        self.diarization = diarization
+
+    # ------------------------------------------------------------------ helpers
+    def _headers(self, *, async_call: bool = False) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        if async_call:
+            headers["Content-Type"] = "application/json"
+            headers["X-DashScope-Async"] = "enable"
+        return headers
+
+    async def _get_policy(self, client: httpx.AsyncClient) -> dict:
+        response = await request(
+            client,
+            "GET",
+            api_url(self.base_url, "/api/v1/uploads"),
+            provider=self.name,
+            timeout=30.0,
+            headers=self._headers(),
+            params={"action": "getPolicy", "model": self.model},
+        )
+        data = json_or_error(response, self.name)
+        output = data.get("output") if isinstance(data.get("output"), dict) else data
+        required = ("upload_host", "upload_dir", "policy", "signature", "oss_access_key_id")
+        missing = [key for key in required if not output.get(key)]
+        if missing:
+            raise ProviderError(
+                f"DashScope 临时上传凭证返回异常（缺少 {', '.join(missing)}）", provider=self.name
+            )
+        return output
+
+    async def _upload(self, client: httpx.AsyncClient, audio_path: Path, policy: dict) -> str:
+        object_key = f"{policy['upload_dir'].rstrip('/')}/{uuid.uuid4().hex}_{audio_path.name}"
+        form = {
+            "OSSAccessKeyId": policy["oss_access_key_id"],
+            "Signature": policy["signature"],
+            "policy": policy["policy"],
+            "key": object_key,
+            "x-oss-object-acl": policy.get("x_oss_object_acl") or "private",
+            "x-oss-forbid-overwrite": policy.get("x_oss_forbid_overwrite") or "true",
+            "success_action_status": "200",
+            "x-oss-content-type": _media_content_type(audio_path),
+        }
+        try:
+            with audio_path.open("rb") as handle:
+                response = await request(
+                    client,
+                    "POST",
+                    policy["upload_host"],
+                    provider=self.name,
+                    timeout=600.0,
+                    data=form,
+                    files={"file": (audio_path.name, handle, _media_content_type(audio_path))},
+                )
+        except OSError as exc:
+            raise ProviderError(f"读取音频文件失败：{exc}", provider=self.name) from exc
+        if response.status_code >= 400:
+            raise ProviderError(
+                f"DashScope 临时上传失败（HTTP {response.status_code}）："
+                f"{redact(response.text)}；建议改用 dashscope_realtime 或自建 Whisper 服务",
+                provider=self.name,
+                status_code=response.status_code,
+            )
+        return f"oss://{object_key}"
+
+    async def _submit(self, client: httpx.AsyncClient, file_url: str, language: str) -> str:
+        parameters: dict[str, Any] = {"channel_id": [0], "language_hints": [language or self.language or "zh"]}
+        if self.diarization:
+            parameters["diarization_enabled"] = True
+        body = {
+            "model": self.model,
+            "input": {"file_urls": [file_url]},
+            "parameters": parameters,
+        }
+        response = await request(
+            client,
+            "POST",
+            api_url(self.base_url, "/api/v1/services/audio/asr/transcription"),
+            provider=self.name,
+            timeout=60.0,
+            headers=self._headers(async_call=True),
+            json=body,
+        )
+        data = json_or_error(response, self.name)
+        task_id = (data.get("output") or {}).get("task_id")
+        if not task_id:
+            raise ProviderError(f"DashScope 录音文件识别提交失败：{_safe_error(data)}", provider=self.name)
+        return str(task_id)
+
+    async def _poll(self, client: httpx.AsyncClient, task_id: str) -> dict:
+        url = api_url(self.base_url, f"/api/v1/tasks/{task_id}")
+        deadline = asyncio.get_running_loop().time() + POLL_TIMEOUT_S
+        delay = POLL_INTERVAL_S
+        while True:
+            response = await request(
+                client, "GET", url, provider=self.name, timeout=60.0, headers=self._headers()
+            )
+            data = json_or_error(response, self.name)
+            output = data.get("output") or {}
+            status = str(output.get("task_status") or "").upper()
+            if status in FINAL_STATUSES:
+                return output
+            if asyncio.get_running_loop().time() > deadline:
+                raise ProviderError("DashScope 录音文件识别等待超时（超过 30 分钟）", provider=self.name)
+            await asyncio.sleep(delay)
+            delay = min(5.0, delay + 0.5)
+
+    async def _download_result(self, client: httpx.AsyncClient, url: str) -> dict:
+        response = await request(client, "GET", url, provider=self.name, timeout=180.0)
+        if response.status_code >= 400:
+            raise ProviderError(
+                f"下载 DashScope 转写结果失败（HTTP {response.status_code}），结果 URL 可能已过期（24 小时有效）",
+                provider=self.name,
+                status_code=response.status_code,
+            )
+        try:
+            data = response.json()
+        except ValueError:
+            raise ProviderError("DashScope 转写结果不是合法 JSON", provider=self.name) from None
+        return data if isinstance(data, dict) else {}
+
+    # ------------------------------------------------------------------- public
+    async def transcribe(
+        self,
+        audio_path: Path,
+        *,
+        language: str = "zh",
+        diarization: bool = True,
+        progress=None,
+    ) -> ASRResult:
+        audio_path = Path(audio_path)
+        if not audio_path.exists():
+            raise ProviderError(f"找不到待转写的音频文件：{audio_path.name}", provider=self.name)
+        if not self.api_key:
+            raise ProviderError("未配置 DashScope API Key，请在设置中填写阿里云百炼 API Key", provider=self.name)
+        logger.info("dashscope_file: uploading %s for async transcription (%s)", audio_path.name, self.model)
+        async with httpx.AsyncClient() as client:
+            if progress:
+                progress(3)
+            policy = await self._get_policy(client)
+            if progress:
+                progress(12)
+            file_url = await self._upload(client, audio_path, policy)
+            if progress:
+                progress(25)
+            task_id = await self._submit(client, file_url, language)
+            logger.info("dashscope_file: task %s submitted, polling", task_id)
+            if progress:
+                progress(35)
+            output = await self._poll(client, task_id)
+            if progress:
+                progress(85)
+            result_url = ""
+            subtask_error = ""
+            for item in output.get("results") or []:
+                if isinstance(item, dict) and item.get("subtask_status") == "SUCCEEDED" and item.get("transcription_url"):
+                    result_url = str(item["transcription_url"])
+                    break
+                if isinstance(item, dict) and item.get("subtask_status") not in (None, "SUCCEEDED", "PENDING", "RUNNING"):
+                    subtask_error = f"{item.get('code') or ''} {item.get('message') or ''}".strip()
+            if not result_url:
+                raise ProviderError(
+                    f"DashScope 录音文件识别失败：{redact(subtask_error) or _safe_error(output.get('task_metrics') or output)}",
+                    provider=self.name,
+                )
+            payload = await self._download_result(client, result_url)
+        result = self.parse_transcription(payload, language=language, provider_model=self.model)
+        if progress:
+            progress(100)
+        return result
+
+    @staticmethod
+    def parse_transcription(payload: dict, *, language: str = "zh", provider_model: str = "paraformer-v2") -> ASRResult:
+        segments: list[ASRSegment] = []
+        labels: list[str] = []
+        transcripts = payload.get("transcripts") or []
+        for transcript in transcripts:
+            if not isinstance(transcript, dict):
+                continue
+            for sentence in transcript.get("sentences") or []:
+                if not isinstance(sentence, dict):
+                    continue
+                text = str(sentence.get("text") or "").strip()
+                if not text:
+                    continue
+                try:
+                    start = max(0, int(sentence.get("begin_time") or 0))
+                except (TypeError, ValueError):
+                    start = 0
+                try:
+                    end = max(0, int(sentence.get("end_time") or 0))
+                except (TypeError, ValueError):
+                    end = 0
+                if end <= start:
+                    end = start + 800
+                speaker_label = None
+                speaker_id = sentence.get("speaker_id")
+                if speaker_id is not None:
+                    try:
+                        speaker_label = f"说话人{int(speaker_id) + 1}"
+                    except (TypeError, ValueError):
+                        speaker_label = None
+                segments.append(
+                    ASRSegment(
+                        start_ms=start,
+                        end_ms=end,
+                        text=text,
+                        speaker_label=speaker_label,
+                    )
+                )
+                if speaker_label and speaker_label not in labels:
+                    labels.append(speaker_label)
+            if not segments and transcript.get("text"):
+                segments.append(
+                    ASRSegment(start_ms=0, end_ms=1000, text=str(transcript["text"]).strip(), speaker_label=None)
+                )
+        if not segments:
+            raise ProviderError("DashScope 未返回任何转写句子，请检查音频是否包含语音", provider="dashscope_file")
+        if not labels:
+            labels = [SINGLE_SPEAKER]
+            for segment in segments:
+                segment.speaker_label = SINGLE_SPEAKER
+        else:
+            for segment in segments:
+                if not segment.speaker_label:
+                    segment.speaker_label = labels[0]
+        segments.sort(key=lambda item: (item.start_ms, item.end_ms))
+        text = "".join(segment.text for segment in segments)
+        return ASRResult(
+            text=text,
+            segments=segments,
+            speakers=labels,
+            language=language or "zh",
+            provider="dashscope_file",
+            model=provider_model,
+            raw={"duration_ms": (payload.get("properties") or {}).get("original_duration_in_milliseconds")},
+        )
+
+    async def check(self) -> str:
+        """Lightweight auth/policy check (no transcription submitted)."""
+        if not self.api_key:
+            raise ProviderError("未配置 DashScope API Key", provider=self.name)
+        async with httpx.AsyncClient() as client:
+            await self._get_policy(client)
+        return "连接成功，DashScope 录音文件识别服务可用"
+
+
+__all__ = [
+    "DashScopeFileASRProvider",
+    "DashScopeRealtimeASRProvider",
+    "DEFAULT_FILE_BASE_URL",
+    "DEFAULT_REALTIME_URL",
+]

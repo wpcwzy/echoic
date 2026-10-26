@@ -1,6 +1,6 @@
 # Echoic 前端设计概要（frontend 实现契约）
 
-参考截图：飞书妙记风格会议详情页（`/home/wpcwzy/.dsh/attachments/v1/objects/60/6077bb...`，webp，只读）。**详情页是最高优先级，要求 1:1 神似**；其余页面保持同一设计语言。
+参考截图：飞书妙记风格会议详情页（最终实现效果见 `docs/screenshots/03-detail-viewpoint.png` 与 `05-mindmap.png`）。**详情页是最高优先级，要求 1:1 神似**；其余页面保持同一设计语言。
 
 ## 1. 视觉语言
 

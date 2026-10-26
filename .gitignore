@@ -30,3 +30,10 @@ logs/
 e2e/screenshots/*.png
 !e2e/screenshots/.gitkeep
 .DS_Store
+
+# ---- research scratch artifacts
+.scratch/
+
+# ---- local npm sandbox workaround
+.npm-home/
+frontend/.npmrc

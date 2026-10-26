@@ -1,0 +1,60 @@
+{
+  "baseUrl": "http://127.0.0.1:8100",
+  "viewport": {
+    "width": 1680,
+    "height": 1050
+  },
+  "savedShots": [
+    {
+      "filename": "01-login.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/01-login.png",
+      "note": "登录页 + admin/admin123 提示"
+    },
+    {
+      "filename": "02-library.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/02-library.png",
+      "note": "资料库：统计卡 + 录音卡片 + 演示数据"
+    },
+    {
+      "filename": "03-detail-viewpoint.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/03-detail-viewpoint.png",
+      "note": "详情页：观点树页签 + 右侧 AI 面板"
+    },
+    {
+      "filename": "04-detail-transcript.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/04-detail-transcript.png",
+      "note": "详情页：转写页签（说话人/时间戳/文本）"
+    },
+    {
+      "filename": "05-mindmap.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/05-mindmap.png",
+      "note": "思维导图弹窗（React Flow + dagre）"
+    },
+    {
+      "filename": "06-settings.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/06-settings.png",
+      "note": "设置页：AI 服务 / 提示词 / 系统 / 账户"
+    }
+  ],
+  "consoleErrors": [
+    {
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "location": {
+        "url": "http://127.0.0.1:8100/api/auth/me",
+        "line": 0,
+        "column": 0,
+        "lineNumber": 0,
+        "columnNumber": 0
+      }
+    }
+  ],
+  "pageErrors": [],
+  "failedRequests": [
+    {
+      "url": "http://127.0.0.1:8100/api/recordings/1/media",
+      "failure": "net::ERR_ABORTED"
+    }
+  ],
+  "overflowIssues": [],
+  "warnings": []
+}

@@ -1,12 +1,14 @@
 """Default Chinese prompt templates.
 
-Each analysis prompt is a template rendered with the transcript via ``str.format``.
-The first line must contain ``TASK=<name>`` so the mock provider can identify the task.
+Keys mirror the analysis kinds in the API: summary / chapters / viewpoint_tree /
+suggested_questions / chat. The first line of each analysis prompt contains a
+``TASK=<name>`` marker so the mock LLM provider can identify the task; the summary
+prompt keeps ``TASK=minutes`` because that is the internal task name.
 Chat uses the ``chat`` entry as system instructions only (context/history appended by services/chat.py).
 """
 
 DEFAULT_PROMPTS: dict[str, str] = {
-    "minutes": """TASK=minutes
+    "summary": """TASK=minutes
 你是一名资深会议纪要助理，擅长从会议转录稿中提炼准确、可执行的信息。
 
 以下是会议的逐字转录稿（含时间戳与说话人）：

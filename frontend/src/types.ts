@@ -242,3 +242,78 @@ export type SSEEvent =
   | { type: 'citations'; citations: Citation[] }
   | { type: 'done'; message_id: number }
   | { type: 'error'; message: string }
+
+// ---------------------------------------------------------------------------
+// Response envelopes / auxiliary types (see docs/API.md)
+// ---------------------------------------------------------------------------
+
+export interface LoginResponse {
+  user: User
+  token: string
+}
+
+export interface MeResponse {
+  user: User
+}
+
+export interface OkResponse {
+  ok: boolean
+  status?: string
+}
+
+export interface ChatHistory {
+  messages: ChatMessage[]
+}
+
+export interface TagListResponse {
+  items: TagWithCount[]
+}
+
+export interface SystemHealth {
+  status: string
+  version: string
+  db?: string
+  media?: string
+  ffmpeg?: string
+  worker?: string
+  demo_mode?: boolean
+  time?: string
+}
+
+export interface SystemInfo {
+  version: string
+  data_dir: string
+  disk: { total_bytes: number; used_bytes: number; free_bytes: number }
+  recordings: number
+  segments: number
+  chunks: number
+  worker: { embedded?: boolean; running?: boolean; queue_depth?: number }
+}
+
+export type AiKind = 'asr' | 'llm' | 'embeddings'
+export type AnalysisKindName = 'summary' | 'chapters' | 'viewpoint_tree' | 'insights' | 'action_items' | 'suggested_questions' | 'keywords'
+
+export interface UpdateRecordingPayload {
+  title?: string
+  description?: string
+  recorded_at?: string
+  language?: string
+  tag_ids?: number[]
+  speaker_names?: Record<number, string>
+}
+
+export interface ReprocessPayload {
+  from: 'all' | 'asr' | 'insights' | 'embeddings'
+}
+
+export interface RecordingListParams {
+  query?: string
+  status?: string
+  tag_id?: number | null
+  sort?: 'recent' | 'oldest' | 'title' | 'duration'
+  page?: number
+  page_size?: number
+}
+
+export type ListViewMode = 'grid' | 'list'
+export type DetailTabKey = 'transcript' | 'summary' | 'viewpoints' | 'chapters'

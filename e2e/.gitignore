@@ -1,0 +1,7 @@
+# e2e 本地运行产物（不提交）
+node_modules/
+# package-lock.json 需要提交以支持 npm ci
+# last-run.log 作为验收证据提交
+.npm-cache/
+screenshots/*.png
+.npmrc

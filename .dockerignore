@@ -1,0 +1,63 @@
+# ============================================================================
+# Docker 构建上下文忽略清单
+# 原则：不把依赖、构建产物、运行时数据、密钥、缓存与本地工具目录送进镜像。
+# 最终镜像只包含 Dockerfile 显式 COPY 的 backend/ 与 frontend/dist/。
+# ============================================================================
+
+# ---- 版本控制 / docker 自身 ----
+.git
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+.github
+
+# ---- 本地环境与密钥（绝不入镜像）----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secret.key
+
+# ---- 前端依赖与构建产物 ----
+frontend/node_modules
+frontend/dist
+frontend/.vite
+frontend/coverage
+# 开发机 .npmrc 常含本机绝对路径（cache/logs-dir），容器内无效；构建使用 Dockerfile 内生成的项目级 .npmrc
+frontend/.npmrc
+e2e/node_modules
+
+# ---- Python 虚拟环境 / 缓存 ----
+backend/.venv
+.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+*.egg-info
+
+# ---- 运行时数据 ----
+data
+backend/data
+backend/app/static
+*.db
+*.db-shm
+*.db-wal
+logs
+*.log
+
+# ---- 测试证据 / 本地缓存 / 草稿 ----
+.cache
+.scratch
+e2e/screenshots
+e2e/last-run.log
+docs/screenshots
+
+# ---- 文档与辅助文件（镜像不需要；README 由 compose/仓库维护）----
+README.md
+docs
+e2e
+scripts

@@ -1,0 +1,108 @@
+# ============================================================================
+# Echoic 一键部署编排
+#
+# 快速开始：
+#   cp .env.example .env        # 修改 ECHOIC_ADMIN_PASSWORD / ECHOIC_SECRET_KEY
+#   docker compose up -d --build
+#   浏览器打开 http://localhost:8000
+#
+# 可选组件（按需启用，默认不启动）：
+#   docker compose --profile postgres up -d              # 外置 PostgreSQL 16
+#   docker compose --profile worker   up -d              # 独立 worker（主服务不再跑内嵌线程）
+#   docker compose --profile postgres --profile worker up -d   # 两者同时
+# 使用外部 PostgreSQL 时，需在 .env 中设置：
+#   ECHOIC_DATABASE_URL=postgresql+psycopg://echoic:<口令>@postgres:5432/echoic
+# 使用独立 worker 时，需在 .env 中设置 ECHOIC_EMBEDDED_WORKER=false。
+# ============================================================================
+
+name: echoic
+
+services:
+  # ---------------------------- 主服务（API + 前端 + 内嵌 worker）----------------------------
+  echoic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # 国内构建加速（可选）：在 .env 中设置 NPM_REGISTRY / PIP_INDEX_URL
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+    image: echoic:latest
+    ports:
+      - "${ECHOIC_HTTP_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      # 容器内路径固定，避免 .env 中面向本机开发的值影响容器
+      ECHOIC_DATA_DIR: /data
+      ECHOIC_STATIC_DIR: /app/backend/app/static
+      # 使用 --profile postgres 或外部数据库时在 .env 设为 true：入口脚本会等待数据库端口就绪
+      ECHOIC_WAIT_FOR_DB: ${ECHOIC_WAIT_FOR_DB:-false}
+    volumes:
+      - echoic-data:/data
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/system/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  # ---------------------------- 可选：独立 worker 进程（--profile worker）----------------------------
+  # 复用主镜像；与 echoic 共享数据卷与数据库。适合 CPU 密集处理时把任务线程与 API 隔离。
+  echoic-worker:
+    profiles: ["worker"]
+    image: echoic:latest
+    command: ["python", "-m", "app.worker"]
+    env_file:
+      - .env
+    environment:
+      ECHOIC_DATA_DIR: /data
+      ECHOIC_STATIC_DIR: /app/backend/app/static
+      ECHOIC_EMBEDDED_WORKER: "false"
+      # 与 postgres profile 组合使用时务必设为 true，确保 worker 等到数据库就绪
+      ECHOIC_WAIT_FOR_DB: ${ECHOIC_WAIT_FOR_DB:-false}
+    volumes:
+      - echoic-data:/data
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      echoic:
+        condition: service_healthy
+    # 说明：compose 不支持按 profile 动态 depends_on。与 --profile postgres 组合使用时，
+    # 请同时设置 ECHOIC_WAIT_FOR_DB=true（入口脚本会等待数据库可用，随后主服务与 worker 自动就绪）。
+
+  # ---------------------------- 可选：PostgreSQL 16（--profile postgres）----------------------------
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-echoic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-echoic}
+      POSTGRES_DB: ${POSTGRES_DB:-echoic}
+    volumes:
+      - echoic-pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-echoic} -d ${POSTGRES_DB:-echoic}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # 默认不暴露端口；仅本机调试时可取消注释
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+
+volumes:
+  # 备份这一个卷即可覆盖 SQLite 数据库、媒体文件、secret.key（详见 docs/DEPLOYMENT.md）
+  echoic-data:
+    name: echoic-data
+  echoic-pgdata:
+    name: echoic-pgdata
