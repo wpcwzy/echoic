@@ -38,6 +38,54 @@ DEFAULT_REALTIME_URL = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
 FINAL_STATUSES = {"SUCCEEDED", "FAILED", "CANCELED", "UNKNOWN"}
 POLL_INTERVAL_S = 2.0
 POLL_TIMEOUT_S = 1800.0
+HANDSHAKE_TIMEOUT_S = 45.0
+
+_HTTP_SUFFIXES = ("/api-ws/v1/inference", "/compatible-mode/v1", "/api/v1")
+
+
+def _strip_known_path_suffix(base: str) -> str:
+    value = (base or "").strip().rstrip("/")
+    lowered = value.lower()
+    for suffix in _HTTP_SUFFIXES:
+        if lowered.endswith(suffix):
+            value = value[: -len(suffix)].rstrip("/")
+            lowered = value.lower()
+    return value
+
+
+def normalize_dashscope_file_base(base_url: str | None) -> str:
+    """Normalize user-entered DashScope base URLs for file transcription.
+
+    Accepts the domain, workspace MaaS domain, or a value accidentally pasted
+    with ``/compatible-mode/v1`` / ``/api/v1``; strips those path suffixes so
+    the provider can append its own ``/api/v1/...`` endpoints.
+    """
+    value = (base_url or "").strip() or DEFAULT_FILE_BASE_URL
+    if value.startswith("ws://"):
+        value = "http://" + value[5:]
+    elif value.startswith("wss://"):
+        value = "https://" + value[6:]
+    value = _strip_known_path_suffix(value)
+    if not value.startswith(("http://", "https://")):
+        value = "https://" + value.lstrip("/")
+    return value.rstrip("/")
+
+
+def normalize_dashscope_realtime_url(base_url: str | None) -> str:
+    """Normalize a realtime ASR base URL and always return the WS endpoint."""
+    value = (base_url or "").strip() or DEFAULT_REALTIME_URL
+    if value.startswith("http://"):
+        value = "ws://" + value[7:]
+    elif value.startswith("https://"):
+        value = "wss://" + value[8:]
+    value = value.rstrip("/")
+    if value.lower().endswith("/api-ws/v1/inference"):
+        return value
+    value = _strip_known_path_suffix(value)
+    if not value.startswith(("ws://", "wss://")):
+        value = "wss://" + value.lstrip("/")
+    return value.rstrip("/") + "/api-ws/v1/inference"
+
 SINGLE_SPEAKER = "说话人1"
 
 
@@ -59,7 +107,7 @@ class DashScopeRealtimeASRProvider:
     supports_diarization = False
 
     def __init__(self, base_url: str, model: str, api_key: str, *, language: str = "zh", diarization: bool = True) -> None:
-        self.base_url = base_url or DEFAULT_REALTIME_URL
+        self.base_url = normalize_dashscope_realtime_url(base_url)
         self.model = model or "paraformer-realtime-v2"
         self.api_key = api_key
         self.language = language or "zh"
@@ -193,7 +241,12 @@ class DashScopeRealtimeASRProvider:
                 finished.set()
 
         headers = auth_headers(self.api_key)
-        logger.info("connecting DashScope realtime ASR (%s, %.1fs audio)", self.model, duration_ms / 1000)
+        logger.info(
+            "connecting DashScope realtime ASR (%s, %.1fs audio, endpoint=%s)",
+            self.model,
+            duration_ms / 1000,
+            self.base_url,
+        )
         try:
             async with websockets.connect(
                 self.base_url,
@@ -204,15 +257,37 @@ class DashScopeRealtimeASRProvider:
                 close_timeout=10,
             ) as ws:
                 await ws.send(json.dumps(self._run_task_message(task_id, language), ensure_ascii=False))
-                try:
-                    await asyncio.wait_for(started.wait(), timeout=30)
-                except asyncio.TimeoutError:
-                    raise ProviderError("DashScope 实时转写握手超时（未收到 task-started）", provider=self.name) from None
+                # The reader MUST start before waiting for task-started: websockets buffers
+                # frames but the event is only set inside ``reader``. Without this the
+                # handshake would always deadlock until the 45s timeout.
                 reader_task = asyncio.create_task(reader(ws))
-                total_bytes = frames * 2
-                sent_bytes = 0
-                frame_size = int(rate * 0.1)  # 100 ms
                 try:
+                    loop = asyncio.get_running_loop()
+                    handshake_deadline = loop.time() + HANDSHAKE_TIMEOUT_S
+                    while not started.is_set():
+                        if failure:
+                            raise ProviderError(
+                                f"DashScope 实时转写启动失败：{redact(failure[0])}",
+                                provider=self.name,
+                            )
+                        if finished.is_set():
+                            raise ProviderError(
+                                "DashScope 实时转写任务在启动阶段即结束（未返回 task-started），"
+                                f"请检查模型名称（{self.model}）、API Key 地域与实时转写并发额度",
+                                provider=self.name,
+                            )
+                        if loop.time() >= handshake_deadline:
+                            raise ProviderError(
+                                f"DashScope 实时转写启动超时（{int(HANDSHAKE_TIMEOUT_S)}s 未收到 task-started）："
+                                f"model={self.model}，endpoint={self.base_url}；"
+                                "请确认 Base URL 为 wss://dashscope.aliyuncs.com/api-ws/v1/inference（或工作空间域名），"
+                                "API Key 与地域一致，并检查该 Key 的实时转写并发/额度",
+                                provider=self.name,
+                            )
+                        await asyncio.sleep(0.05)
+                    total_bytes = frames * 2
+                    sent_bytes = 0
+                    frame_size = int(rate * 0.1)  # 100 ms
                     with wave.open(str(audio_path), "rb") as wav:
                         while True:
                             chunk = wav.readframes(frame_size)
@@ -312,14 +387,15 @@ class DashScopeRealtimeASRProvider:
             ) from exc
         if not started:
             raise ProviderError("DashScope 实时转写连接超时（未收到 task-started）", provider=self.name)
-        return "连接成功，DashScope 实时语音识别服务可用"
+        return f"连接成功，DashScope 实时语音识别服务可用（{self.base_url} · {self.model}）"
 
 
 class DashScopeFileASRProvider:
     name = "dashscope_file"
 
     def __init__(self, base_url: str, model: str, api_key: str, *, language: str = "zh", diarization: bool = True) -> None:
-        self.base_url = (base_url or DEFAULT_FILE_BASE_URL).rstrip("/")
+        self.base_url = normalize_dashscope_file_base(base_url)
+        self._effective_base = self.base_url
         self.model = model or "paraformer-v2"
         self.api_key = api_key
         self.language = language or "zh"
@@ -333,25 +409,69 @@ class DashScopeFileASRProvider:
             headers["X-DashScope-Async"] = "enable"
         return headers
 
+    def _policy_candidates(self) -> list[str]:
+        """Base URLs to try for the temporary-upload policy endpoint.
+
+        Workspace-specific MaaS domains occasionally expose a different path
+        layout; the legacy ``dashscope.aliyuncs.com`` endpoint is still
+        supported and accepts the same CN API keys, so use it as a fallback
+        instead of failing with an opaque 404.
+        """
+        candidates = [self.base_url]
+        if self.base_url != DEFAULT_FILE_BASE_URL and "dashscope.aliyuncs.com" not in self.base_url:
+            candidates.append(DEFAULT_FILE_BASE_URL)
+        return candidates
+
     async def _get_policy(self, client: httpx.AsyncClient) -> dict:
-        response = await request(
-            client,
-            "GET",
-            api_url(self.base_url, "/api/v1/uploads"),
+        last_error: ProviderError | None = None
+        attempted: list[str] = []
+        for candidate in self._policy_candidates():
+            attempted.append(candidate)
+            try:
+                response = await request(
+                    client,
+                    "GET",
+                    api_url(candidate, "/api/v1/uploads"),
+                    provider=self.name,
+                    timeout=30.0,
+                    headers=self._headers(),
+                    params={"action": "getPolicy", "model": self.model},
+                )
+                data = json_or_error(response, self.name)
+            except ProviderError as exc:
+                if getattr(exc, "status_code", None) == 404:
+                    last_error = exc
+                    logger.warning(
+                        "dashscope_file: policy endpoint 404 on %s, trying fallback if available",
+                        candidate,
+                    )
+                    continue
+                raise
+            output = data.get("output") if isinstance(data.get("output"), dict) else data
+            required = ("upload_host", "upload_dir", "policy", "signature", "oss_access_key_id")
+            missing = [key for key in required if not output.get(key)]
+            if missing:
+                raise ProviderError(
+                    f"DashScope 临时上传凭证返回异常（缺少 {', '.join(missing)}）", provider=self.name
+                )
+            if candidate != self.base_url:
+                logger.warning(
+                    "dashscope_file: custom base_url %s returned 404 for policy; "
+                    "fell back to %s. Consider setting ECHOIC_ASR_BASE_URL=%s.",
+                    self.base_url,
+                    candidate,
+                    candidate,
+                )
+            self._effective_base = candidate
+            return output
+        raise ProviderError(
+            "DashScope 录音文件识别接口不存在（HTTP 404）：请把 ASR Base URL 设为 "
+            "https://dashscope.aliyuncs.com（不要包含 /compatible-mode/v1 或 /api/v1；"
+            "使用工作空间专属域名时填到域名根即可）。"
+            f"当前 Base URL={self.base_url}，模型={self.model}，已尝试={', '.join(attempted)}",
             provider=self.name,
-            timeout=30.0,
-            headers=self._headers(),
-            params={"action": "getPolicy", "model": self.model},
-        )
-        data = json_or_error(response, self.name)
-        output = data.get("output") if isinstance(data.get("output"), dict) else data
-        required = ("upload_host", "upload_dir", "policy", "signature", "oss_access_key_id")
-        missing = [key for key in required if not output.get(key)]
-        if missing:
-            raise ProviderError(
-                f"DashScope 临时上传凭证返回异常（缺少 {', '.join(missing)}）", provider=self.name
-            )
-        return output
+            status_code=404,
+        ) from last_error
 
     async def _upload(self, client: httpx.AsyncClient, audio_path: Path, policy: dict) -> str:
         object_key = f"{policy['upload_dir'].rstrip('/')}/{uuid.uuid4().hex}_{audio_path.name}"
@@ -399,7 +519,7 @@ class DashScopeFileASRProvider:
         response = await request(
             client,
             "POST",
-            api_url(self.base_url, "/api/v1/services/audio/asr/transcription"),
+            api_url(self._effective_base, "/api/v1/services/audio/asr/transcription"),
             provider=self.name,
             timeout=60.0,
             headers=self._headers(async_call=True),
@@ -412,7 +532,7 @@ class DashScopeFileASRProvider:
         return str(task_id)
 
     async def _poll(self, client: httpx.AsyncClient, task_id: str) -> dict:
-        url = api_url(self.base_url, f"/api/v1/tasks/{task_id}")
+        url = api_url(self._effective_base, f"/api/v1/tasks/{task_id}")
         deadline = asyncio.get_running_loop().time() + POLL_TIMEOUT_S
         delay = POLL_INTERVAL_S
         while True:
@@ -566,7 +686,7 @@ class DashScopeFileASRProvider:
             raise ProviderError("未配置 DashScope API Key", provider=self.name)
         async with httpx.AsyncClient() as client:
             await self._get_policy(client)
-        return "连接成功，DashScope 录音文件识别服务可用"
+        return f"连接成功，DashScope 录音文件识别服务可用（{self._effective_base} · {self.model}）"
 
 
 __all__ = [
@@ -574,4 +694,6 @@ __all__ = [
     "DashScopeRealtimeASRProvider",
     "DEFAULT_FILE_BASE_URL",
     "DEFAULT_REALTIME_URL",
+    "normalize_dashscope_file_base",
+    "normalize_dashscope_realtime_url",
 ]

@@ -705,6 +705,9 @@ ECHOIC_DATA_DIR=/tmp/echoic-e2e ECHOIC_DEMO_SEED=true ECHOIC_SECRET_KEY=e2e-secr
 | 上传大文件 413 | 调大 `ECHOIC_MAX_UPLOAD_MB`，并同步反向代理 `client_max_body_size` |
 | 上传返回 415 | 扩展名/编码不支持；支持 mp3/wav/m4a/aac/ogg/webm/mp4/mov/mkv，先用 `ffprobe` 验证文件完整性 |
 | 任务一直 `queued` | worker 未运行：默认内嵌线程应自动启动；检查日志 `worker started`；独立 worker 场景确认 `echoic-worker` 容器在跑 |
+| ASR「测试连接」报 `dashscope_file ... HTTP 404`／上传转写 404 | Base URL 填写错误：`dashscope_file` 应填 `https://dashscope.aliyuncs.com`（**不要**带 `/api/v1` 或 `/compatible-mode/v1`；工作空间域名填到域名根）。v0.3.1 起服务端会自动纠正常见路径并提供旧域名回退；仍失败请确认 Key 与地域一致、已开通 Paraformer 录音文件识别 |
+| ASR「测试连接」成功但上传后报「实时转写握手超时（未收到 task-started）」 | v0.3.0 的实时转写握手缺陷，升级到 **v0.3.1** 修复。若仍出现：确认 Base URL 为 `wss://dashscope.aliyuncs.com/api-ws/v1/inference`（或只填域名）、模型为 `paraformer-realtime-v2`、Key 与地域一致，并检查该 Key 的实时转写并发额度；工作日志会打印实际 endpoint/model。整场录音转写建议改用 `dashscope_file`（带说话人分离） |
+| 整场录音应该选哪个 ASR？ | 上传录音/视频做整场转写选 **`dashscope_file`（录音文件识别，paraformer-v2，支持说话人分离，无需公网 URL）**；`dashscope_realtime` 仅用于录音页实时字幕（Beta，无说话人分离），不是整场转写主路径 |
 | 任务 `failed` 且提示 ASR/LLM 连接失败 | 「设置 → AI 服务」点「测试连接」；检查 base_url / Key / 出站网络；日志中不含明文 Key |
 | 放入 consume 目录的文件未自动导入（v0.2） | 确认 `ECHOIC_CONSUME_ENABLED=true`、目录在容器内可写（默认 `/data/consume`）、扩展名受支持；查看日志 `consume`；修改 `ECHOIC_CONSUME_INTERVAL_SEC` 可调整扫描间隔；归属用户由 `ECHOIC_CONSUME_OWNER_USERNAME` 指定（空=首个管理员） |
 | 公开分享链接无法解锁 | 检查 `ECHOIC_SHARE_COOKIE_HOURS`（默认 2 小时）与链接是否过期；分享解锁 Cookie 仅对该分享记录有效 |

@@ -121,6 +121,15 @@ const PROVIDER_META: Record<AiKind, { title: string; desc: string; icon: React.R
   },
 }
 
+const ASR_PROVIDER_DEFAULTS: Record<string, { base: string; model: string }> = {
+  dashscope_file: { base: 'https://dashscope.aliyuncs.com', model: 'paraformer-v2' },
+  dashscope_realtime: {
+    base: 'wss://dashscope.aliyuncs.com/api-ws/v1/inference',
+    model: 'paraformer-realtime-v2',
+  },
+  openai: { base: 'https://api.openai.com/v1', model: 'whisper-1' },
+}
+
 const PROMPT_FIELDS = [
   { key: 'summary', label: '纪要总结', desc: '生成 AI 纪要（Markdown）时使用' },
   { key: 'chapters', label: '章节划分', desc: '生成章节标题、摘要与要点时使用' },
@@ -403,6 +412,9 @@ export default function SettingsPage() {
           const meta = PROVIDER_META[kind]
           const draft = aiDrafts[kind]
           const result = testResults[kind]
+          const asrDefaults = kind === 'asr' ? ASR_PROVIDER_DEFAULTS[draft.provider] : undefined
+          const basePlaceholder = asrDefaults?.base ?? meta.basePlaceholder
+          const modelPlaceholder = asrDefaults?.model ?? meta.modelPlaceholder
           return (
             <section className="settings-card" key={kind}>
               <header className="settings-card__head">
@@ -430,14 +442,28 @@ export default function SettingsPage() {
                   <Select
                     value={draft.provider}
                     options={PROVIDER_OPTIONS[kind]}
-                    onChange={(value) => updateProvider(kind, { provider: value })}
+                    onChange={(value) => {
+                      if (kind !== 'asr') {
+                        updateProvider(kind, { provider: value })
+                        return
+                      }
+                      const defaults = ASR_PROVIDER_DEFAULTS[value]
+                      const patch: Partial<ProviderSettings> = { provider: value }
+                      if (defaults) {
+                        const knownBases = Object.values(ASR_PROVIDER_DEFAULTS).map((item) => item.base)
+                        const knownModels = Object.values(ASR_PROVIDER_DEFAULTS).map((item) => item.model)
+                        if (!draft.base_url || knownBases.includes(draft.base_url)) patch.base_url = defaults.base
+                        if (!draft.model || knownModels.includes(draft.model)) patch.model = defaults.model
+                      }
+                      updateProvider(kind, patch)
+                    }}
                   />
                 </label>
                 <label className="settings-field">
                   <span className="settings-field__label">模型</span>
                   <Input
                     value={draft.model}
-                    placeholder={meta.modelPlaceholder}
+                    placeholder={modelPlaceholder}
                     onChange={(event) => updateProvider(kind, { model: event.target.value })}
                   />
                 </label>
@@ -445,9 +471,16 @@ export default function SettingsPage() {
                   <span className="settings-field__label">Base URL</span>
                   <Input
                     value={draft.base_url}
-                    placeholder={meta.basePlaceholder}
+                    placeholder={basePlaceholder}
                     onChange={(event) => updateProvider(kind, { base_url: event.target.value })}
                   />
+                  {kind === 'asr' && (
+                    <span className="settings-field__hint">
+                      文件转写填 <code>https://dashscope.aliyuncs.com</code>（不要带 /api/v1 或
+                      /compatible-mode/v1）；实时转写填
+                      <code> wss://dashscope.aliyuncs.com/api-ws/v1/inference</code>，只填域名时服务端会自动补全。
+                    </span>
+                  )}
                 </label>
 
                 {kind === 'asr' && (

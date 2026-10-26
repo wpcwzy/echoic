@@ -2,6 +2,15 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.3.1] - 2026-10-27
+
+### 修复
+
+- **DashScope 实时转写握手假死**：v0.3.0 的 `dashscope_realtime` 在上传录音后可能长时间等待并报「握手超时（未收到 task-started）」——原因是 Provider 在启动 WebSocket 读取循环之前就等待 `task-started` 事件，消息被缓冲但事件永远不会被设置。现在先启动 reader 再等待握手，并区分 `task-failed`（直接展示服务端原因）、超时（包含 endpoint/model 与并发/地域排查提示）。
+- **DashScope 录音文件识别 404**：Base URL 常被误填为 `.../api/v1` 或 `.../compatible-mode/v1`，导致拼接出重复路径返回 404。现在会自动规范化 Base URL（支持域名/工作空间域名/常见后缀），并在工作空间域名 404 时自动回退到 `https://dashscope.aliyuncs.com`；404 错误信息会给出正确填写示例。
+- **AI 设置页 Base URL 提示与默认值**：ASR 按服务商展示正确的 Base URL / 模型占位（文件识别 `https://dashscope.aliyuncs.com`，实时 `wss://dashscope.aliyuncs.com/api-ws/v1/inference`），切换服务商时自动填充默认值，并新增填写说明；DEPS/DEPLOYMENT/环境变量示例补充 ASR 选型与排障说明。
+- 新增 DashScope ASR 回归测试（URL 规范化、实时握手不死锁、task-failed 报错、404 与旧域名回退）。
+
 ## [0.3.0] - 2026-10-27
 
 P1 收官版本：**暗色主题、回收站与批量操作、对象存储、实时转写 Beta、向量/混合检索**。docs/09 中 v0.2.1 与 v0.3.0 两个里程碑合并为 v0.3.0 交付。
