@@ -1,0 +1,32 @@
+# ---- python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# ---- frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+web-dist/
+
+# ---- runtime data
+data/
+backend/data/
+*.db
+*.db-shm
+*.db-wal
+secret.key
+
+# ---- secrets / local
+.env
+.env.local
+
+# ---- tooling / scratch
+.cache/
+logs/
+e2e/screenshots/*.png
+!e2e/screenshots/.gitkeep
+.DS_Store
