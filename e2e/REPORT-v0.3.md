@@ -11,6 +11,7 @@
   - 前端构建通过（`index-DMo8e3bu.js` 1.92 MB / gzip **613.41 KB**；`index-Bpx04KvO.css` gzip 22.41 KB）
   - UI 截图 **8/8**，0 未捕获异常、0 横向溢出；深色主题 6 处状态校验全部通过（含刷新持久化）
   - `scripts/verify.sh` 一键验证 **11 组检查全部通过**（v0.1 + v0.2 + v0.3 三套冒烟）
+  - **发布验证通过**：commit `7d80e6b` CI success；tag `v0.3.0` 多架构 GHCR 镜像发布 success，匿名可拉取
   - **无 P1/P2/P3 发布阻塞缺陷**；仅有若干观察项与发布后待验证项（见 §5/§6）
 
 ---
@@ -99,8 +100,8 @@ cd e2e && ECHOIC_E2E_BASE_URL=http://127.0.0.1:8100 node screenshots_v03.mjs
 | 前端 tsc + vite build | ✅ PASS |
 | `scripts/verify.sh` | ✅ 11 通过 / 0 失败 |
 | UI 截图 + 视觉巡检 | ✅ 8/8，0 异常 / 0 溢出 |
-| GitHub Actions CI（v0.3.0 提交） | ⏳ 待 Lead 提交后验证（见 §7） |
-| GHCR v0.3.0 多架构镜像 | ⏳ 待打 tag 后验证 |
+| GitHub Actions CI（commit `7d80e6b`） | ✅ **success**（backend pytest + frontend build，2m59s） |
+| GHCR v0.3.0 多架构镜像（tag `v0.3.0`） | ✅ **success**（amd64+arm64，匿名拉取已验证，见 §7） |
 
 ### 3.2 v0.3 新能力冒烟（`e2e/smoke_v03.py`，34 项，全部 PASS）
 
@@ -167,20 +168,35 @@ v0.2 及之前已修复项（Diarization 开关、思维导图缩放、资料库
 | R5 | 浏览器矩阵：UI 截图仅 Chromium；深色主题/移动端 390px 已验证，Safari/Firefox 未覆盖 | 低 | 后续加 WebKit/Firefox 冒烟；公开分享页跟随系统深色已由前端实现 |
 | R6 | 前端 bundle 1.92MB（gzip 613KB），接近 chunk 警告阈值 | 低 | 后续 route-level code-splitting（不影响功能） |
 | R7 | v0.2→v0.3 数据库迁移：启动幂等迁移已在全新库验证；旧 v0.2 真实数据目录升级演练未做 | 中 | 升级前备份；在目标机用 v0.2 数据副本跑一次升级（迁移为加列/建表，向后兼容） |
-| R8 | GHCR `v0.3.0` 镜像与 CI 状态待 Lead 提交/tag 后验证（本次报告时尚未 tag） | — | 见 §7，QA 在 tag 后执行发布验证 |
+| R8 | ~~GHCR `v0.3.0` 镜像与 CI 状态待验证~~ | — | ✅ 已完成（§7）：CI success、tag 发布 success、匿名多架构校验通过 |
 
 ---
 
-## 7. 发布验证待办（Lead 提交 + tag 后由 QA 执行）
+## 7. 发布验证结果（GitHub Actions + GHCR，已完成）
 
-1. 等待 Lead 创建最终提交并推送，确认 GitHub Actions **CI** 成功（backend pytest + frontend build）；
-2. Lead 打 tag `v0.3.0` 后，确认 **Docker Publish (GHCR)** 成功；
-3. 匿名校验镜像 manifest（无登录）：
-   - `ghcr.io/wpcwzy/echoic:v0.3.0`、`0.3`、`0.3.0`、`0`、`latest`
-   - `Accept: application/vnd.oci.image.index.v1+json` → 应为多架构 index（`linux/amd64` + `linux/arm64`）；
-4. 记录 workflow run URL / image digest 写入发布说明。
+- **发布提交**：`7d80e6b`（`release: v0.3.0 — P1 complete (dark theme, trash/batch, storage, live Beta, vector search)`），
+  annotated tag `v0.3.0` 已推送（tag 对象 `22c4c6d` → commit `7d80e6b`）。
+- **GitHub Actions（全部 success）**：
 
----
+| 工作流 | 事件 / 分支 | 运行 | 耗时 | 结果 |
+|---|---|---|---|---|
+| CI | push main | [40395016050](https://github.com/wpcwzy/echoic/actions/runs/40395016050) | 2m59s | ✅ Backend tests (pytest) + Frontend build (tsc + vite) |
+| Docker Publish (GHCR) | push main | [40395015986](https://github.com/wpcwzy/echoic/actions/runs/40395015986) | 4m49s | ✅ Build & push multi-arch image |
+| Docker Publish (GHCR) | push tag `v0.3.0` | [40395025393](https://github.com/wpcwzy/echoic/actions/runs/40395025393) | 5m51s | ✅ Build & push multi-arch image |
+
+- **GHCR 匿名验证**（无登录，`Accept: application/vnd.oci.image.index.v1+json`）：
+
+| tag | HTTP | manifest 类型 | digest |
+|---|---|---|---|
+| `v0.3.0` / `0.3.0` / `0.3` / `0` / `latest` / `sha-7d80e6b` | 200 | **OCI image index** | `sha256:0958bce23bc0439635655831f5e1cfe458a0d0443c8e56547307d38e991a3ea8`（全部 tag 指向同一 index） |
+
+- **多架构清单**：`linux/amd64` + `linux/arm64` + 2 个 attestation manifest（provenance/SBOM，`unknown/unknown`）；
+  amd64 子 manifest digest `sha256:8c5e9bbb5af7b17e051212fff0f5e2c9fe9cd524573382c724889f2350d84dea`，
+  config digest `sha256:9638236468d961a4836d45b9cdea2101a7afe5d7592f709309d1028655308d8e`，构建时间 `2026-10-26T20:22:49Z`。
+- **镜像 OCI labels**（从 config 校验）：`title=Echoic`、`version=v0.3.0`、
+  `revision=7d80e6b0da41d2fce97b84b6d272efc39f3db634`、`licenses=MIT`、`source=https://github.com/wpcwzy/echoic`。
+- **结论**：v0.3.0 发布流水线、多架构镜像与公开拉取均验证通过；`docker pull ghcr.io/wpcwzy/echoic:v0.3.0`
+  在 amd64/arm64 主机可匿名使用。发布验证项全部完成，无异常。
 
 ## 8. 交付物与复现
 
