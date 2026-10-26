@@ -1,10 +1,20 @@
 # ============================================================================
-# Echoic 一键部署编排
+# Echoic 一键部署编排（镜像优先 / image-first，v0.2+）
 #
-# 快速开始：
-#   cp .env.example .env        # 修改 ECHOIC_ADMIN_PASSWORD / ECHOIC_SECRET_KEY
-#   docker compose up -d --build
+# 默认方式：直接拉取预构建多架构镜像（无需本地构建，最快）：
+#   cp .env.example .env                      # 修改 ECHOIC_ADMIN_PASSWORD / ECHOIC_SECRET_KEY
+#   docker compose pull                       # 拉取 ghcr.io/wpcwzy/echoic:${ECHOIC_IMAGE_TAG}
+#   docker compose up -d                      # 启动
 #   浏览器打开 http://localhost:8000
+#
+# 镜像标签（.env 中 ECHOIC_IMAGE_TAG）：
+#   latest  ：main 分支最新构建（默认，适合体验）
+#   v0.2.0  ：语义化版本（生产建议固定版本）
+#   sha-xxx ：某次提交构建（可复现）
+#
+# 从源码构建（开发/定制）：
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#   镜像会以 echoic:local 本地标签构建（不覆盖官方 latest）。
 #
 # 可选组件（按需启用，默认不启动）：
 #   docker compose --profile postgres up -d              # 外置 PostgreSQL 16
@@ -20,14 +30,8 @@ name: echoic
 services:
   # ---------------------------- 主服务（API + 前端 + 内嵌 worker）----------------------------
   echoic:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      # 国内构建加速（可选）：在 .env 中设置 NPM_REGISTRY / PIP_INDEX_URL
-      args:
-        NPM_REGISTRY: ${NPM_REGISTRY:-}
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
-    image: echoic:latest
+    # 镜像优先：默认不构建。源码构建请叠加 docker-compose.build.yml。
+    image: ghcr.io/wpcwzy/echoic:${ECHOIC_IMAGE_TAG:-latest}
     ports:
       - "${ECHOIC_HTTP_PORT:-8000}:8000"
     env_file:
@@ -53,10 +57,10 @@ services:
       start_period: 40s
 
   # ---------------------------- 可选：独立 worker 进程（--profile worker）----------------------------
-  # 复用主镜像；与 echoic 共享数据卷与数据库。适合 CPU 密集处理时把任务线程与 API 隔离。
+  # 复用同一镜像；与 echoic 共享数据卷与数据库。适合 CPU 密集处理时把任务线程与 API 隔离。
   echoic-worker:
     profiles: ["worker"]
-    image: echoic:latest
+    image: ghcr.io/wpcwzy/echoic:${ECHOIC_IMAGE_TAG:-latest}
     command: ["python", "-m", "app.worker"]
     env_file:
       - .env

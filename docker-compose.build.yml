@@ -1,0 +1,36 @@
+# ============================================================================
+# Echoic 源码构建覆盖文件（与 docker-compose.yml 叠加使用）
+#
+# 用途：不依赖 GHCR 预构建镜像，直接从本仓库源码构建并运行（开发 / 定制 / 离线环境）。
+#
+# 用法：
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# 说明：
+#   - 构建产物使用本地镜像标签 echoic:local（可用 ECHOIC_LOCAL_IMAGE 覆盖），
+#     不会覆盖官方 ghcr.io 镜像标签；
+#   - 国内构建加速：在 .env 中设置 NPM_REGISTRY=https://registry.npmmirror.com
+#     与 PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple；
+#   - 升级：git pull 后重复上述命令即可重建。
+#
+#   ⚠️ 注意：`docker compose pull` 默认仍会尝试拉取 ghcr.io 镜像；源码构建场景请
+#      只用 `up -d --build`（或加 --pull never）即可。
+# ============================================================================
+
+name: echoic
+
+services:
+  echoic:
+    # 本地构建标签（避免意外覆盖/混淆官方 latest）
+    image: ${ECHOIC_LOCAL_IMAGE:-echoic:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # 默认使用官方源以保证 CI/公开环境可复现；国内网络可覆盖为 npmmirror/清华源
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+
+  echoic-worker:
+    # worker 复用同一次源码构建产出的本地镜像
+    image: ${ECHOIC_LOCAL_IMAGE:-echoic:local}

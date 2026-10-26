@@ -1,0 +1,146 @@
+# ============================================================================
+# Echoic 镜像发布：构建多架构镜像并推送到 GitHub Container Registry (GHCR)
+#
+# 触发：
+#   - push main        → 标签 latest + sha-xxxxxxx
+#   - push 语义化 tag  → vX.Y.Z / X.Y / X + sha-xxxxxxx（v* tag 触发）
+#   - 手动 workflow_dispatch（按当前分支，sha 标签）
+#
+# 产物：ghcr.io/wpcwzy/echoic（linux/amd64 + linux/arm64）
+# 首次发布后需将包可见性设为 Public，否则 `docker pull` 需要登录（见末尾 best-effort 步骤）。
+# ============================================================================
+name: Docker Publish (GHCR)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+
+# 同一分支/tag 的发布串行执行；发布任务不自动取消，避免中断推送
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  # 构建期把 npmmirror 的 lockfile 下载地址改写为官方源
+  NPM_BUILD_REGISTRY: https://registry.npmjs.org
+
+jobs:
+  publish:
+    name: Build & push multi-arch image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image name (lowercase)
+        id: image
+        run: |
+          IMAGE="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          echo "name=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "GHCR image: ${IMAGE}"
+
+      - name: Set up QEMU (multi-arch emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags & labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          # latest 仅 main 分支；v* tag 生成语义化版本；每次构建附加 sha 标签
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.title=Echoic
+            org.opencontainers.image.description=Self-hosted meeting recording knowledge base with transcription, AI minutes, viewpoint tree and RAG chat
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+
+      - name: Build and push (linux/amd64 + linux/arm64)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          build-args: |
+            NPM_REGISTRY=${{ env.NPM_BUILD_REGISTRY }}
+            PIP_INDEX_URL=https://pypi.org/simple
+
+      - name: Write job summary
+        run: |
+          {
+            echo "## 🐳 Echoic image published"
+            echo ""
+            echo "| 项目 | 值 |"
+            echo "|---|---|"
+            echo "| 镜像 | \`${{ steps.image.outputs.name }}\` |"
+            echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
+            echo "| 平台 | linux/amd64, linux/arm64 |"
+            echo "| 事件 | \`${{ github.event_name }}\` / \`${{ github.ref }}\` |"
+            echo ""
+            echo "标签："
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -------------------------------------------------------------------
+      # GHCR 包可见性：默认私有，匿名 docker pull 会 403。
+      # GITHUB_TOKEN 通常没有修改 user package 可见性的权限，因此本步骤
+      # continue-on-error（失败不影响发布）；若失败请在包设置页手动改为 Public。
+      # -------------------------------------------------------------------
+      - name: Try to make GHCR package public (best effort)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          PACKAGE="$(echo "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')"
+          echo "尝试将 ghcr.io/${GITHUB_REPOSITORY_OWNER}/${PACKAGE} 设为 public ..."
+          if gh api --method PATCH "/user/packages/container/${PACKAGE}" \
+               -H "X-GitHub-Api-Version: 2022-11-28" \
+               -f visibility=public >/dev/null 2>&1; then
+            echo "✅ 包已设为 public（匿名可拉取）"
+          else
+            echo "::notice title=GHCR package visibility::无法通过 GITHUB_TOKEN 自动设为 public。请一次性在 https://github.com/users/${GITHUB_REPOSITORY_OWNER}/packages/container/${PACKAGE}/settings 将 Visibility 改为 Public；或使用者先 docker login ghcr.io 再拉取。"
+          fi
+
+      - name: Verify pullable tag list
+        run: |
+          echo "已推送标签："
+          echo "${{ steps.meta.outputs.tags }}"
+          echo "提示：多架构 manifest 可用 'docker buildx imagetools inspect ${{ steps.image.outputs.name }}:latest' 验证。"
