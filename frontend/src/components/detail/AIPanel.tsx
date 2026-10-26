@@ -17,6 +17,7 @@ import { api, streamChat } from '../../api/client'
 import { qk, useChatHistory } from '../../api/queries'
 import type { ChatMessage, Citation, Insights, SSEEvent } from '../../types'
 import { formatMs } from '../../utils/format'
+import { viewpointForest } from '../../utils/viewpoints'
 import { confirmAction, toast, toastError } from '../../utils/toast'
 import { MarkdownView } from '../common/MarkdownView'
 
@@ -150,7 +151,7 @@ export function AIPanel({
     return (fromServer.length ? fromServer : DEFAULT_QUESTIONS).slice(0, 6)
   }, [insights])
 
-  const hasViewpoints = Boolean(insights?.viewpoint_tree?.root)
+  const hasViewpoints = viewpointForest(insights?.viewpoint_tree).length > 0
   const hasInsights = Boolean(insights?.insights?.length || insights?.action_items?.length)
 
   const send = useCallback(

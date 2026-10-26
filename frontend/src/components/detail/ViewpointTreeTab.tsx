@@ -6,6 +6,7 @@ import { formatMs } from '../../utils/format'
 import { EmptyState } from '../common/EmptyState'
 import { ErrorState } from '../common/ErrorState'
 import { TabContentSkeleton } from '../common/Skeletons'
+import { countViewpointNodes, viewpointForest } from '../../utils/viewpoints'
 
 interface ViewpointTreeTabProps {
   insights: Insights | undefined
@@ -200,12 +201,12 @@ export function ViewpointTreeTab({
   onRetry,
   readOnly = false,
 }: ViewpointTreeTabProps) {
-  const root = insights?.viewpoint_tree?.root
-  const total = useMemo(() => countNodes(root), [root])
+  const forest = useMemo(() => viewpointForest(insights?.viewpoint_tree), [insights?.viewpoint_tree])
+  const total = useMemo(() => countViewpointNodes(forest), [forest])
 
   if (loading) return <TabContentSkeleton rows={4} />
   if (error) return <ErrorState title="观点树加载失败" description="AI 分析结果获取失败，请稍后重试。" onRetry={onRetry} />
-  if (!root) {
+  if (!forest.length) {
     return (
       <EmptyState
         icon={<ReloadOutlined />}
@@ -213,7 +214,7 @@ export function ViewpointTreeTab({
         description={
           readOnly
             ? '这份分享暂未包含 AI 观点树，或录音仍在处理中。'
-            : '观点树会把会议中的主题、观点、待办与风险整理成结构化脉络，支持点击节点跳转播放。'
+            : '观点树会从长会议中提炼多个独立专题，并把每个专题整理成一棵树（观点森林），支持点击节点跳转播放。'
         }
         actions={
           readOnly ? undefined : (
@@ -226,42 +227,74 @@ export function ViewpointTreeTab({
     )
   }
 
-  const children = root.children ?? []
-
   return (
     <div className="viewpoint-tree">
-      <div className="vp-root">
-        <span
-          className={`vp-root__pill ${typeof root.time_ms === 'number' ? 'is-clickable' : ''}`}
-          role={typeof root.time_ms === 'number' ? 'button' : undefined}
-          tabIndex={typeof root.time_ms === 'number' ? 0 : undefined}
-          onClick={typeof root.time_ms === 'number' ? () => onSeek(root.time_ms as number) : undefined}
-        >
-          {root.label}
-        </span>
-        {root.detail && <span className="vp-root__detail">{root.detail}</span>}
-        <span className="vp-root__count">{total} 个观点节点</span>
+      <div className="vp-forest__summary">
+        共 {forest.length} 个专题 · {total} 个观点节点
       </div>
 
-      {children.length === 0 ? (
-        <div className="vp-callout">
-          <span className="vp-callout__text">{root.detail || '暂无更多观点内容'}</span>
-        </div>
-      ) : (
-        <div className="vp-tree">
-          {children.map((child) => (
-            <div className="vp-tree__item" key={child.id}>
-              {child.children?.length ? (
-                <GroupCard node={child} onSeek={onSeek} />
-              ) : (
-                <CalloutCard node={child} onSeek={onSeek} />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="viewpoint-forest">
+        {forest.map((topic) => {
+          const children = topic.children ?? []
+          const topicHasTime = typeof topic.time_ms === 'number' && topic.time_ms !== null
+          return (
+            <section className="vp-forest__tree" key={topic.id}>
+              <header className="vp-forest__topic">
+                <span
+                  className={`vp-root__pill ${topicHasTime ? 'is-clickable' : ''}`}
+                  role={topicHasTime ? 'button' : undefined}
+                  tabIndex={topicHasTime ? 0 : undefined}
+                  onClick={topicHasTime ? () => onSeek(topic.time_ms as number) : undefined}
+                  onKeyDown={
+                    topicHasTime
+                      ? (event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            onSeek(topic.time_ms as number)
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  {topic.label}
+                </span>
+                {topic.detail && <span className="vp-forest__detail">{topic.detail}</span>}
+                <span className="vp-forest__count">{countViewpointNodes([topic])} 个节点</span>
+              </header>
 
-      <div className="vp-hint">悬停节点可查看时间与发言人，点击可跳转到对应录音位置</div>
+              {children.length > 0 ? (
+                children.every((child) => !child.children?.length) ? (
+                  <div className="vp-tree">
+                    <div className="vp-tree__item">
+                      <div className="vp-rows vp-forest__rows">
+                        {children.map((child) => (
+                          <VpRow key={child.id} node={child} onSeek={onSeek} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="vp-tree">
+                    {children.map((child) => (
+                      <div className="vp-tree__item" key={child.id}>
+                        {child.children?.length ? (
+                          <GroupCard node={child} onSeek={onSeek} />
+                        ) : (
+                          <VpRow node={child} onSeek={onSeek} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                <CalloutCard node={topic} onSeek={onSeek} />
+              )}
+            </section>
+          )
+        })}
+      </div>
+
+      <div className="vp-hint">专题按会议讨论主题归纳；悬停节点可查看时间与发言人，点击可跳转到对应录音位置</div>
     </div>
   )
 }

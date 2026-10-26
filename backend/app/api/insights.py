@@ -117,6 +117,15 @@ def _parse_node(raw: Any) -> ViewpointNodeOut | None:
 
 def _parse_viewpoint_tree(payload: Any) -> ViewpointTreeOut | None:
     if isinstance(payload, dict):
+        roots_raw = payload.get("roots") or payload.get("trees") or payload.get("forest")
+        if isinstance(roots_raw, list):
+            roots = [
+                parsed
+                for parsed in (_parse_node(item) for item in roots_raw if isinstance(item, dict))
+                if parsed is not None
+            ]
+            if roots:
+                return ViewpointTreeOut(roots=roots, root=roots[0] if len(roots) == 1 else None)
         root_raw = payload.get("root", payload if "label" in payload else None)
     else:
         root_raw = None

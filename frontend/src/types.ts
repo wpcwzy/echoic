@@ -140,6 +140,12 @@ export interface ViewpointNode {
   children: ViewpointNode[]
 }
 
+/** A meeting can have one legacy root or a forest of independent topic trees. */
+export interface ViewpointTree {
+  root?: ViewpointNode | null
+  roots?: ViewpointNode[]
+}
+
 export interface Chapter {
   id: string
   title: string
@@ -188,7 +194,7 @@ export interface Insights {
   model: string | null
   summary: { markdown: string } | null
   chapters: Chapter[] | null
-  viewpoint_tree: { root: ViewpointNode } | null
+  viewpoint_tree: ViewpointTree | null
   insights: Insight[] | null
   action_items: ActionItem[] | null
   suggested_questions: string[] | null

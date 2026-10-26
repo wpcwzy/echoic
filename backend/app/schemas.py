@@ -252,7 +252,10 @@ ViewpointNodeOut.model_rebuild()
 
 
 class ViewpointTreeOut(BaseModel):
-    root: ViewpointNodeOut
+    """Viewpoint structure: either a single legacy root or a forest of topic trees."""
+
+    root: ViewpointNodeOut | None = None
+    roots: list[ViewpointNodeOut] = Field(default_factory=list)
 
 
 class InsightOut(BaseModel):

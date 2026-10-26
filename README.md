@@ -11,7 +11,7 @@
 > Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
 - Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
-- Version: **v0.3.3** — P1 complete (dark theme, trash & batch, object storage, live transcription Beta, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
+- Version: **v0.3.4** — P1 complete (dark theme, trash & batch, object storage, live transcription Beta, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
 - License: MIT
 
 ## 📸 Screenshots
@@ -36,6 +36,10 @@
 |---|---|
 | ![Trash](docs/screenshots/v0.3/03-trash.png) | ![Semantic search](docs/screenshots/v0.3/05-semantic-search.png) |
 
+| Viewpoint forest (multiple topic trees) |
+|---|
+| ![Viewpoint forest](docs/screenshots/v0.3/09-viewpoint-forest.png) |
+
 **v0.2 collaboration & sharing**
 
 | User & role management | Create a share link |
@@ -55,7 +59,7 @@
 | 🎙 Browser recording + upload | Record directly from the microphone (timer / pause / level meter); supports mp3/wav/m4a/aac/ogg/webm/mp4/mov/mkv up to 2 GB per file |
 | 📝 Speech-to-text | Plug-and-play providers: Alibaba Cloud DashScope / OpenAI-compatible Whisper / Mock; transcript with speaker labels and timestamps, renameable and editable |
 | 🧠 AI minutes | Markdown summary + key conclusions + decisions + action items; regenerable |
-| 🌳 Viewpoint tree & mind map | Structured viewpoint tree rendered as an interactive mind map; click any node to seek in the recording |
+| 🌳 Viewpoint forest & mind map | Long meetings are distilled into multiple independent topic trees (a "forest"), each rendered with its own branches; interactive mind map; click any node to seek in the recording |
 | 📑 Smart chapters | Automatic chapter segmentation (title / time range / summary / bullets); click to jump |
 | 💬 AI Q&A | RAG over transcripts + minutes, streamed over SSE, answers cite `[12:05]` timestamps that seek the player |
 | 📚 Library | Search / status filters / tags / sorting / stats; global search jumps to the matching transcript segment |
@@ -193,7 +197,7 @@ docker pull ghcr.io/wpcwzy/echoic:latest
 |---|---|---|
 | GitHub Actions CI | **Passing**: backend pytest + frontend tsc/vite build; PR also validates the amd64 image build | [CI runs](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
 | Multi-arch image publish | **Succeeded**: linux/amd64 + linux/arm64 pushed to GHCR (`latest` / `sha-*`; semver tags on releases) | [Publish runs](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR package](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
-| Backend tests | **396 passed** (v0.1 129 + v0.2 + v0.3 trash/live/vector/storage/migrations); includes a moto S3 end-to-end upload → pipeline → Range test | `cd backend && .venv/bin/pytest -q` |
+| Backend tests | **401 passed** (v0.1 129 + v0.2 + v0.3 trash/live/vector/storage/migrations); includes a moto S3 end-to-end upload → pipeline → Range test | `cd backend && .venv/bin/pytest -q` |
 | Frontend build | **Passing** (`tsc --noEmit` clean; ~613 KB JS + 22 KB CSS gzipped) | `cd frontend && npm run build` |
 | End-to-end smoke (mock, fresh database) | v0.1 **30/30** + v0.2 **34/34** + v0.3 **34/34 PASS**: trash/batch invariants, live mock WebSocket → upload → replace/promote merge, vector reindex + semantic/hybrid search with ACL, storage Range, regression suites | [`e2e/REPORT-v0.3.md`](e2e/REPORT-v0.3.md) |
 | UI screenshot audit | v0.1 6/6 + v0.2 7/7 + v0.3 8/8 (light/dark, desktop/mobile), no overflow, no uncaught exceptions, no 5xx | [`docs/screenshots/`](docs/screenshots/) · [`docs/screenshots/v0.3/`](docs/screenshots/v0.3/) |

@@ -44,6 +44,7 @@ import { useAuthStore } from '../store/auth'
 import type { DetailTabKey, RecordingDetail } from '../types'
 import { parseMsParam } from '../utils/format'
 import { isAdminUser } from '../utils/roles'
+import { viewpointForest, viewpointMindMapRoot } from '../utils/viewpoints'
 import { confirmAction, toast, toastError } from '../utils/toast'
 import { AudioPlayerCard } from '../components/player/AudioPlayerCard'
 import { StatusBadge } from '../components/common/StatusBadge'
@@ -195,6 +196,11 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
     [transcript?.speakers, recording.speakers],
   )
   const chapters = useMemo(() => insights?.chapters ?? [], [insights?.chapters])
+  const viewpointTopics = useMemo(() => viewpointForest(insights?.viewpoint_tree), [insights?.viewpoint_tree])
+  const mindMapRoot = useMemo(
+    () => viewpointMindMapRoot(viewpointTopics, recording.title),
+    [viewpointTopics, recording.title],
+  )
   const segments = useMemo(() => transcript?.segments ?? [], [transcript?.segments])
   const activeSegmentId = useMemo(() => findActiveSegmentId(currentMs, segments), [currentMs, segments])
 
@@ -207,11 +213,11 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
       userTabRef.current = true
       return
     }
-    if (insights?.viewpoint_tree?.root) {
+    if (viewpointTopics.length) {
       setTab('viewpoints')
       userTabRef.current = true
     }
-  }, [insights?.viewpoint_tree, isReady, searchParams])
+  }, [viewpointTopics, isReady, searchParams])
 
   const changeTab = (next: DetailTabKey) => {
     userTabRef.current = true
@@ -414,7 +420,7 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   }
 
   const aiInline = breakpoint.isWide && !aiCollapsed
-  const hasViewpoints = Boolean(insights?.viewpoint_tree?.root)
+  const hasViewpoints = viewpointTopics.length > 0
 
   const aiPanelNode = (
     <AIPanel
@@ -668,7 +674,7 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
       <MindMapModal
         open={mindMapOpen}
         onClose={() => setMindMapOpen(false)}
-        root={insights?.viewpoint_tree?.root ?? null}
+        root={mindMapRoot}
         title={recording.title}
         onSeek={(ms) => {
           seekTo(ms)

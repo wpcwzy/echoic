@@ -171,17 +171,20 @@ def build_embedding_provider(cfg: EmbeddingConfig) -> EmbeddingProvider | None
 ```
 3–12 章，按内容转折切分，时间戳必须来自转录稿时间范围（升序不重叠），首章 start_ms=0，末章 end_ms≈duration。
 
-**C. viewpoint_tree** → kind `viewpoint_tree`
+**C. viewpoint_tree（v0.3.4 起为“观点森林”）** → kind `viewpoint_tree`
 ```json
-{"root":{"id":"root","label":"会议主题（≤16字）","detail":"一句话概述","kind":"topic","children":[
-  {"id":"n1","label":"关键交付节点","detail":"","kind":"topic","time_ms":0,"speaker":"吴克强","children":[
-    {"id":"n1-1","label":"摘要提交","detail":"预计还有两周时间完成并交付摘要部分","kind":"point","time_ms":385000,"speaker":"吴克强","children":[]}
+{"roots":[
+  {"id":"t1","label":"专题标题（≤18字）","detail":"一句话说明专题","kind":"topic","time_ms":385000,"speaker":"吴克强","children":[
+    {"id":"t1-1","label":"一级论点/任务/风险","detail":"具体内容（≤60字）","kind":"point","time_ms":386000,"speaker":"吴克强","children":[
+      {"id":"t1-1-1","label":"补充观点","kind":"point","children":[]}
+    ]}
   ]}
-]}}
+]}
 ```
-- 深度 2–3 层，总节点 12–40；label ≤ 24 字；`detail` ≤ 80 字；`kind`: `topic`（分支主题）/`point`（观点）/`task`（任务）/`risk`（风险）。
+- 从长会议中提炼 2–6 个相互独立、可命名的专题（短会议 1–2 个），每个专题一棵树；不要强行造总根。
+- 每个专题 3–10 个节点，总节点 12–40，最多 3 层；label ≤ 24 字；`detail` ≤ 80 字；`kind`: `topic`（仅专题根）/`point`/`task`/`risk`。
 - 观点必须来自转录稿，`time_ms` 取支撑该观点的首个发言时间；`speaker` 用转录稿中的说话人显示名。
-- 顶层 3–6 个分支，供思维导图展示。
+- 兼容旧格式 `{"root": {...}}`：旧数据的 root 子主题会由前端提升为森林专题；新分析一律输出 `roots`。
 
 **D. suggested_questions** → kind `suggested_questions`
 ```json

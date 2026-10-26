@@ -354,10 +354,11 @@ def sanitize_chapters(payload: Any, duration_ms: int) -> list[dict]:
 
 def sanitize_viewpoint_tree(payload: Any, duration_ms: int, speakers: list[str] | None = None) -> dict:
     data = _as_dict(payload)
+    roots_raw = data.get("roots") or data.get("trees") or data.get("forest")
     root = data.get("root")
     if not isinstance(root, dict):
         root = data if data.get("label") or data.get("children") else {}
-    if not root:
+    if not root and not (isinstance(roots_raw, list) and roots_raw):
         raise AnalysisError("观点树结果为空")
     speakers_set = set(speakers or [])
     counter = {"total": 0}
@@ -391,6 +392,27 @@ def sanitize_viewpoint_tree(payload: Any, duration_ms: int, speakers: list[str] 
                 child_id = _as_text(child.get("id")) or f"{node['id']}-{index + 1}"
                 node["children"].append(build_node(child, node_id=child_id, depth=depth + 1))
         return node
+
+    # v0.3.4: viewpoint forest — long meetings produce multiple independent topic trees.
+    if isinstance(roots_raw, list) and roots_raw:
+        forest: list[dict[str, Any]] = []
+        for index, raw_root in enumerate(roots_raw[:8]):
+            if not isinstance(raw_root, dict):
+                continue
+            if counter["total"] >= MAX_VIEWPOINT_NODES:
+                break
+            tree = build_node(
+                raw_root,
+                node_id=_as_text(raw_root.get("id")) or f"tree-{index + 1}",
+                depth=0,
+            )
+            # Forest roots are always topics and get stable, unique ids.
+            tree["id"] = f"tree-{index + 1}"
+            tree["kind"] = "topic"
+            forest.append(tree)
+        if not forest:
+            raise AnalysisError("观点森林结果为空")
+        return {"roots": forest}
 
     root_node = build_node(root, node_id=_as_text(root.get("id")) or "root", depth=0)
     root_node["id"] = "root"

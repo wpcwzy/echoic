@@ -54,7 +54,7 @@ interface Insights {
   recording_id: number; generated_at: string | null; model: string | null;
   summary: { markdown: string } | null;
   chapters: Chapter[] | null;
-  viewpoint_tree: { root: ViewpointNode } | null;
+  viewpoint_tree: { root?: ViewpointNode | null; roots?: ViewpointNode[] } | null; // v0.3.4 观点森林：roots 每项一个专题；旧数据只有 root
   insights: Insight[] | null;
   action_items: ActionItem[] | null;
   suggested_questions: string[] | null;
