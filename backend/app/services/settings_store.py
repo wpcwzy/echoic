@@ -114,6 +114,7 @@ def _env_defaults() -> dict[str, dict[str, Any]]:
             "auto_process": True,
             "default_language": "zh",
             "max_upload_mb": settings.max_upload_mb,
+            "allow_registration": settings.allow_registration,
         },
     }
 
@@ -202,6 +203,7 @@ def load_ai_config(db) -> AIConfig:
         "auto_process": bool(system_raw.get("auto_process", True)),
         "default_language": system_raw.get("default_language") or "zh",
         "max_upload_mb": int(system_raw.get("max_upload_mb", settings.max_upload_mb) or settings.max_upload_mb),
+        "allow_registration": bool(system_raw.get("allow_registration", settings.allow_registration)),
     }
     return AIConfig(asr=asr, llm=llm, embeddings=embeddings, prompts=prompts, system=system)
 
@@ -252,6 +254,12 @@ def masked_settings(db) -> dict[str, Any]:
             "auto_process": bool(system.get("auto_process", True)),
             "max_upload_mb": int(system.get("max_upload_mb", settings.max_upload_mb)),
             "default_language": system.get("default_language", "zh"),
+            "allow_registration": bool(system.get("allow_registration", settings.allow_registration)),
+            "consume": {
+                "enabled": bool(settings.consume_enabled),
+                "dir": str(settings.consume_path),
+                "interval_sec": int(settings.consume_interval_sec),
+            },
             "version": settings.version,
             "worker": {
                 "embedded": settings.embedded_worker,
@@ -375,6 +383,8 @@ def update_settings(db, payload: dict[str, Any]) -> None:
             if not 1 <= limit <= 10240:
                 raise bad_request("max_upload_mb 必须在 1-10240 之间")
             merged["max_upload_mb"] = limit
+        if "allow_registration" in system:
+            merged["allow_registration"] = bool(system["allow_registration"])
         _set_value(db, "system", merged)
 
 

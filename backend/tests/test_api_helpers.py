@@ -16,15 +16,18 @@ from pathlib import Path
 from typing import Any
 
 from app.config import settings
+from app.core.security import hash_password
 from app.core.utils import dump_json, utcnow
 from app.models import (
     Analysis,
     ChatMessage,
     Job,
     Recording,
+    Share,
     Speaker,
     Tag,
     TranscriptSegment,
+    User,
 )
 
 ADMIN_USERNAME = "admin"
@@ -295,6 +298,96 @@ def make_chat_message(db, recording: Recording, role: str = "user", content: str
     db.commit()
     db.refresh(message)
     return message
+
+
+# ------------------------------------------------------------------ v0.2 users / shares
+def create_user(
+    db,
+    username: str,
+    password: str = "memberpass123",
+    *,
+    role: str = "member",
+    display_name: str | None = None,
+    email: str | None = None,
+    disabled: bool = False,
+) -> User:
+    user = User(
+        username=username,
+        password_hash=hash_password(password),
+        display_name=display_name or username,
+        email=email,
+        role=role,
+        is_admin=role == "admin",
+        disabled=disabled,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def get_user(db, username: str) -> User | None:
+    return db.query(User).filter(User.username == username).one_or_none()
+
+
+def login_token(client, username: str, password: str) -> str:
+    response = client.post(
+        "/api/auth/login", json={"username": username, "password": password}
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["token"]
+
+
+def api_request(client, token: str, method: str, path: str, **kwargs):
+    """Authenticated request that cannot be shadowed by a session cookie."""
+    client.cookies.clear()
+    headers = dict(kwargs.pop("headers", {}) or {})
+    headers["Authorization"] = f"Bearer {token}"
+    client.headers.pop("Authorization", None)
+    return client.request(method.upper(), path, headers=headers, **kwargs)
+
+
+def public_request(client, method: str, path: str, **kwargs):
+    """Anonymous request: no Authorization header, keeps share cookies."""
+    client.headers.pop("Authorization", None)
+    return client.request(method.upper(), path, **kwargs)
+
+
+def clear_share_throttle() -> None:
+    from app.api import public as public_api
+
+    public_api._unlock_attempts.clear()  # noqa: SLF001 - test helper
+
+
+def make_share(
+    db,
+    recording: Recording,
+    *,
+    password: str | None = None,
+    expires_at=None,
+    include_transcript: bool = True,
+    include_insights: bool = True,
+    allow_download: bool = False,
+    created_by: int | None = None,
+    revoked_at=None,
+) -> Share:
+    import secrets as _secrets
+
+    share = Share(
+        recording_id=recording.id,
+        token=_secrets.token_urlsafe(24),
+        password_hash=hash_password(password) if password else None,
+        expires_at=expires_at,
+        include_transcript=include_transcript,
+        include_insights=include_insights,
+        allow_download=allow_download,
+        created_by=created_by,
+        revoked_at=revoked_at,
+    )
+    db.add(share)
+    db.commit()
+    db.refresh(share)
+    return share
 
 
 # ------------------------------------------------------------------ response utils

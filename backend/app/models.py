@@ -81,7 +81,15 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(120), default="")
     is_admin: Mapped[bool] = mapped_column(Boolean, default=True)
+    role: Mapped[str] = mapped_column(String(16), default="member", index=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    @property
+    def is_admin_role(self) -> bool:
+        return self.role == "admin" or bool(self.is_admin)
 
 
 class AppSetting(Base):
@@ -154,6 +162,9 @@ class Recording(Base):
     )
     jobs: Mapped[list["Job"]] = relationship(
         back_populates="recording", cascade="all, delete-orphan", order_by="Job.id"
+    )
+    shares: Mapped[list["Share"]] = relationship(
+        back_populates="recording", cascade="all, delete-orphan", order_by="Share.id"
     )
 
     def analysis_map(self) -> dict[str, "Analysis"]:
@@ -269,3 +280,44 @@ class Job(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     recording: Mapped[Recording] = relationship(back_populates="jobs")
+
+
+class Share(Base):
+    """Public read-only share link for a recording (R-17)."""
+
+    __tablename__ = "shares"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recording_id: Mapped[int] = mapped_column(
+        ForeignKey("recordings.id", ondelete="CASCADE"), index=True
+    )
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    include_transcript: Mapped[bool] = mapped_column(Boolean, default=True)
+    include_insights: Mapped[bool] = mapped_column(Boolean, default=True)
+    allow_download: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    view_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    recording: Mapped[Recording] = relationship(back_populates="shares")
+
+
+class ImportedFile(Base):
+    """Consume-directory import bookkeeping / sha256 dedupe (R-22)."""
+
+    __tablename__ = "imported_files"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sha256: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    filename: Mapped[str] = mapped_column(String(255), default="")
+    size_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    status: Mapped[str] = mapped_column(String(16), default="imported", index=True)
+    recording_id: Mapped[int | None] = mapped_column(
+        ForeignKey("recordings.id", ondelete="SET NULL"), nullable=True
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

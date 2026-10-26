@@ -1,4 +1,4 @@
-"""Authentication endpoints (docs/API.md §2)."""
+"""Authentication endpoints (docs/API.md §2 + docs/08-P1 §2.3)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..core.errors import ApiError, bad_request, unauthorized
+from ..core.errors import ApiError, bad_request, conflict, forbidden, unauthorized
 from ..core.security import (
     COOKIE_NAME,
     check_login_rate,
@@ -20,10 +20,12 @@ from ..core.security import (
     reset_login_attempts,
     verify_password,
 )
+from ..core.utils import utcnow
 from ..db import get_db
 from ..deps import get_current_user
 from ..models import User
-from ..schemas import LoginIn, LoginOut, OkOut, UserOut
+from ..schemas import LoginIn, LoginOut, OkOut, RegisterIn, UserOut
+from ..services.settings_store import load_ai_config
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,18 @@ def _client_ip(request: Request) -> str:
     return forwarded.split(",")[0].strip() or "unknown"
 
 
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        max_age=settings.session_days * 24 * 3600,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=False,
+    )
+
+
 @router.post("/login", response_model=LoginOut)
 def login(payload: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
     ip = _client_ip(request)
@@ -64,20 +78,43 @@ def login(payload: LoginIn, request: Request, response: Response, db: Session = 
     if user is None or not verify_password(payload.password, user.password_hash):
         register_login_attempt(ip)
         raise unauthorized("用户名或密码错误")
+    if user.disabled:
+        raise forbidden("账号已被停用，请联系管理员")
 
     reset_login_attempts(ip)
+    user.last_login_at = utcnow()
+    db.add(user)
+    db.commit()
     token = create_access_token(user.id)
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=token,
-        max_age=settings.session_days * 24 * 3600,
-        path="/",
-        httponly=True,
-        samesite="lax",
-        secure=False,
-    )
+    _set_session_cookie(response, token)
     logger.info("user %s logged in", user.username)
     return LoginOut(user=UserOut.model_validate(user), token=token)
+
+
+@router.post("/register", response_model=UserOut, status_code=201)
+def register(payload: RegisterIn, db: Session = Depends(get_db)):
+    config = load_ai_config(db)
+    if not bool(config.system.get("allow_registration", False)):
+        raise forbidden("注册暂未开放")
+
+    username = payload.username.strip()
+    existing = db.scalar(select(User.id).where(User.username == username))
+    if existing is not None:
+        raise conflict(f"用户名已被占用：{username}")
+    user = User(
+        username=username,
+        password_hash=hash_password(payload.password),
+        display_name=(payload.display_name or username).strip()[:120],
+        email=(payload.email or "").strip() or None,
+        role="member",
+        is_admin=False,
+        disabled=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    logger.info("registered member %s", user.username)
+    return UserOut.model_validate(user)
 
 
 @router.post("/logout", response_model=OkOut)

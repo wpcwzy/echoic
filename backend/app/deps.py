@@ -7,10 +7,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .core.errors import forbidden, unauthorized
+from .core.errors import forbidden, not_found, unauthorized
 from .core.security import COOKIE_NAME, decode_access_token, hash_password
 from .db import get_db
-from .models import User
+from .models import Recording, User
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,8 @@ def ensure_admin_user(db: Session) -> User:
         password_hash=hash_password(settings.admin_password),
         display_name=settings.admin_display_name,
         is_admin=True,
+        role="admin",
+        disabled=False,
     )
     db.add(user)
     db.commit()
@@ -55,10 +57,37 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     user = db.get(User, user_id)
     if user is None:
         raise unauthorized("登录状态已失效，请重新登录")
+    if user.disabled:
+        raise unauthorized("账号已被停用，请联系管理员")
     return user
+
+
+def is_admin(user: User) -> bool:
+    return bool(user.is_admin) or getattr(user, "role", "") == "admin"
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    if not user.is_admin:
+    if not is_admin(user):
         raise forbidden()
     return user
+
+
+def can_access_recording(user: User, recording: Recording) -> bool:
+    """Admin sees all; members only their own recordings (v0.2)."""
+    if is_admin(user):
+        return True
+    return recording.owner_id is not None and recording.owner_id == user.id
+
+
+def get_recording_for_user(db: Session, user: User, recording_id: int) -> Recording:
+    recording = db.get(Recording, recording_id)
+    if recording is None or not can_access_recording(user, recording):
+        raise not_found("录音不存在")
+    return recording
+
+
+def recording_scope(query, user: User):
+    """Apply the visibility scope to a Recording SQLAlchemy query."""
+    if is_admin(user):
+        return query
+    return query.where(Recording.owner_id == user.id)

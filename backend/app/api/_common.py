@@ -1,7 +1,4 @@
-"""Shared helpers used by the HTTP routers.
-
-Kept deliberately small: lookups, DTO conversion, stats and job-queue bridges.
-"""
+"""Shared helpers used by the HTTP routers (v0.2: roles, shares, scoped stats)."""
 
 from __future__ import annotations
 
@@ -9,24 +6,38 @@ import logging
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Sequence, TypeVar
 from urllib.parse import quote
 
+from fastapi import Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from ..core.errors import bad_request, not_found
+from ..core.errors import ApiError, bad_request, not_found
+from ..core.media import guess_mime
+from ..core.storage import StorageError, resolve_storage_dir
 from ..core.utils import utcnow
+from ..deps import is_admin
 from ..models import (
     Analysis,
     Job,
     Recording,
     RecordingStatus,
+    Share,
     Tag,
     TranscriptSegment,
+    User,
     recording_tags,
 )
-from ..schemas import LibraryStats, RecordingSummary, TagWithCountOut
+from ..schemas import (
+    LibraryStats,
+    RecordingSummary,
+    ShareOut,
+    TagWithCountOut,
+    UserBriefOut,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,20 +52,40 @@ SummaryT = TypeVar("SummaryT", bound=RecordingSummary)
 
 
 # ------------------------------------------------------------------ lookups
-def get_recording_or_404(db: Session, recording_id: int) -> Recording:
-    recording = db.get(Recording, recording_id)
-    if recording is None:
-        raise not_found("录音不存在")
-    return recording
-
-
 def get_job_or_none(db: Session, recording_id: int) -> Job | None:
     return db.scalar(
         select(Job).where(Job.recording_id == recording_id).order_by(Job.id.desc()).limit(1)
     )
 
 
-# ------------------------------------------------------------------ DTO
+def visible_owner_id(user: User | None) -> int | None:
+    """``None`` means "no ownership filter" (anonymous or admin)."""
+    if user is None or is_admin(user):
+        return None
+    return user.id
+
+
+# ------------------------------------------------------------------ DTO conversion
+def user_brief(user: User | None) -> UserBriefOut | None:
+    if user is None:
+        return None
+    return UserBriefOut(
+        id=user.id,
+        username=user.username,
+        display_name=user.display_name or user.username,
+    )
+
+
+def load_owners(db: Session, recordings: Sequence[Recording]) -> dict[int, User]:
+    owner_ids = {
+        recording.owner_id for recording in recordings if getattr(recording, "owner_id", None)
+    }
+    if not owner_ids:
+        return {}
+    users = db.scalars(select(User).where(User.id.in_(owner_ids))).all()
+    return {user.id: user for user in users}
+
+
 def transcript_ids_for(db: Session, recording_ids: Sequence[int]) -> set[int]:
     ids = [int(i) for i in recording_ids]
     if not ids:
@@ -85,11 +116,14 @@ def recording_to_summary(
     *,
     has_transcript: bool = False,
     insight_kinds: list[str] | None = None,
+    owner: User | None = None,
     cls: type[SummaryT] = RecordingSummary,
 ) -> SummaryT:
     summary = cls.model_validate(recording)
     summary.has_transcript = bool(has_transcript)
     summary.insight_kinds = list(insight_kinds or [])
+    summary.owner_id = recording.owner_id
+    summary.owner = user_brief(owner)
     return summary
 
 
@@ -99,37 +133,39 @@ def recordings_to_summaries(
     ids = [recording.id for recording in recordings]
     transcript_ids = transcript_ids_for(db, ids)
     kinds = insight_kinds_for(db, ids)
+    owners = load_owners(db, recordings)
     return [
         recording_to_summary(
             recording,
             has_transcript=recording.id in transcript_ids,
             insight_kinds=kinds.get(recording.id, []),
+            owner=owners.get(recording.owner_id) if recording.owner_id else None,
         )
         for recording in recordings
     ]
 
 
-# ------------------------------------------------------------------ stats
-def library_stats(db: Session) -> LibraryStats:
+# ------------------------------------------------------------------ scoped stats
+def library_stats(db: Session, user: User | None = None) -> LibraryStats:
     week_ago = utcnow() - timedelta(days=7)
-    row = db.execute(
-        select(
-            func.count(Recording.id),
-            func.coalesce(
-                func.sum(case((Recording.status == RecordingStatus.READY, 1), else_=0)), 0
-            ),
-            func.coalesce(
-                func.sum(case((Recording.status.in_(ACTIVE_STATUSES), 1), else_=0)), 0
-            ),
-            func.coalesce(
-                func.sum(case((Recording.status == RecordingStatus.FAILED, 1), else_=0)), 0
-            ),
-            func.coalesce(func.sum(Recording.duration_ms), 0),
-            func.coalesce(
-                func.sum(case((Recording.created_at >= week_ago, 1), else_=0)), 0
-            ),
-        )
-    ).one()
+    stmt = select(
+        func.count(Recording.id),
+        func.coalesce(
+            func.sum(case((Recording.status == RecordingStatus.READY, 1), else_=0)), 0
+        ),
+        func.coalesce(
+            func.sum(case((Recording.status.in_(ACTIVE_STATUSES), 1), else_=0)), 0
+        ),
+        func.coalesce(
+            func.sum(case((Recording.status == RecordingStatus.FAILED, 1), else_=0)), 0
+        ),
+        func.coalesce(func.sum(Recording.duration_ms), 0),
+        func.coalesce(func.sum(case((Recording.created_at >= week_ago, 1), else_=0)), 0),
+    )
+    owner_id = visible_owner_id(user)
+    if owner_id is not None:
+        stmt = stmt.where(Recording.owner_id == owner_id)
+    row = db.execute(stmt).one()
     total, ready, processing, failed, total_duration_ms, this_week = (
         int(row[0] or 0),
         int(row[1] or 0),
@@ -203,36 +239,221 @@ def title_for_download(title: str, ext: str) -> str:
 
 
 # ------------------------------------------------------------------ tags
-def tags_with_counts(db: Session, *, limit: int | None = None, order: str = "name") -> list[TagWithCountOut]:
-    """All tags with their recording count (``order``: name|count)."""
-    count_column = func.count(recording_tags.c.recording_id)
-    stmt = (
-        select(Tag, count_column)
-        .outerjoin(recording_tags, recording_tags.c.tag_id == Tag.id)
-        .group_by(Tag.id)
+def tags_with_counts(
+    db: Session,
+    *,
+    limit: int | None = None,
+    order: str = "name",
+    user: User | None = None,
+) -> list[TagWithCountOut]:
+    """Tag catalogue with recording counts scoped to the caller's visibility."""
+    owner_id = visible_owner_id(user)
+    count_query = select(func.count(recording_tags.c.recording_id)).where(
+        recording_tags.c.tag_id == Tag.id
     )
+    if owner_id is not None:
+        count_query = count_query.join(
+            Recording, Recording.id == recording_tags.c.recording_id
+        ).where(Recording.owner_id == owner_id)
+    count_column = count_query.scalar_subquery()
+    stmt = select(Tag, count_column.label("recording_count"))
     if order == "count":
         stmt = stmt.order_by(count_column.desc(), Tag.name.asc())
     else:
         stmt = stmt.order_by(Tag.name.asc())
     if limit is not None:
         stmt = stmt.limit(limit)
-    rows = db.execute(stmt).all()
     result: list[TagWithCountOut] = []
-    for tag, count in rows:
+    for tag, count in db.execute(stmt).all():
         item = TagWithCountOut.model_validate(tag)
         item.recording_count = int(count or 0)
         result.append(item)
     return result
 
 
+# ------------------------------------------------------------------ shares
+def share_url_path(token: str) -> str:
+    return f"/s/{token}"
+
+
+def share_expired(share: Share) -> bool:
+    return share.expires_at is not None and share.expires_at <= utcnow()
+
+
+def share_to_out(share: Share, creator: User | None = None) -> ShareOut:
+    return ShareOut(
+        id=share.id,
+        recording_id=share.recording_id,
+        token=share.token,
+        url_path=share_url_path(share.token),
+        include_transcript=bool(share.include_transcript),
+        include_insights=bool(share.include_insights),
+        allow_download=bool(share.allow_download),
+        has_password=bool(share.password_hash),
+        expires_at=share.expires_at,
+        expired=share_expired(share),
+        revoked_at=share.revoked_at,
+        view_count=int(share.view_count or 0),
+        last_viewed_at=share.last_viewed_at,
+        created_at=share.created_at,
+        created_by=user_brief(creator),
+    )
+
+
+# ------------------------------------------------------------------ media streaming
+def recording_storage_path(recording: Recording) -> Path | None:
+    try:
+        return resolve_storage_dir(recording.storage_dir)
+    except StorageError:
+        return None
+
+
+def recording_original_file(recording: Recording) -> Path | None:
+    base = recording_storage_path(recording)
+    if base is None or not base.is_dir():
+        return None
+    if recording.original_ext:
+        exact = base / f"original{recording.original_ext}"
+        if exact.is_file() and exact.stat().st_size > 0:
+            return exact
+    for candidate in sorted(base.glob("original.*")):
+        if candidate.is_file() and candidate.stat().st_size > 0:
+            return candidate
+    return None
+
+
+def recording_playback_file(recording: Recording) -> Path | None:
+    base = recording_storage_path(recording)
+    if base is None:
+        return None
+    candidate = base / "playback.m4a"
+    if candidate.is_file() and candidate.stat().st_size > 0:
+        return candidate
+    return None
+
+
+def parse_range(header: str, size: int) -> tuple[int, int] | None:
+    """Parse a single-range ``bytes=`` header; ``None`` means invalid (HTTP 416)."""
+    if not header:
+        return None
+    value = header.strip()
+    if not value.lower().startswith("bytes="):
+        return None
+    spec = value[6:].strip()
+    if not spec or "," in spec or "-" not in spec:
+        return None
+    first, last = (part.strip() for part in spec.split("-", 1))
+    try:
+        if first == "":
+            if last == "":
+                return None
+            suffix = int(last)
+            if suffix <= 0:
+                return None
+            suffix = min(suffix, size)
+            start, end = size - suffix, size - 1
+        else:
+            start = int(first)
+            end = int(last) if last else size - 1
+    except ValueError:
+        return None
+    if size <= 0 or start < 0 or start >= size or end < start:
+        return None
+    return start, min(end, size - 1)
+
+
+def range_invalid_error(size: int) -> ApiError:
+    return ApiError(
+        416,
+        "请求的 Range 不合法",
+        "VALIDATION_ERROR",
+        headers={"Content-Range": f"bytes */{size}", "Accept-Ranges": "bytes"},
+    )
+
+
+def serve_media_file(
+    path: Path,
+    request: Request,
+    *,
+    content_type: str,
+    filename: str,
+    inline: bool,
+) -> StreamingResponse:
+    size = path.stat().st_size
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Disposition": content_disposition(filename, inline=inline),
+        "Cache-Control": "private, max-age=0, must-revalidate",
+    }
+    range_header = request.headers.get("range")
+    if range_header:
+        parsed = parse_range(range_header, size)
+        if parsed is None:
+            raise range_invalid_error(size)
+        start, end = parsed
+        length = end - start + 1
+
+        def iter_range():
+            with path.open("rb") as handle:
+                handle.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = handle.read(min(256 * 1024, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        headers.update(
+            {
+                "Content-Range": f"bytes {start}-{end}/{size}",
+                "Content-Length": str(length),
+            }
+        )
+        return StreamingResponse(
+            iter_range(), status_code=206, media_type=content_type, headers=headers
+        )
+
+    def iter_full():
+        with path.open("rb") as handle:
+            while True:
+                chunk = handle.read(256 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+
+    headers["Content-Length"] = str(size)
+    return StreamingResponse(iter_full(), status_code=200, media_type=content_type, headers=headers)
+
+
+def pick_media(recording: Recording, *, download: bool) -> tuple[Path, str, str, bool]:
+    """Choose the file to stream: playback for audio, original for video/download.
+
+    Returns ``(path, content_type, filename, attachment)``.
+    """
+    original = recording_original_file(recording)
+    playback = recording_playback_file(recording)
+    if download:
+        path = original or playback
+    elif recording.media_type == "video":
+        path = original or playback
+    else:
+        path = playback or original
+    if path is None:
+        raise not_found("媒体文件不存在")
+    is_playback = path.name.startswith("playback")
+    if is_playback:
+        content_type = "audio/mp4"
+        filename = f"{recording.title or 'recording'}.m4a"
+    else:
+        content_type = recording.mime_type or guess_mime(path.suffix)
+        filename = recording.original_filename or f"{recording.title or 'recording'}{path.suffix}"
+    return path, content_type, filename, download
+
+
 # ------------------------------------------------------------------ job queue bridge
 def enqueue_job(db: Session, recording_id: int, from_: str = "all") -> None:
-    """Ask the AI queue to (re)process a recording.
-
-    ``app.services.queue`` is owned by backend-ai; while it is still a stub the
-    call raises ``NotImplementedError`` which must not break the HTTP layer.
-    """
+    """Ask the AI queue to (re)process a recording."""
     try:
         from ..services import queue as queue_service
 
@@ -258,15 +479,27 @@ __all__ = [
     "enqueue_job",
     "escape_like",
     "get_job_or_none",
-    "get_recording_or_404",
     "insight_kinds_for",
     "library_stats",
     "like_pattern",
+    "load_owners",
     "normalize_datetime",
+    "parse_range",
     "parse_tag_ids",
+    "pick_media",
+    "range_invalid_error",
+    "recording_original_file",
+    "recording_playback_file",
+    "recording_storage_path",
     "recording_to_summary",
     "recordings_to_summaries",
+    "serve_media_file",
+    "share_expired",
+    "share_to_out",
+    "share_url_path",
     "tags_with_counts",
-    "transcript_ids_for",
     "title_for_download",
+    "transcript_ids_for",
+    "user_brief",
+    "visible_owner_id",
 ]

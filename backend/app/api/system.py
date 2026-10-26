@@ -1,7 +1,12 @@
-"""System health / info endpoints (docs/API.md §6)."""
+"""System health / info / consume endpoints (docs/API.md §6, docs/08-P1 §4.4).
+
+v0.2: ``/info``, ``/logs``, ``/seed-demo`` and the consume scan are admin-only;
+``/health`` stays public.
+"""
 
 from __future__ import annotations
 
+import inspect
 import logging
 import shutil
 from collections import deque
@@ -12,8 +17,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import settings
+from ..core.errors import ApiError
+from ..core.utils import to_iso, utcnow
 from ..db import get_db
-from ..deps import get_current_user, require_admin
+from ..deps import require_admin
 from ..models import Chunk, Recording, TranscriptSegment, User
 from ..schemas import HealthOut
 
@@ -82,6 +89,47 @@ def _worker_state(db: Session) -> dict:
     }
 
 
+def _count_files(directory, *, exclude_suffix: str | None = None) -> int:
+    try:
+        if not directory.is_dir():
+            return 0
+        count = 0
+        for child in directory.iterdir():
+            if not child.is_file():
+                continue
+            if exclude_suffix and child.name.endswith(exclude_suffix):
+                continue
+            count += 1
+        return count
+    except OSError:
+        return 0
+
+
+def _fallback_consume_status() -> dict:
+    consume_dir = settings.consume_path
+    return {
+        "enabled": bool(settings.consume_enabled),
+        "dir": str(consume_dir),
+        "interval_sec": max(5, int(settings.consume_interval_sec or 15)),
+        "pending_files": _count_files(consume_dir),
+        "failed_files": _count_files(consume_dir / "failed", exclude_suffix=".error.txt"),
+        "last_scan": None,
+    }
+
+
+def consume_status() -> dict:
+    """Consume-directory status; falls back to local filesystem inspection."""
+    try:
+        from ..services.consume import consume_status as service_status
+
+        data = service_status()
+        if isinstance(data, dict):
+            return data
+    except Exception:  # pragma: no cover - service lands with backend-ai
+        logger.debug("consume_status 不可用，使用本地回退信息", exc_info=True)
+    return _fallback_consume_status()
+
+
 @router.get("/health", response_model=HealthOut)
 def health(db: Session = Depends(get_db)) -> HealthOut:
     db_status = "ok"
@@ -111,7 +159,7 @@ def health(db: Session = Depends(get_db)) -> HealthOut:
 
 
 @router.get("/info")
-def info(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+def info(db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
     data_path = settings.data_path
     try:
         usage = shutil.disk_usage(str(data_path))
@@ -130,7 +178,37 @@ def info(db: Session = Depends(get_db), _user: User = Depends(get_current_user))
         "segments": int(db.scalar(select(func.count()).select_from(TranscriptSegment)) or 0),
         "chunks": int(db.scalar(select(func.count()).select_from(Chunk)) or 0),
         "worker": _worker_state(db),
+        "consume": consume_status(),
     }
+
+
+@router.post("/consume/scan")
+async def consume_scan(db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
+    try:
+        from ..services.consume import scan_now
+    except Exception:  # concurrent development: service not landed yet
+        raise ApiError(503, "consume 导入服务尚未就绪，请稍后重试", "SERVICE_UNAVAILABLE")
+    try:
+        payload = scan_now()
+        if inspect.isawaitable(payload):
+            payload = await payload
+    except NotImplementedError:  # pragma: no cover - transitional stub
+        raise ApiError(503, "consume 导入服务尚未就绪，请稍后重试", "SERVICE_UNAVAILABLE")
+    except Exception as exc:  # catastrophic errors only; per-file failures are counted
+        logger.exception("consume scan failed")
+        raise ApiError(500, f"consume 扫描失败：{exc}", "CONSUME_ERROR")
+
+    if not isinstance(payload, dict):
+        payload = {}
+    raw_result = payload.get("result")
+    result_source = raw_result if isinstance(raw_result, dict) else payload
+    result = {
+        key: int(result_source.get(key) or 0)
+        for key in ("scanned", "imported", "duplicates", "failed")
+    }
+    at = payload.get("at") or to_iso(utcnow())
+    logger.info("consume scan done: %s", result)
+    return {"ok": True, "result": result, "at": at}
 
 
 @router.post("/seed-demo")

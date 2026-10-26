@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from ..core.utils import load_json
 from ..db import get_db
-from ..deps import get_current_user
-from ..models import ANALYSIS_KINDS, Analysis, Recording, RecordingStatus, Stage
+from ..deps import get_current_user, get_recording_for_user
+from ..models import ANALYSIS_KINDS, Analysis, Recording, RecordingStatus, Stage, User
 from ..schemas import (
     ActionItemOut,
     ChapterOut,
@@ -24,7 +24,7 @@ from ..schemas import (
     ViewpointNodeOut,
     ViewpointTreeOut,
 )
-from ._common import content_disposition, enqueue_job, get_recording_or_404, title_for_download
+from ._common import content_disposition, enqueue_job, title_for_download
 
 logger = logging.getLogger(__name__)
 
@@ -233,8 +233,12 @@ def build_insights(db: Session, recording: Recording) -> InsightsOut:
 
 # ------------------------------------------------------------------ routes
 @router.get("/{recording_id}/insights", response_model=InsightsOut)
-def get_insights(recording_id: int, db: Session = Depends(get_db)):
-    recording = get_recording_or_404(db, recording_id)
+def get_insights(
+    recording_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    recording = get_recording_for_user(db, user, recording_id)
     return build_insights(db, recording)
 
 
@@ -243,8 +247,9 @@ def regenerate_insights(
     recording_id: int,
     payload: RegenerateInsightsIn | None = None,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    recording = get_recording_or_404(db, recording_id)
+    recording = get_recording_for_user(db, user, recording_id)
     requested = payload.kinds if payload is not None else None
     # Contract note: the queue only knows stage-level reprocessing, so asking for a
     # subset of kinds still recomputes every AI analysis (documented v0.1 limitation).
@@ -262,8 +267,12 @@ def regenerate_insights(
 
 
 @router.get("/{recording_id}/insights/export")
-def export_insights(recording_id: int, db: Session = Depends(get_db)):
-    recording = get_recording_or_404(db, recording_id)
+def export_insights(
+    recording_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    recording = get_recording_for_user(db, user, recording_id)
     insights = build_insights(db, recording)
     lines: list[str] = [f"# {recording.title}", ""]
     if insights.summary is not None:

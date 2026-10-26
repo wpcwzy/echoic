@@ -24,8 +24,54 @@ class UserOut(ORMModel):
     id: int
     username: str
     display_name: str = ""
-    is_admin: bool = True
+    email: str | None = None
+    role: Literal["admin", "member"] = "member"
+    is_admin: bool = False
+    disabled: bool = False
     created_at: UTCDateTime | None = None
+    last_login_at: UTCDateTime | None = None
+
+
+class UserBriefOut(BaseModel):
+    id: int
+    username: str
+    display_name: str = ""
+
+
+class UserAdminOut(UserOut):
+    recording_count: int = 0
+    share_count: int = 0
+
+
+class UserListOut(BaseModel):
+    items: list[UserAdminOut] = Field(default_factory=list)
+    total: int = 0
+
+
+class UserCreateIn(BaseModel):
+    username: str = Field(min_length=2, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=8, max_length=200)
+    display_name: str | None = Field(default=None, max_length=120)
+    email: str | None = Field(default=None, max_length=255)
+    role: Literal["admin", "member"] = "member"
+
+
+class UserUpdateIn(BaseModel):
+    display_name: str | None = Field(default=None, max_length=120)
+    email: str | None = Field(default=None, max_length=255)
+    role: Literal["admin", "member"] | None = None
+    disabled: bool | None = None
+
+
+class ResetPasswordIn(BaseModel):
+    new_password: str = Field(min_length=8, max_length=200)
+
+
+class RegisterIn(BaseModel):
+    username: str = Field(min_length=2, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=8, max_length=200)
+    display_name: str | None = Field(default=None, max_length=120)
+    email: str | None = Field(default=None, max_length=255)
 
 
 class LoginIn(BaseModel):
@@ -110,6 +156,8 @@ class RecordingSummary(ORMModel):
     recorded_at: UTCDateTime
     language: str = "zh"
     source: str = "upload"
+    owner_id: int | None = None
+    owner: UserBriefOut | None = None
     tags: list[TagOut] = Field(default_factory=list)
     speakers: list[SpeakerOut] = Field(default_factory=list)
     has_transcript: bool = False
@@ -149,6 +197,7 @@ class RecordingUpdateIn(BaseModel):
     language: str | None = Field(default=None, max_length=16)
     tag_ids: list[int] | None = None
     speaker_names: dict[int, str] | None = None
+    owner_id: int | None = None  # admin only
 
 
 class ReprocessIn(BaseModel):
@@ -351,10 +400,105 @@ class WorkerInfo(BaseModel):
 
 class HealthOut(BaseModel):
     status: str = "ok"
-    version: str = "0.1.0"
+    version: str = "0.2.0"
     db: str = "ok"
     media: str = "ok"
     ffmpeg: str = "ok"
     worker: str = "ok"
     demo_mode: bool = False
     time: str = ""
+
+
+# ---------------------------------------------------------------- v0.2 shares (R-17)
+class ShareCreateIn(BaseModel):
+    password: str | None = Field(default=None, min_length=4, max_length=64)
+    expires_at: datetime | None = None
+    include_transcript: bool = True
+    include_insights: bool = True
+    allow_download: bool = False
+
+
+class ShareOut(BaseModel):
+    id: int
+    recording_id: int
+    token: str
+    url_path: str
+    include_transcript: bool = True
+    include_insights: bool = True
+    allow_download: bool = False
+    has_password: bool = False
+    expires_at: UTCDateTime | None = None
+    expired: bool = False
+    revoked_at: UTCDateTime | None = None
+    view_count: int = 0
+    last_viewed_at: UTCDateTime | None = None
+    created_at: UTCDateTime | None = None
+    created_by: UserBriefOut | None = None
+
+
+class ShareListOut(BaseModel):
+    items: list[ShareOut] = Field(default_factory=list)
+    total: int = 0
+
+
+class PublicShareInfoOut(BaseModel):
+    include_transcript: bool = True
+    include_insights: bool = True
+    allow_download: bool = False
+    has_password: bool = False
+    expires_at: UTCDateTime | None = None
+    created_at: UTCDateTime | None = None
+    view_count: int = 0
+
+
+class PublicRecordingOut(BaseModel):
+    uuid: str
+    title: str
+    description: str | None = None
+    media_type: str = "audio"
+    duration_ms: int = 0
+    recorded_at: UTCDateTime
+    language: str = "zh"
+    speakers: list[SpeakerOut] = Field(default_factory=list)
+    tags: list[TagOut] = Field(default_factory=list)
+
+
+class PublicShareOut(BaseModel):
+    share: PublicShareInfoOut
+    recording: PublicRecordingOut
+
+
+class ShareUnlockIn(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
+class ShareUnlockOut(BaseModel):
+    ok: bool = True
+    expires_in: int = 7200
+
+
+# ---------------------------------------------------------------- v0.2 consume import (R-22)
+class ConsumeScanResult(BaseModel):
+    scanned: int = 0
+    imported: int = 0
+    duplicates: int = 0
+    failed: int = 0
+
+
+class ConsumeLastScan(ConsumeScanResult):
+    at: UTCDateTime | None = None
+
+
+class ConsumeInfoOut(BaseModel):
+    enabled: bool = True
+    dir: str = ""
+    interval_sec: int = 15
+    pending_files: int = 0
+    failed_files: int = 0
+    last_scan: ConsumeLastScan | None = None
+
+
+class ConsumeScanOut(BaseModel):
+    ok: bool = True
+    result: ConsumeScanResult
+    at: UTCDateTime | None = None

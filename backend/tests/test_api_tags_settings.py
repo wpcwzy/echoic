@@ -216,7 +216,8 @@ def test_settings_require_auth(client):
 
 def test_settings_mutations_require_admin(client, db):
     headers = _login_as_non_admin(client, db)
-    assert client.get("/api/settings", headers=headers).status_code == 200
+    # v0.2: the whole settings surface (including GET masks) is admin-only.
+    assert client.get("/api/settings", headers=headers).status_code == 403
     assert (
         client.put("/api/settings", json={"system": {"auto_process": True}}, headers=headers).status_code
         == 403

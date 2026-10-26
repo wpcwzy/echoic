@@ -17,16 +17,20 @@ from .api import (
     chat,
     dashboard,
     insights,
+    public,
     recordings,
     search,
     settings as settings_api,
+    shares,
     system,
     tags,
     transcript,
+    users,
 )
 from .config import settings
 from .core.errors import ApiError, ProviderError
 from .db import SessionLocal, init_db
+from .migrations import run_migrations
 from .deps import ensure_admin_user
 from .services.demo import ensure_mock_demo
 from .services.queue import reset_stale_tasks
@@ -47,6 +51,7 @@ def _configure_logging() -> None:
 
 def _seed_startup_state() -> None:
     init_db()
+    run_migrations()
     with SessionLocal() as db:
         ensure_default_settings(db)
         ensure_admin_user(db)
@@ -152,6 +157,9 @@ def create_app() -> FastAPI:
     app.include_router(search.router, prefix="/api/search", tags=["search"])
     app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
     app.include_router(system.router, prefix="/api/system", tags=["system"])
+    app.include_router(users.router, prefix="/api/users", tags=["users"])
+    app.include_router(shares.router, prefix="/api/shares", tags=["shares"])
+    app.include_router(public.router, prefix="/api/public", tags=["public"])
 
     static_dir = settings.resolved_static_dir
     if static_dir is not None:

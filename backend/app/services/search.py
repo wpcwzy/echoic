@@ -2,6 +2,7 @@
 
 Owned by backend-api. The router in ``app/api/search.py`` turns the returned
 rows into API DTOs; keeping the query logic here makes it testable on its own.
+v0.2: results are scoped with ``owner_id`` (``None`` = admin / full visibility).
 """
 
 from __future__ import annotations
@@ -63,7 +64,14 @@ def make_snippet(text: str, query: str, radius: int = 26) -> str:
     return f"{prefix}{text[start:end].strip()}{suffix}"
 
 
-def search(db: Session, query: str, limit: int = 20) -> SearchResult:
+def search(
+    db: Session, query: str, limit: int = 20, owner_id: int | None = None
+) -> SearchResult:
+    """Search titles/descriptions/transcript segments.
+
+    ``owner_id`` restricts results to one owner (members); ``None`` means admin
+    / full visibility.
+    """
     result = SearchResult(query=query or "")
     needle = (query or "").strip()
     if not needle:
@@ -71,29 +79,33 @@ def search(db: Session, query: str, limit: int = 20) -> SearchResult:
     pattern = _pattern(needle)
 
     # recordings whose title/description match
-    title_matches = list(
-        db.scalars(
-            select(Recording).where(
-                or_(
-                    Recording.title.ilike(pattern, escape="\\"),
-                    Recording.description.ilike(pattern, escape="\\"),
-                )
-            )
-        ).all()
+    title_stmt = select(Recording).where(
+        or_(
+            Recording.title.ilike(pattern, escape="\\"),
+            Recording.description.ilike(pattern, escape="\\"),
+        )
     )
+    if owner_id is not None:
+        title_stmt = title_stmt.where(Recording.owner_id == owner_id)
+    title_matches = list(db.scalars(title_stmt).all())
 
     # transcript segment matches (with recording + speaker context)
-    segment_rows = db.execute(
+    segment_stmt = (
         select(TranscriptSegment, Recording, Speaker)
         .join(Recording, Recording.id == TranscriptSegment.recording_id)
         .outerjoin(Speaker, Speaker.id == TranscriptSegment.speaker_id)
         .where(TranscriptSegment.text.ilike(pattern, escape="\\"))
         .order_by(TranscriptSegment.recording_id.asc(), TranscriptSegment.start_ms.asc())
-    ).all()
+    )
+    if owner_id is not None:
+        segment_stmt = segment_stmt.where(Recording.owner_id == owner_id)
+    segment_rows = db.execute(segment_stmt).all()
 
     counts: Counter[int] = Counter()
     segment_hits: list[SegmentHit] = []
-    recordings_by_id: dict[int, Recording] = {recording.id: recording for recording in title_matches}
+    recordings_by_id: dict[int, Recording] = {
+        recording.id: recording for recording in title_matches
+    }
     for segment, recording, speaker in segment_rows:
         counts[recording.id] += 1
         recordings_by_id.setdefault(recording.id, recording)

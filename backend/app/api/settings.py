@@ -1,4 +1,7 @@
-"""Settings & provider connection-test endpoints (docs/API.md §6)."""
+"""Settings & provider connection-test endpoints (docs/API.md §6).
+
+v0.2: settings (including the masks of API keys) are admin-only.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..core.errors import ProviderError
 from ..db import get_db
-from ..deps import get_current_user, require_admin
+from ..deps import require_admin
 from ..models import User
 from ..schemas import (
     ProviderTestIn,
@@ -21,7 +24,7 @@ from ..services.settings_store import masked_settings, reset_prompts, update_set
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 def _settings_payload(db: Session) -> SettingsOut:

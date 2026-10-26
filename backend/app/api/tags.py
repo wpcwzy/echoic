@@ -1,4 +1,8 @@
-"""Tag CRUD endpoints (docs/API.md §5)."""
+"""Tag endpoints (docs/API.md §5).
+
+v0.2: every logged-in user can browse the shared tag catalogue (counts scoped to
+their own recordings); only admins may create/rename/delete tags.
+"""
 
 from __future__ import annotations
 
@@ -11,8 +15,8 @@ from sqlalchemy.orm import Session
 
 from ..core.errors import bad_request, conflict, not_found
 from ..db import get_db
-from ..deps import get_current_user
-from ..models import Tag
+from ..deps import get_current_user, require_admin
+from ..models import Tag, User
 from ..schemas import OkOut, TagCreateIn, TagOut, TagUpdateIn, TagWithCountOut
 from ._common import tags_with_counts
 
@@ -33,12 +37,19 @@ def _find_by_name(db: Session, name: str, exclude_id: int | None = None) -> Tag 
 
 
 @router.get("", response_model=TagListOut)
-def list_tags(db: Session = Depends(get_db)):
-    return TagListOut(items=tags_with_counts(db))
+def list_tags(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return TagListOut(items=tags_with_counts(db, user=user))
 
 
 @router.post("", response_model=TagOut, status_code=201)
-def create_tag(payload: TagCreateIn, db: Session = Depends(get_db)):
+def create_tag(
+    payload: TagCreateIn,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
     name = payload.name.strip()
     if not name:
         raise bad_request("标签名称不能为空")
@@ -52,7 +63,12 @@ def create_tag(payload: TagCreateIn, db: Session = Depends(get_db)):
 
 
 @router.patch("/{tag_id}", response_model=TagOut)
-def update_tag(tag_id: int, payload: TagUpdateIn, db: Session = Depends(get_db)):
+def update_tag(
+    tag_id: int,
+    payload: TagUpdateIn,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
     tag = db.get(Tag, tag_id)
     if tag is None:
         raise not_found("标签不存在")
@@ -73,7 +89,11 @@ def update_tag(tag_id: int, payload: TagUpdateIn, db: Session = Depends(get_db))
 
 
 @router.delete("/{tag_id}", response_model=OkOut)
-def delete_tag(tag_id: int, db: Session = Depends(get_db)):
+def delete_tag(
+    tag_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
     tag = db.get(Tag, tag_id)
     if tag is None:
         raise not_found("标签不存在")

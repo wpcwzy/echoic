@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Echoic"
-    version: str = "0.1.0"
+    version: str = "0.2.0"
     debug: bool = False
     log_level: str = "INFO"
 
@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     embedded_worker: bool = True
     demo_seed: bool = True
     max_upload_mb: int = 2048
+    share_cookie_hours: int = 2
+
+    # multi-user / consume directory (P1 v0.2)
+    allow_registration: bool = False
+    consume_enabled: bool = True
+    consume_dir: str = ""
+    consume_interval_sec: int = 15
+    consume_owner_username: str = ""
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
@@ -78,6 +86,17 @@ class Settings(BaseSettings):
     @property
     def media_path(self) -> Path:
         p = self.data_path / "media"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    @property
+    def consume_path(self) -> Path:
+        if self.consume_dir:
+            p = Path(os.path.expanduser(self.consume_dir))
+            if not p.is_absolute():
+                p = (REPO_ROOT / p).resolve()
+        else:
+            p = self.data_path / "consume"
         p.mkdir(parents=True, exist_ok=True)
         return p
 

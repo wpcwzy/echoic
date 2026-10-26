@@ -1,4 +1,4 @@
-"""Transcript endpoints (docs/API.md §3)."""
+"""Transcript endpoints (docs/API.md §3 + docs/08-P1 permission model)."""
 
 from __future__ import annotations
 
@@ -11,14 +11,10 @@ from sqlalchemy.orm import Session
 
 from ..core.errors import bad_request, not_found
 from ..db import get_db
-from ..deps import get_current_user
-from ..models import Recording, Speaker, TranscriptSegment
+from ..deps import get_current_user, get_recording_for_user
+from ..models import Recording, Speaker, TranscriptSegment, User
 from ..schemas import SegmentOut, SegmentUpdateIn, SpeakerOut, SpeakerUpdateIn, TranscriptOut
-from ._common import (
-    content_disposition,
-    get_recording_or_404,
-    title_for_download,
-)
+from ._common import content_disposition, title_for_download
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +63,8 @@ def _srt_timestamp(ms: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{millis:03d}"
 
 
-def _build_transcript(db: Session, recording: Recording) -> TranscriptOut:
+def build_transcript(db: Session, recording: Recording) -> TranscriptOut:
+    """Shared transcript DTO builder (also used by the public share endpoints)."""
     speakers = _speakers_for(db, recording.id)
     segments = _segments_for(db, recording.id)
     return TranscriptOut(
@@ -81,9 +78,13 @@ def _build_transcript(db: Session, recording: Recording) -> TranscriptOut:
 
 # ------------------------------------------------------------------ read / edit
 @router.get("/{recording_id}/transcript", response_model=TranscriptOut)
-def get_transcript(recording_id: int, db: Session = Depends(get_db)):
-    recording = get_recording_or_404(db, recording_id)
-    return _build_transcript(db, recording)
+def get_transcript(
+    recording_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    recording = get_recording_for_user(db, user, recording_id)
+    return build_transcript(db, recording)
 
 
 @router.patch("/{recording_id}/speakers/{speaker_id}", response_model=SpeakerOut)
@@ -92,8 +93,9 @@ def update_speaker(
     speaker_id: int,
     payload: SpeakerUpdateIn,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    get_recording_or_404(db, recording_id)
+    get_recording_for_user(db, user, recording_id)
     speaker = db.get(Speaker, speaker_id)
     if speaker is None or speaker.recording_id != recording_id:
         raise not_found("说话人不存在")
@@ -112,8 +114,9 @@ def update_segment(
     segment_id: int,
     payload: SegmentUpdateIn,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    get_recording_or_404(db, recording_id)
+    get_recording_for_user(db, user, recording_id)
     segment = db.get(TranscriptSegment, segment_id)
     if segment is None or segment.recording_id != recording_id:
         raise not_found("转录分段不存在")
@@ -145,9 +148,10 @@ def export_transcript(
     recording_id: int,
     format: Literal["txt", "srt", "md", "json"] = Query("txt"),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    recording = get_recording_or_404(db, recording_id)
-    transcript = _build_transcript(db, recording)
+    recording = get_recording_for_user(db, user, recording_id)
+    transcript = build_transcript(db, recording)
     speakers = {speaker.id: speaker for speaker in _speakers_for(db, recording_id)}
 
     if format == "json":
@@ -166,24 +170,33 @@ def export_transcript(
         lines = [f"# {recording.title}", ""]
         for segment in transcript.segments:
             name = _speaker_name(segment, speakers)
-            prefix = f"**[{_hhmmss(segment.start_ms)}] {name}**：" if name else f"**[{_hhmmss(segment.start_ms)}]** "
+            prefix = (
+                f"**[{_hhmmss(segment.start_ms)}] {name}**："
+                if name
+                else f"**[{_hhmmss(segment.start_ms)}]** "
+            )
             lines.append(f"- {prefix}{segment.text}")
         body = "\n".join(lines) + "\n"
     else:
         lines = []
         for segment in transcript.segments:
             name = _speaker_name(segment, speakers)
-            prefix = f"[{_hhmmss(segment.start_ms)}] {name}：" if name else f"[{_hhmmss(segment.start_ms)}] "
+            prefix = (
+                f"[{_hhmmss(segment.start_ms)}] {name}："
+                if name
+                else f"[{_hhmmss(segment.start_ms)}] "
+            )
             lines.append(f"{prefix}{segment.text}")
         body = "\n".join(lines) + ("\n" if lines else "")
 
     ext, media_type = _EXPORT_META[format]
     filename = title_for_download(recording.title or "transcript", ext)
+    encoded = body.encode("utf-8")
     return Response(
-        content=body.encode("utf-8"),
+        content=encoded,
         media_type=media_type,
         headers={
             "Content-Disposition": content_disposition(filename),
-            "Content-Length": str(len(body.encode("utf-8"))),
+            "Content-Length": str(len(encoded)),
         },
     )

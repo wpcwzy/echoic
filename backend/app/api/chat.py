@@ -1,4 +1,4 @@
-"""RAG chat endpoints (docs/API.md §4 + §7 SSE protocol)."""
+"""RAG chat endpoints (docs/API.md §4 + §7 SSE protocol, scoped by owner)."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 from ..core.errors import bad_request
 from ..core.utils import load_json
 from ..db import SessionLocal, get_db
-from ..deps import get_current_user
-from ..models import ChatMessage
+from ..deps import get_current_user, get_recording_for_user
+from ..models import ChatMessage, User
 from ..schemas import (
     ChatHistoryOut,
     ChatIn,
@@ -23,7 +23,6 @@ from ..schemas import (
     CitationOut,
     OkOut,
 )
-from ._common import get_recording_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +54,12 @@ def _citations_from(raw: str | None) -> list[CitationOut]:
 
 
 @router.get("/{recording_id}/chat", response_model=ChatHistoryOut)
-def get_chat_history(recording_id: int, db: Session = Depends(get_db)):
-    get_recording_or_404(db, recording_id)
+def get_chat_history(
+    recording_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    get_recording_for_user(db, user, recording_id)
     rows = list(
         db.scalars(
             select(ChatMessage)
@@ -80,8 +83,12 @@ def get_chat_history(recording_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/{recording_id}/chat", response_model=OkOut)
-def clear_chat_history(recording_id: int, db: Session = Depends(get_db)):
-    get_recording_or_404(db, recording_id)
+def clear_chat_history(
+    recording_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    get_recording_for_user(db, user, recording_id)
     db.execute(delete(ChatMessage).where(ChatMessage.recording_id == recording_id))
     db.commit()
     return OkOut()
@@ -92,8 +99,9 @@ async def chat_stream(
     recording_id: int,
     payload: ChatIn,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    recording = get_recording_or_404(db, recording_id)
+    recording = get_recording_for_user(db, user, recording_id)
     message = payload.message.strip()
     if not message:
         raise bad_request("消息不能为空", "VALIDATION_ERROR")

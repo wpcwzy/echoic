@@ -77,11 +77,22 @@ def _process_one(job_id: int, recording_id: int, from_stage: str) -> None:
         _mark_job_failed(job_id, "处理任务异常终止：" + str(exc)[:200])
 
 
+def _maybe_consume_scan() -> None:
+    """Periodic consume-directory import (R-22): at most once per interval."""
+    try:
+        from .services.consume import maybe_scan
+
+        maybe_scan()
+    except Exception:  # noqa: BLE001 - auto-import must never stop job processing
+        logger.exception("consume scan hook failed")
+
+
 def _worker_loop() -> None:
     logger.info("embedded worker started")
     _state["running"] = True
     _state["started_at"] = utcnow().isoformat()
     while not _stop_event.is_set():
+        _maybe_consume_scan()
         try:
             claimed = claim_next_job()
         except Exception as exc:  # noqa: BLE001
@@ -133,6 +144,12 @@ def stop_embedded_worker() -> None:
 
 def worker_status() -> dict:
     current = _state.get("current")
+    try:
+        from .services.consume import last_scan_info
+
+        last_consume_scan = last_scan_info()
+    except Exception:  # pragma: no cover - status must stay safe before boot
+        last_consume_scan = None
     return {
         "running": bool(_state.get("running")),
         "queue_depth": _depth(),
@@ -142,6 +159,7 @@ def worker_status() -> dict:
         "current": dict(current) if isinstance(current, dict) else None,
         "embedded": bool(settings.embedded_worker),
         "started_at": _state.get("started_at"),
+        "last_consume_scan": last_consume_scan,
     }
 
 
@@ -156,6 +174,7 @@ def run_forever() -> None:
     logger.info("standalone worker starting (data dir: %s)", settings.data_path)
     try:
         while True:
+            _maybe_consume_scan()
             claimed = claim_next_job()
             if claimed is None:
                 time.sleep(1.5)

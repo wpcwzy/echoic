@@ -31,6 +31,7 @@ from ..models import (
     Stage,
     Tag,
     TranscriptSegment,
+    User,
 )
 from ..providers.demo_fixtures import demo_recordings, fixture_segments, fixture_speaker_labels, load_demo_data
 from .analysis import (
@@ -153,6 +154,13 @@ def _generate_demo_audio(recording: Recording, *, generate: bool) -> None:
         logger.warning("demo audio bookkeeping failed for %r: %s", recording.title, exc)
 
 
+def _demo_owner_id(db: Session) -> int | None:
+    owner = db.scalar(select(User).where(User.role == "admin").order_by(User.id).limit(1))
+    if owner is None:
+        owner = db.scalar(select(User).order_by(User.id).limit(1))
+    return owner.id if owner is not None else None
+
+
 def _create_demo_recording(db: Session, item: dict[str, Any]) -> Recording:
     duration_ms = max(0, int(item.get("duration_ms") or 0))
     recorded_days_ago = item.get("recorded_at_days_ago")
@@ -181,6 +189,7 @@ def _create_demo_recording(db: Session, item: dict[str, Any]) -> Recording:
         recorded_at=now - timedelta(days=recorded_days_ago),
         language=str(item.get("language") or "zh"),
         source="upload",
+        owner_id=_demo_owner_id(db),
         asr_provider="mock",
         llm_provider="mock",
         processed_at=now,

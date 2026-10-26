@@ -1,38 +1,43 @@
-"""Recording library endpoints (docs/API.md §3)."""
+"""Recording library endpoints (docs/08-P1 §4.2/§4.5, docs/API.md §3).
+
+v0.2: every recording-scoped endpoint is permission checked through
+``app.deps.get_recording_for_user`` (admin sees all, members only their own;
+invisible resources answer 404 to avoid leaking existence).
+"""
 
 from __future__ import annotations
 
 import logging
+import secrets
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..config import settings
-from ..core.errors import ApiError, bad_request, conflict, not_found
+from ..core.errors import ApiError, bad_request, conflict, forbidden
 from ..core.media import MediaError, guess_media_type, guess_mime, probe
+from ..core.security import hash_password
 from ..core.storage import (
-    StorageError,
     delete_recording_dir,
     original_path,
-    resolve_storage_dir,
     safe_extension,
     save_upload,
     storage_relpath,
 )
 from ..core.utils import parse_iso, utcnow
 from ..db import get_db
-from ..deps import get_current_user
+from ..deps import get_current_user, get_recording_for_user, is_admin, recording_scope
 from ..models import (
     ChatMessage,
     Job,
     Recording,
     RecordingStatus,
+    Share,
     Speaker,
     Stage,
     Tag,
@@ -47,23 +52,27 @@ from ..schemas import (
     RecordingSummary,
     RecordingUpdateIn,
     ReprocessIn,
+    ShareCreateIn,
+    ShareListOut,
+    ShareOut,
 )
 from ..services.settings_store import load_ai_config
 from ._common import (
     ACTIVE_STATUSES,
     cancel_job,
     clean_filename,
-    content_disposition,
     enqueue_job,
     get_job_or_none,
-    get_recording_or_404,
     insight_kinds_for,
     library_stats,
     like_pattern,
     normalize_datetime,
     parse_tag_ids,
+    pick_media,
     recording_to_summary,
     recordings_to_summaries,
+    serve_media_file,
+    share_to_out,
     transcript_ids_for,
 )
 
@@ -116,151 +125,34 @@ _ORDER_BY = {
 }
 
 
-# ------------------------------------------------------------------ media helpers
-def _storage_path(recording: Recording) -> Path | None:
-    try:
-        return resolve_storage_dir(recording.storage_dir)
-    except StorageError:
-        return None
-
-
-def _original_file(recording: Recording) -> Path | None:
-    base = _storage_path(recording)
-    if base is None or not base.is_dir():
-        return None
-    if recording.original_ext:
-        exact = base / f"original{recording.original_ext}"
-        if exact.is_file() and exact.stat().st_size > 0:
-            return exact
-    for candidate in sorted(base.glob("original.*")):
-        if candidate.is_file() and candidate.stat().st_size > 0:
-            return candidate
-    return None
-
-
-def _playback_file(recording: Recording) -> Path | None:
-    base = _storage_path(recording)
-    if base is None:
-        return None
-    candidate = base / "playback.m4a"
-    if candidate.is_file() and candidate.stat().st_size > 0:
-        return candidate
-    return None
-
-
-def _parse_range(header: str, size: int) -> tuple[int, int] | None:
-    """Parse a single-range ``bytes=`` header; ``None`` means invalid (HTTP 416)."""
-    if not header:
-        return None
-    value = header.strip()
-    if not value.lower().startswith("bytes="):
-        return None
-    spec = value[6:].strip()
-    if not spec or "," in spec or "-" not in spec:
-        return None
-    first, last = (part.strip() for part in spec.split("-", 1))
-    try:
-        if first == "":
-            if last == "":
-                return None
-            suffix = int(last)
-            if suffix <= 0:
-                return None
-            suffix = min(suffix, size)
-            start, end = size - suffix, size - 1
-        else:
-            start = int(first)
-            end = int(last) if last else size - 1
-    except ValueError:
-        return None
-    if size <= 0 or start < 0 or start >= size or end < start:
-        return None
-    return start, min(end, size - 1)
-
-
-def _range_invalid(size: int) -> ApiError:
-    return ApiError(
-        416,
-        "请求的 Range 不合法",
-        "VALIDATION_ERROR",
-        headers={"Content-Range": f"bytes */{size}", "Accept-Ranges": "bytes"},
+def _single_summary(db: Session, recording: Recording) -> RecordingSummary:
+    owner = db.get(User, recording.owner_id) if recording.owner_id else None
+    transcript_ids = transcript_ids_for(db, [recording.id])
+    kinds = insight_kinds_for(db, [recording.id])
+    return recording_to_summary(
+        recording,
+        has_transcript=recording.id in transcript_ids,
+        insight_kinds=kinds.get(recording.id, []),
+        owner=owner,
     )
 
 
-def _serve_file(
-    path: Path,
-    request: Request,
-    *,
-    content_type: str,
-    filename: str,
-    inline: bool,
-) -> StreamingResponse:
-    size = path.stat().st_size
-    headers = {
-        "Accept-Ranges": "bytes",
-        "Content-Disposition": content_disposition(filename, inline=inline),
-        "Cache-Control": "private, max-age=0, must-revalidate",
-    }
-    range_header = request.headers.get("range")
-    if range_header:
-        parsed = _parse_range(range_header, size)
-        if parsed is None:
-            raise _range_invalid(size)
-        start, end = parsed
-        length = end - start + 1
-
-        def iter_range():
-            with path.open("rb") as handle:
-                handle.seek(start)
-                remaining = length
-                while remaining > 0:
-                    chunk = handle.read(min(256 * 1024, remaining))
-                    if not chunk:
-                        break
-                    remaining -= len(chunk)
-                    yield chunk
-
-        headers.update(
-            {
-                "Content-Range": f"bytes {start}-{end}/{size}",
-                "Content-Length": str(length),
-            }
-        )
-        return StreamingResponse(
-            iter_range(), status_code=206, media_type=content_type, headers=headers
-        )
-
-    def iter_full():
-        with path.open("rb") as handle:
-            while True:
-                chunk = handle.read(256 * 1024)
-                if not chunk:
-                    break
-                yield chunk
-
-    headers["Content-Length"] = str(size)
-    return StreamingResponse(iter_full(), status_code=200, media_type=content_type, headers=headers)
+def _new_share_token(db: Session) -> str:
+    for _ in range(6):
+        token = secrets.token_urlsafe(24)
+        if db.scalar(select(Share.id).where(Share.token == token)) is None:
+            return token
+    raise ApiError(500, "分享链接生成失败，请重试", "ERROR")
 
 
-def _pick_media(recording: Recording, *, download: bool) -> tuple[Path, str, str, bool]:
-    original = _original_file(recording)
-    playback = _playback_file(recording)
-    if download:
-        path = original or playback
-    elif recording.media_type == "video":
-        path = original or playback
-    else:
-        path = playback or original
-    if path is None:
-        raise not_found("媒体文件不存在")
-    is_playback = path.name.startswith("playback")
-    if is_playback:
-        content_type = "audio/mp4"
-        filename = f"{recording.title or 'recording'}.m4a"
-    else:
-        content_type = recording.mime_type or guess_mime(path.suffix)
-        filename = recording.original_filename or f"{recording.title or 'recording'}{path.suffix}"
-    return path, content_type, filename, download
+def _shares_out(db: Session, shares) -> list[ShareOut]:
+    creator_ids = {share.created_by for share in shares if share.created_by}
+    creators = (
+        {user.id: user for user in db.scalars(select(User).where(User.id.in_(creator_ids))).all()}
+        if creator_ids
+        else {}
+    )
+    return [share_to_out(share, creators.get(share.created_by)) for share in shares]
 
 
 # ------------------------------------------------------------------ list / detail
@@ -273,8 +165,9 @@ def list_recordings(
     page: int = Query(1, ge=1),
     page_size: int = Query(24, ge=1, le=100),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    base = _list_query(query, status, tag_id)
+    base = recording_scope(_list_query(query, status, tag_id), user)
     total = int(db.scalar(select(func.count()).select_from(base.subquery())) or 0)
     stmt = (
         base.options(
@@ -292,7 +185,7 @@ def list_recordings(
         total=total,
         page=page,
         page_size=page_size,
-        stats=library_stats(db),
+        stats=library_stats(db, user),
     )
 
 
@@ -394,12 +287,18 @@ def upload_recording(
         recording.duration_ms,
         user.username,
     )
-    return recording_to_summary(recording, has_transcript=False, insight_kinds=[])
+    return recording_to_summary(
+        recording, has_transcript=False, insight_kinds=[], owner=user
+    )
 
 
 @router.get("/{recording_id}", response_model=RecordingDetail)
-def get_recording(recording_id: int, db: Session = Depends(get_db)):
-    recording = get_recording_or_404(db, recording_id)
+def get_recording(
+    recording_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    recording = get_recording_for_user(db, user, recording_id)
     job = get_job_or_none(db, recording_id)
     chat_count = int(
         db.scalar(
@@ -411,10 +310,12 @@ def get_recording(recording_id: int, db: Session = Depends(get_db)):
     )
     transcript_ids = transcript_ids_for(db, [recording_id])
     kinds = insight_kinds_for(db, [recording_id])
+    owner = db.get(User, recording.owner_id) if recording.owner_id else None
     detail = recording_to_summary(
         recording,
         has_transcript=recording_id in transcript_ids,
         insight_kinds=kinds.get(recording_id, []),
+        owner=owner,
         cls=RecordingDetail,
     )
     detail.job = JobInfo.model_validate(job) if job is not None else None
@@ -424,9 +325,12 @@ def get_recording(recording_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/{recording_id}", response_model=RecordingSummary)
 def update_recording(
-    recording_id: int, payload: RecordingUpdateIn, db: Session = Depends(get_db)
+    recording_id: int,
+    payload: RecordingUpdateIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    recording = get_recording_or_404(db, recording_id)
+    recording = get_recording_for_user(db, user, recording_id)
     fields = payload.model_fields_set
     if "title" in fields and payload.title is not None:
         recording.title = payload.title.strip()[:255] or recording.title
@@ -436,6 +340,16 @@ def update_recording(
         recording.recorded_at = normalize_datetime(payload.recorded_at)
     if "language" in fields and payload.language is not None:
         recording.language = payload.language.strip()[:16] or recording.language
+    if "owner_id" in fields:
+        if not is_admin(user):
+            raise forbidden("仅管理员可以转移录音归属")
+        if payload.owner_id is not None:
+            target = db.get(User, payload.owner_id)
+            if target is None:
+                raise bad_request("目标用户不存在")
+            recording.owner_id = target.id
+        else:
+            recording.owner_id = None
     if "tag_ids" in fields and payload.tag_ids is not None:
         ids = [int(tag_id) for tag_id in payload.tag_ids]
         tags = list(db.scalars(select(Tag).where(Tag.id.in_(ids))).all()) if ids else []
@@ -451,24 +365,21 @@ def update_recording(
                 continue
             speaker.display_name = (display_name or "").strip()[:120]
     db.commit()
-
-    transcript_ids = transcript_ids_for(db, [recording_id])
-    kinds = insight_kinds_for(db, [recording_id])
-    return recording_to_summary(
-        recording,
-        has_transcript=recording_id in transcript_ids,
-        insight_kinds=kinds.get(recording_id, []),
-    )
+    return _single_summary(db, recording)
 
 
 @router.delete("/{recording_id}", response_model=OkOut)
-def delete_recording(recording_id: int, db: Session = Depends(get_db)):
-    recording = get_recording_or_404(db, recording_id)
+def delete_recording(
+    recording_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    recording = get_recording_for_user(db, user, recording_id)
     storage_dir = recording.storage_dir
     db.delete(recording)
     db.commit()
     delete_recording_dir(storage_dir)
-    logger.info("recording %s deleted", recording_id)
+    logger.info("recording %s deleted by %s", recording_id, user.username)
     return OkOut()
 
 
@@ -478,8 +389,9 @@ def reprocess_recording(
     recording_id: int,
     payload: ReprocessIn | None = None,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    recording = get_recording_or_404(db, recording_id)
+    recording = get_recording_for_user(db, user, recording_id)
     from_stage = payload.from_ if payload is not None else "all"
     stage = {
         "insights": Stage.ANALYZING,
@@ -497,19 +409,23 @@ def reprocess_recording(
 
 
 @router.post("/{recording_id}/cancel", response_model=OkOut)
-def cancel_recording(recording_id: int, db: Session = Depends(get_db)):
-    recording = get_recording_or_404(db, recording_id)
+def cancel_recording(
+    recording_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    recording = get_recording_for_user(db, user, recording_id)
     if recording.status == RecordingStatus.CANCELLED:
         return OkOut()
     if recording.status not in ACTIVE_STATUSES:
         raise conflict("录音当前状态无法取消", "CONFLICT")
     cancel_job(db, recording_id)
-    recording = get_recording_or_404(db, recording_id)
+    recording = get_recording_for_user(db, user, recording_id)
     recording.status = RecordingStatus.CANCELLED
     recording.progress = 0
     recording.error_message = None
     db.commit()
-    logger.info("recording %s cancelled", recording_id)
+    logger.info("recording %s cancelled by %s", recording_id, user.username)
     return OkOut()
 
 
@@ -520,10 +436,11 @@ def get_recording_media(
     request: Request,
     download: bool = Query(False),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    recording = get_recording_or_404(db, recording_id)
-    path, content_type, filename, attachment = _pick_media(recording, download=bool(download))
-    return _serve_file(
+    recording = get_recording_for_user(db, user, recording_id)
+    path, content_type, filename, attachment = pick_media(recording, download=bool(download))
+    return serve_media_file(
         path,
         request,
         content_type=content_type,
@@ -533,11 +450,62 @@ def get_recording_media(
 
 
 @router.get("/{recording_id}/jobs", response_model=JobListOut)
-def list_recording_jobs(recording_id: int, db: Session = Depends(get_db)):
-    get_recording_or_404(db, recording_id)
+def list_recording_jobs(
+    recording_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    get_recording_for_user(db, user, recording_id)
     jobs = list(
         db.scalars(
             select(Job).where(Job.recording_id == recording_id).order_by(Job.id.desc())
         ).all()
     )
     return JobListOut(items=[JobInfo.model_validate(job) for job in jobs])
+
+
+# ------------------------------------------------------------------ shares (R-17)
+@router.get("/{recording_id}/shares", response_model=ShareListOut)
+def list_recording_shares(
+    recording_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    recording = get_recording_for_user(db, user, recording_id)
+    shares = list(
+        db.scalars(
+            select(Share).where(Share.recording_id == recording.id).order_by(Share.id.desc())
+        ).all()
+    )
+    items = _shares_out(db, shares)
+    return ShareListOut(items=items, total=len(items))
+
+
+@router.post("/{recording_id}/shares", response_model=ShareOut, status_code=201)
+def create_recording_share(
+    recording_id: int,
+    payload: ShareCreateIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    recording = get_recording_for_user(db, user, recording_id)
+    expires_at = None
+    if payload.expires_at is not None:
+        expires_at = normalize_datetime(payload.expires_at)
+        if expires_at <= utcnow():
+            raise bad_request("expires_at 必须在未来")
+    share = Share(
+        recording_id=recording.id,
+        token=_new_share_token(db),
+        password_hash=hash_password(payload.password) if payload.password else None,
+        expires_at=expires_at,
+        include_transcript=bool(payload.include_transcript),
+        include_insights=bool(payload.include_insights),
+        allow_download=bool(payload.allow_download),
+        created_by=user.id,
+    )
+    db.add(share)
+    db.commit()
+    db.refresh(share)
+    logger.info("share %s created for recording %s by %s", share.id, recording.id, user.username)
+    return share_to_out(share, user)

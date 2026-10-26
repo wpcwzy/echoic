@@ -1,4 +1,4 @@
-"""Global search endpoint (docs/API.md §5)."""
+"""Global search endpoint (docs/API.md §5, scoped by recording owner)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import get_current_user
+from ..deps import get_current_user, is_admin
+from ..models import User
 from ..schemas import SearchOut, SearchRecordingHit, SearchSegmentHit
 from ..services import search as search_service
 from ._common import recordings_to_summaries
@@ -23,11 +24,11 @@ def global_search(
     q: str = Query("", description="搜索关键词"),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    result = search_service.search(db, q, limit=limit)
-    summaries = recordings_to_summaries(
-        db, [hit.recording for hit in result.recordings]
-    )
+    owner_id = None if is_admin(user) else user.id
+    result = search_service.search(db, q, limit=limit, owner_id=owner_id)
+    summaries = recordings_to_summaries(db, [hit.recording for hit in result.recordings])
     recording_hits = [
         SearchRecordingHit(**summary.model_dump(), hit_count=hit.hit_count)
         for summary, hit in zip(summaries, result.recordings)
