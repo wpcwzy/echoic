@@ -268,6 +268,57 @@ data: {"type":"done","message_id":42}
 ```
 注意：用户消息先落库；AI 消息在 done 前若中断也保存已生成部分。前端需处理 `error` 与网络中断。
 
+---
+
+## 9. v0.2 新增：多用户 / 角色 / 分享 / consume（协作与分享）
+
+> 完整设计见 [`docs/08-P1-协作与分享设计.md`](./08-P1-协作与分享设计.md)。以下为接口速查，错误格式与鉴权约定同 §0。
+
+### 9.1 角色与用户
+
+- `users.role`：`admin` | `member`；admin 可见全部录音/用户/设置/系统，member 仅自己（`owner_id`）的录音。不可见资源返回 **404**；无权操作可见资源返回 **403**。
+- `GET /api/auth/me` 返回 UserOut 增加 `email / role / disabled / last_login_at`。
+- `POST /api/auth/register`（仅 `system.allow_registration=true` 时可用）body `{username,password,display_name?,email?}` → 201 UserOut（member）。
+- 登录停用账号 → 403；登录成功更新 `last_login_at`。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/users?query=&role=&include_disabled=&page=&page_size=` | admin；`{items:[UserAdminOut],total}` |
+| POST | `/api/users` | admin；创建用户（password ≥ 8）→ 201 |
+| PATCH | `/api/users/{id}` | admin；`{display_name?,email?,role?,disabled?}`（不能移除最后一个管理员） |
+| POST | `/api/users/{id}/reset-password` | admin；`{new_password}` |
+| DELETE | `/api/users/{id}` | admin；不能删自己/最后管理员；拥有录音时 409 |
+
+`RecordingSummary` 新增 `owner_id: int|null`、`owner: {id,username,display_name}|null`；`PATCH /api/recordings/{id}` 支持 `owner_id`（仅 admin）。
+
+### 9.2 分享链接
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/recordings/{id}/shares` | 所有者/admin；含已撤销项 |
+| POST | `/api/recordings/{id}/shares` | `{password?,expires_at?,include_transcript=true,include_insights=true,allow_download=false}` → 201 ShareOut（含 `token` / `url_path`） |
+| GET | `/api/shares?recording_id=&include_revoked=` | 当前用户（admin 全部） |
+| DELETE | `/api/shares/{id}` | 软撤销 → `{ok:true}` |
+| GET | `/api/public/shares/{token}` | 公开；元数据；无效/撤销/过期 404；`view_count+1` |
+| POST | `/api/public/shares/{token}/unlock` | 公开；`{password}` → 设置 HttpOnly Cookie（Path=`/api/public/shares/{token}`，2h）；错误 401，限速 429 |
+| GET | `/api/public/shares/{token}/media` | 公开；Range 206；密码分享需先解锁；`?download=1` 受 `allow_download` 限制 |
+| GET | `/api/public/shares/{token}/transcript` | 受 `include_transcript` 限制，否则 403 |
+| GET | `/api/public/shares/{token}/insights` | 受 `include_insights` 限制，否则 403 |
+
+公开页地址：`/s/{token}`。公开接口不暴露用户/owner 信息，不提供 AI 问答。
+
+### 9.3 consume 目录
+
+- 环境变量：`ECHOIC_CONSUME_ENABLED`、`ECHOIC_CONSUME_DIR`、`ECHOIC_CONSUME_INTERVAL_SEC`、`ECHOIC_CONSUME_OWNER_USERNAME`。
+- `GET /api/system/info`（admin）新增 `consume:{enabled,dir,interval_sec,pending_files,failed_files,last_scan}`。
+- `POST /api/system/consume/scan`（admin）→ `{ok,result:{scanned,imported,duplicates,failed},at}`。
+- 行为：顶层文件 → sha256 去重 → ffprobe 校验 → 移入媒体目录 → 创建录音（`source=consume`，owner=管理员）→ 入队；失败文件移至 `consume/failed/` 并记录错误。
+
+### 9.4 设置
+
+- `GET/PUT /api/settings` 仅 admin；`system` 增加 `allow_registration`、只读 `consume:{enabled,dir,interval_sec}`。
+- 标签写操作（POST/PATCH/DELETE `/api/tags*`）仅 admin；读取所有登录用户可用。
+
 ## 8. 引擎/进程行为
 
 - 上传成功后由 API 立即写入 `recordings(status=queued)` 与 `jobs(status=queued)`；内嵌 worker 每秒轮询。

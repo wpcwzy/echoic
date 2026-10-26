@@ -1,11 +1,16 @@
 # Echoic
 
+[![CI](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml/badge.svg)](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml)
+[![Docker Publish (GHCR)](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml)
+[![GHCR](https://img.shields.io/badge/ghcr.io-wpcwzy%2Fechoic-2496ED?logo=docker&logoColor=white)](https://github.com/wpcwzy/echoic/pkgs/container/echoic)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 > 自托管的私人**会议 / 通话 / 录音 / 视频知识库**。
 > 上传或网页录制声音，自动获得**转录稿、AI 纪要、观点树 & 思维导图、章节、关键洞察、待办与 AI 问答**——所有数据都留在你自己的服务器上。
 
 - 定位：paperless-ngx 之于纸质文档 = **Echoic 之于录音**
 - 风格参考：飞书妙记 / 钉钉闪记（详情页 1:1 神似）
-- 版本：v0.1.0（MVP，可私有化部署）
+- 版本：**v0.2.0 开发中**（P1 batch 1：多用户 / 角色、公开分享链接、consume 目录导入正在开发；v0.1.0 已发布）
 - 许可：MIT
 
 ## 📸 界面预览
@@ -38,7 +43,7 @@
 | 🔐 安全 | HttpOnly Cookie JWT、bcrypt 密码、Fernet 加密 API Key（仅回掩码）、上传校验、登录限速 |
 | 🎭 演示模式 | 零 API Key、零外网也能完整跑通全流程（内置示例录音与全套 AI 结果） |
 | 📤 数据导出 | 转录稿导出 TXT / SRT / Markdown / JSON |
-| 🐳 一键部署 | 多阶段 Docker 镜像 + docker compose，`up -d` 即用；可切独立 worker / PostgreSQL |
+| 🐳 一键部署 | **GHCR 预构建多架构镜像**（amd64/arm64，CI 自动发布）+ docker compose 镜像优先部署，`pull && up -d` 即用；亦可源码构建；可切独立 worker / PostgreSQL |
 
 ---
 
@@ -82,34 +87,85 @@ upload/record → 落盘 + ffprobe → [prepare] 标准化 16k wav + playback.m4
 
 ---
 
-## 🚀 快速开始（Docker，推荐）
+## 🚀 快速开始（Docker 镜像，推荐）
+
+无需本地构建：直接拉取 CI 自动发布的**多架构预构建镜像**（linux/amd64 + linux/arm64）。
 
 ```bash
-cp .env.example .env      # 修改 ECHOIC_ADMIN_PASSWORD（默认 admin123 仅用于首次体验）
-docker compose up -d --build
+# 1. 准备环境变量（至少修改管理员口令）
+cp .env.example .env
+vi .env                    # 修改 ECHOIC_ADMIN_PASSWORD（默认 admin123 仅用于首次体验）
+
+# 2. 拉取预构建镜像并启动（默认 ghcr.io/wpcwzy/echoic:latest）
+docker compose pull
+docker compose up -d
+
+# 3. 浏览器打开 http://localhost:8000，用 admin / <你设置的口令> 登录
 ```
 
-打开 <http://localhost:8000>，用 `.env` 中的管理员账号登录（默认 **admin / admin123**）。
-
+- 镜像：`ghcr.io/wpcwzy/echoic`，标签 `latest`（main 最新）/ `v0.2.0` 等语义化版本 / `sha-xxxxxxx`；
+  在 `.env` 中用 `ECHOIC_IMAGE_TAG` 选择（生产建议固定版本，如 `v0.2.0`）；
+- **GHCR 包已设为 Public**（已验证匿名可拉取），`docker compose pull` 无需登录；
+  若仍遇到 403（例如镜像被重新设为私有），请先 `docker login ghcr.io` 或把包可见性改为 Public
+  （详见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) §3.2）；
 - 默认 **mock 演示模式**：无需任何 API Key，启动即有示例录音与全套 AI 结果；
 - 接入真实模型：在「设置 → AI 服务」填写 DashScope / OpenAI 兼容端点的 Key 与模型，点「测试连接」即可；
-- 数据/媒体/密钥全部落在 `echoic-data` 卷，备份该卷即可迁移。
+- 数据/媒体/密钥全部落在 `echoic-data` 卷，备份该卷即可迁移；
+
+### 从源码构建（可选）
+
+```bash
+# 适合开发 / 定制 / 离线环境；构建产物为本地镜像 echoic:local，不覆盖官方镜像标签
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
 
 完整部署（反向代理、备份恢复、升级、PostgreSQL、独立 worker、故障排查）见 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。
 
-> ⚠️ **验证边界**：本项目的本地验证在未启用 Docker 的 WSL 环境中完成（Docker CLI 不可用），因此 `Dockerfile` / `docker-compose.yml` 已做静态校验（YAML、路径、指令、脚本语法），但**镜像构建与容器运行未在真实 Docker 主机上执行**。请首次部署时按 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) 在目标机复跑并记录；阿里云真实 Key 的端到端调用同样需在目标机验证（Mock / 离线路径已全量验证）。
+> ⚠️ **验证边界**：v0.1.0 的本地 E2E / UI 验收在未启用 Docker CLI 的 WSL 环境中完成（Mock 模式，30/30 PASS）；`Dockerfile` 与 compose 已做静态校验，且镜像已由 GitHub Actions 在真实 Docker 环境**成功构建并推送多架构 GHCR 镜像**。但本仓库开发机仍**未本地运行过容器**，请首次部署时按 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) 在目标机复跑；阿里云真实 Key 的端到端调用同样需在目标机验证（Mock / 离线路径已全量验证）。
 
 ---
 
-## ✅ 验证状态（v0.1.0，2026-10-26）
+## 🐳 容器镜像与 CI/CD
+
+| 项目 | 说明 |
+|---|---|
+| 镜像地址 | `ghcr.io/wpcwzy/echoic`（GitHub Container Registry） |
+| 架构 | `linux/amd64` + `linux/arm64` 多架构 manifest（x86 服务器 / Apple Silicon / ARM 云主机均可直接拉取） |
+| 标签 | `latest`（main 每次推送）、`vX.Y.Z` / `X.Y` / `X`（推送 git tag 时自动生成）、`sha-xxxxxxx`（每次构建，可复现 / 回滚） |
+| 发布流水线 | [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml)：QEMU + Buildx 多架构构建 → GHCR；BuildKit GHA 缓存 + provenance 构建证明 |
+| 持续集成 | [`.github/workflows/ci.yml`](.github/workflows/ci.yml)：后端 pytest（含 ffmpeg）+ 前端 tsc / vite 构建 + PR 镜像构建（amd64，不推送） |
+| 依赖更新 | [`.github/dependabot.yml`](.github/dependabot.yml)：pip / npm / GitHub Actions / Docker 基础镜像每周自动检查 |
+
+**发布新版本**（维护者）：
+
+```bash
+git tag -a v0.2.0 -m "Echoic v0.2.0" && git push origin v0.2.0   # 自动构建并发布 v0.2.0 / 0.2 / 0 标签
+docker pull ghcr.io/wpcwzy/echoic:v0.2.0                          # 发布后验证
+```
+
+**GHCR 包可见性（首次发布后做一次）**：GitHub 默认新包为私有，匿名 `docker pull` 会 403。发布流水线末尾会用 `GITHUB_TOKEN`
+尝试自动改为 public（`continue-on-error`，多数环境无此权限）；若未生效，请到
+<https://github.com/users/wpcwzy/packages/container/echoic/settings> → Danger Zone → Change visibility → **Public**，
+或使用具备 `write:packages` 权限的 PAT：
+
+```bash
+echo "<PAT>" | docker login ghcr.io -u wpcwzy --password-stdin
+docker pull ghcr.io/wpcwzy/echoic:latest
+```
+
+---
+
+## ✅ 验证状态（v0.1.0 基线 + v0.2 CI 流水线）
 
 | 项目 | 结果 | 证据 |
 |---|---|---|
-| 后端测试 | **129 passed**（pytest，含 API 102 + 管线/Provider/演示数据 27） | `cd backend && .venv/bin/pytest -q` |
-| 前端构建 | **通过**（`tsc --noEmit` 零错误；vite 产物 gzip ≈ 499 KB JS + 16 KB CSS） | `cd frontend && npm run build` |
+| GitHub Actions CI | **通过**：后端 pytest + 前端构建；PR 额外验证 amd64 镜像构建 | [CI 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
+| 多架构镜像发布 | **成功**：linux/amd64 + linux/arm64 已推送 GHCR（`latest` + `sha-*`） | [Publish 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR 包](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
+| 后端测试（v0.1.0 基线） | **129 passed**（pytest，含 API 102 + 管线/Provider/演示数据 27；v0.2 P1 功能测试随开发补充） | `cd backend && .venv/bin/pytest -q` |
+| 前端构建（v0.1.0 基线） | **通过**（`tsc --noEmit` 零错误；vite 产物 gzip ≈ 499 KB JS + 16 KB CSS） | `cd frontend && npm run build` |
 | 端到端冒烟（Mock 模式，全新数据库） | **30 / 30 PASS**：登录/权限、演示数据、转录/分析、真实上传→管线就绪、改说话人/改段落、导出、搜索、SSE 问答、设置、Range 媒体、重算、删除 | [`e2e/last-run.log`](e2e/last-run.log) · [`e2e/REPORT.md`](e2e/REPORT.md) |
 | UI 截图巡检 | **6 / 6 张**，无布局溢出、无未捕获异常、无 5xx | [`docs/screenshots/`](docs/screenshots/) |
-| Docker | 配置静态校验通过；**未在真实 Docker 环境运行**（见上方验证边界） | `docs/DEPLOYMENT.md` |
+| 容器运行 | 官方镜像由 CI 在真实 Docker 构建成功；**本开发机无 Docker，容器运行待目标机验证**（见上方验证边界） | `docs/DEPLOYMENT.md` |
 
 
 
@@ -169,6 +225,13 @@ e2e/                                        端到端冒烟脚本与验收报告
 | `ECHOIC_DEMO_SEED` | `true` | 空库时写入内置演示录音 |
 | `ECHOIC_EMBEDDED_WORKER` | `true` | 内嵌任务线程；独立 worker 部署时设 `false` |
 | `ECHOIC_MAX_UPLOAD_MB` | `2048` | 单文件上传上限 |
+| `ECHOIC_IMAGE_TAG` | `latest` | **部署**：GHCR 镜像标签（`latest` / `v0.2.0` / `sha-xxxxxxx`） |
+| `ECHOIC_ALLOW_REGISTRATION` | `false` | v0.2：开放网页注册（默认仅管理员建号） |
+| `ECHOIC_SHARE_COOKIE_HOURS` | `2` | v0.2：公开分享链接解锁 Cookie 有效期（小时） |
+| `ECHOIC_CONSUME_ENABLED` | `true` | v0.2：监听 consume 目录自动导入录音 |
+| `ECHOIC_CONSUME_DIR` | 空（`<data>/consume`） | v0.2：consume 目录（Docker 内即 `/data/consume`，随数据卷持久化） |
+| `ECHOIC_CONSUME_INTERVAL_SEC` | `15` | v0.2：consume 扫描间隔（秒） |
+| `ECHOIC_CONSUME_OWNER_USERNAME` | 空（首个管理员） | v0.2：导入录音归属用户 |
 | `ECHOIC_ASR_PROVIDER` / `ECHOIC_LLM_PROVIDER` | `mock` / `mock` | AI provider（mock / dashscope_realtime / openai …） |
 | `ECHOIC_ASR_API_KEY` / `ECHOIC_LLM_API_KEY` | 空 | 服务商密钥（首次启动写入数据库；网页设置优先） |
 
@@ -176,12 +239,20 @@ e2e/                                        端到端冒烟脚本与验收报告
 
 ---
 
-## 🗺 Roadmap（v0.1 非目标）
+## 🗺 Roadmap
 
-- [ ] 多用户 / 团队协作 / 分享链接与细粒度权限
+### v0.2.0（P1 batch 1，开发中）
+
+- [x] 多架构容器镜像 + GHCR 自动发布 + GitHub Actions CI/CD
+- [ ] 多用户 / 角色权限（管理员 / 普通用户）
+- [ ] 公开分享链接（解锁 Cookie、只读访问）
+- [ ] consume 目录自动导入（监听文件夹自动建录音并处理）
+- [ ] 数据库迁移机制与升级兼容
+
+### 后续版本
+
 - [ ] 实时转写与实时字幕（边录边出字）
 - [ ] 视频画面 PPT / 场景抽取
-- [ ] 邮件 / 扫描目录自动导入（paperless 式 consume 目录）
 - [ ] 移动 App / 浏览器扩展
 - [ ] 向量数据库（pgvector / Qdrant）与混合检索增强
 - [ ] 回收站 / 审计日志 / OAuth / LDAP

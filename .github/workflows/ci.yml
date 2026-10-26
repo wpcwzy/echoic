@@ -46,10 +46,18 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements*.txt
 
-      - name: Install ffmpeg
+      - name: Ensure ffmpeg
+        # ubuntu-latest 运行器通常已自带 ffmpeg；仅在缺失时安装。
+        # 使用 shell timeout 兜底：防止 apt 源不可达时步骤长时间挂起（首次 CI 曾出现 >20min 卡住）。
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
+          if command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; then
+            echo "ffmpeg 已预装，跳过安装"
+          else
+            echo "ffmpeg 缺失，安装中（最多 180s）..."
+            sudo timeout --kill-after=10 120 apt-get update -qq || true
+            sudo timeout --kill-after=10 180 apt-get install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -version | head -1
 
       - name: Install Python dependencies
         run: |

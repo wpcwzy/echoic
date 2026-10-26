@@ -31,8 +31,6 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  # 构建期把 npmmirror 的 lockfile 下载地址改写为官方源
-  NPM_BUILD_REGISTRY: https://registry.npmjs.org
 
 jobs:
   publish:
@@ -97,7 +95,7 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: true
           build-args: |
-            NPM_REGISTRY=${{ env.NPM_BUILD_REGISTRY }}
+            NPM_REGISTRY=https://registry.npmjs.org
             PIP_INDEX_URL=https://pypi.org/simple
 
       - name: Write job summary

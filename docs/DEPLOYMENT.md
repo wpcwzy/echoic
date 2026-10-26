@@ -14,6 +14,7 @@
                                             卷 echoic-data:/data
                                               ├── echoic.db（SQLite，默认）
                                               ├── media/{uuid}/original.* · playback.m4a
+                                              ├── consume/（v0.2 自动导入监听目录）
                                               └── secret.key（JWT/密钥加密）
 ```
 
@@ -25,8 +26,8 @@
 |---|---|---|
 | 容器内端口 | `8000` | 由 uvicorn 监听 |
 | 宿主机端口 | `8000` | compose 中 `${ECHOIC_HTTP_PORT:-8000}` 可改 |
-| 数据目录 | `/data`（卷 `echoic-data`） | SQLite + 媒体 + 密钥 |
-| 镜像 | `echoic:latest` | 多阶段构建产物 |
+| 数据目录 | `/data`（卷 `echoic-data`） | SQLite + 媒体 + 密钥 + consume |
+| 镜像 | `ghcr.io/wpcwzy/echoic:${ECHOIC_IMAGE_TAG:-latest}` | CI 发布的**多架构镜像**（linux/amd64 + arm64），无需本地构建 |
 
 ---
 
@@ -41,51 +42,101 @@
 | CPU | 2 核起 | ffmpeg 转码为 CPU 操作；无需 GPU |
 | 网络 | 出站 HTTPS | 仅接入真实 AI 服务时需要 |
 
-> 构建阶段需要访问 npm / PyPI（或配置国内镜像，见 §10）。
-> 运行阶段**不需要**联网（mock 模式）。
+> **镜像部署无需构建**：只需能访问 `ghcr.io`；运行阶段不需要联网（mock 模式）。
+> 仅「从源码构建」（§3.3）才需要访问 npm / PyPI（或配置国内镜像，见 §3.4）。
 
 ---
 
-## 3. 快速开始
+## 3. 快速开始（镜像优先，推荐）
 
 ```bash
-# 1. 获取代码
+# 1. 获取部署文件（推荐 git clone，便于后续升级）
 git clone <repo-url> echoic && cd echoic
 
 # 2. 准备环境变量（至少修改管理员口令）
 cp .env.example .env
 vi .env        # 修改 ECHOIC_ADMIN_PASSWORD；ECHOIC_SECRET_KEY 可留空自动生成
 
-# 3. 构建并启动（首次构建 3~8 分钟，取决于网络）
-docker compose up -d --build
+# 3. 拉取预构建多架构镜像并启动（无需本地构建）
+docker compose pull
+docker compose up -d
 
 # 4. 查看状态
 docker compose ps
 docker compose logs -f echoic
 ```
 
-启动成功的标志（`docker compose ps` 中 `echoic` 为 `healthy`，或日志出现 `starting Echoic v0.1.0`）：
+启动成功的标志（`docker compose ps` 中 `echoic` 为 `healthy`，或日志出现 `starting Echoic v0.2.0`）：
 
 ```bash
 curl -fsS http://localhost:8000/api/system/health
-# {"status":"ok","version":"0.1.0","db":"ok","media":"ok","ffmpeg":"ok","worker":"ok","demo_mode":true,...}
+# {"status":"ok","version":"0.2.0","db":"ok","media":"ok","ffmpeg":"ok","worker":"ok","demo_mode":true,...}
 ```
 
 浏览器打开 **http://localhost:8000**。
 
-### 3.1 国内网络加速（可选）
+> 生产环境建议在 `.env` 中固定版本：`ECHOIC_IMAGE_TAG=v0.2.0`（默认 `latest` 会跟随 main 分支构建，升级前请先看 CHANGELOG）。
+
+### 3.1 从源码构建（可选）
+
+适用于开发、定制或无法访问 GHCR 的离线环境：
 
 ```bash
-# 方式一：写入 .env，compose 会作为 build args 传入
+# 本地构建镜像（标签 echoic:local，不覆盖/不依赖官方镜像标签）；首次约 3~8 分钟
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+构建参数（可选，写入 `.env` 即可被 build override 使用）：
+
+| 变量 | 说明 |
+|---|---|
+| `NPM_REGISTRY` | npm 源；默认 `https://registry.npmjs.org`（国内可设 `https://registry.npmmirror.com`） |
+| `PIP_INDEX_URL` | PyPI 源；默认官方，国内可设清华源 |
+| `ECHOIC_LOCAL_IMAGE` | 本地镜像标签，默认 `echoic:local` |
+
+也可以直接 `docker build`：
+
+```bash
+docker build --build-arg NPM_REGISTRY=https://registry.npmjs.org -t echoic:local .
+```
+
+### 3.2 镜像标签与 GHCR 可见性
+
+镜像地址：`ghcr.io/wpcwzy/echoic`（多架构 `linux/amd64` + `linux/arm64`，由 GitHub Actions 自动发布）。
+
+| 标签 | 含义 |
+|---|---|
+| `latest` | main 分支最新构建（默认，适合体验/跟进最新功能） |
+| `v0.2.0` / `0.2` / `0` | 推送 git tag 时自动生成的语义化版本（生产建议固定，如 `v0.2.0`） |
+| `sha-xxxxxxx` | 每次构建的提交标签（可复现 / 回滚） |
+
+- **公开包（当前状态，已验证）**：GHCR 包已设为 Public，匿名 `docker compose pull` / registry manifest 访问均验证通过，无需登录；
+- **若包被改为私有**（匿名拉取返回 403）：先登录再拉取：
+
+  ```bash
+  echo "<GitHub PAT，至少 read:packages 权限>" | docker login ghcr.io -u <GitHub用户名> --password-stdin
+  docker compose pull
+  ```
+
+  一次性改为公开：<https://github.com/users/wpcwzy/packages/container/echoic/settings> → Danger Zone → Change visibility → **Public**；
+  （发布流水线末尾也会用 `GITHUB_TOKEN` 尝试自动设为 public，失败不影响发布。）
+- 验证多架构清单：`docker buildx imagetools inspect ghcr.io/wpcwzy/echoic:latest`。
+
+### 3.3 国内网络加速（仅源码构建需要）
+
+镜像部署只依赖 `ghcr.io`（可用代理/镜像加速）；以下仅适用于 `docker-compose.build.yml` 源码构建：
+
+```bash
+# 方式一：写入 .env，compose build override 会作为 build args 传入
 echo 'NPM_REGISTRY=https://registry.npmmirror.com' >> .env
 echo 'PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple' >> .env
-docker compose build --no-cache echoic   # 或直接 compose up -d --build
+docker compose -f docker-compose.yml -f docker-compose.build.yml build --no-cache echoic
 
 # 方式二：直接 docker build 传参
 docker build \
   --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
   --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-  -t echoic:latest .
+  -t echoic:local .
 ```
 
 > **构建期网络说明**：仓库中的 `frontend/package-lock.json` 目前由国内镜像源
@@ -183,6 +234,7 @@ docker build \
 | `/data/echoic.db`（+ `-wal`/`-shm`） | SQLite 全部业务数据 | **必须** |
 | `/data/media/{uuid}/` | 原始音视频与 `playback.m4a` | **必须** |
 | `/data/secret.key` | JWT / API Key 加密密钥 | **必须**（丢失后已保存的 API Key 无法解密） |
+| `/data/consume/` | v0.2 自动导入监听目录（处理完的原文件会移走/保留策略见日志） | 建议备份（源文件） |
 | PostgreSQL（可选 profile） | 使用 PG 时的业务数据 | 用 `pg_dump` 单独备份 |
 
 ### 6.2 备份
@@ -218,16 +270,20 @@ docker compose up -d
 
 ```bash
 # 1) 先备份（见 6.2）
-# 2) 拉取新代码并重建镜像
-git pull
-docker compose up -d --build
-# 3) 查看日志与健康状态
+# 2) 拉取新镜像（默认 latest；若固定了 ECHOIC_IMAGE_TAG 则拉到对应版本）
+docker compose pull
+# 3) 重建容器（数据卷保留）
+docker compose up -d
+# 4) 查看日志与健康状态
 docker compose logs -f --tail=100 echoic
 curl -fsS http://localhost:8000/api/system/health
 ```
 
-- 数据库表结构由应用启动时自动迁移（SQLite `create_all`；如需精细迁移请先备份）；
-- 旧镜像保留便于回滚：`docker tag echoic:latest echoic:rollback` 后再构建。
+- 语义化版本升级：修改 `.env` 中 `ECHOIC_IMAGE_TAG=v0.3.0` → `docker compose pull && docker compose up -d`；
+- 回滚：把 `ECHOIC_IMAGE_TAG` 改回旧版本（或 `sha-xxxxxxx`）后重复 pull/up；
+- 源码构建环境：`git pull` 后执行
+  `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`；
+- 数据库表结构由应用启动时自动迁移（v0.2 起包含迁移机制；**升级前务必先备份**）。
 
 ---
 
@@ -302,7 +358,9 @@ echo 'ECHOIC_DATABASE_URL=postgresql+psycopg://echoic:echoic@postgres:5432/echoi
 # 让入口脚本等待数据库端口就绪，避免主服务先于 PG 启动导致崩溃重启
 echo 'ECHOIC_WAIT_FOR_DB=true' >> .env
 
-docker compose --profile postgres up -d --build
+# 镜像优先部署（会自动拉取 postgres:16-alpine 与 echoic 镜像）
+docker compose --profile postgres up -d
+# 指定版本/升级时：docker compose --profile postgres pull && docker compose --profile postgres up -d
 ```
 
 注意：
@@ -317,11 +375,11 @@ docker compose --profile postgres up -d --build
 # .env 中关闭内嵌线程
 echo 'ECHOIC_EMBEDDED_WORKER=false' >> .env
 
-# 启动主服务 + worker（worker 复用 echoic:latest 镜像与同一数据卷）
-docker compose --profile worker up -d --build
+# 启动主服务 + worker（worker 复用同一镜像与同一数据卷）
+docker compose --profile worker up -d
 
 # 若同时使用 PostgreSQL：再叠加 --profile postgres，并设置 ECHOIC_WAIT_FOR_DB=true
-docker compose --profile postgres --profile worker up -d --build
+docker compose --profile postgres --profile worker up -d
 ```
 
 - `echoic-worker` 通过 `python -m app.worker` 轮询数据库任务队列；
@@ -368,17 +426,21 @@ ECHOIC_DATA_DIR=/tmp/echoic-e2e ECHOIC_DEMO_SEED=true ECHOIC_SECRET_KEY=e2e-secr
 | 现象 | 排查与解决 |
 |---|---|
 | 容器起不来，`docker compose ps` 显示 `unhealthy` | `docker compose logs echoic --tail=200`；常见原因：`.env` 缺失、端口被占用、数据卷权限 |
+| `docker compose pull` 返回 403 / `denied` | GHCR 包仍为私有：先 `docker login ghcr.io`（PAT 需 `read:packages`），或把包设为 Public（见 §3.2） |
+| `exec format error` / 镜像平台不匹配 | 确认拉取的是多架构镜像（`docker buildx imagetools inspect ghcr.io/wpcwzy/echoic:latest`）；ARM 主机需 Docker 支持 arm64 |
 | `curl /api/system/health` 返回 `ffmpeg: missing` | 镜像内应自带 ffmpeg；自建镜像请确认 `apt-get install ffmpeg` 未失败 |
 | 健康检查 `db: error` / 日志 `database is locked` | SQLite 并发写争用：确认只运行 1 个写进程（关闭内嵌 worker 或用独立 worker 时**不要**同时开内嵌线程）；PG 场景检查 `ECHOIC_DATABASE_URL` |
 | 上传大文件 413 | 调大 `ECHOIC_MAX_UPLOAD_MB`，并同步反向代理 `client_max_body_size` |
 | 上传返回 415 | 扩展名/编码不支持；支持 mp3/wav/m4a/aac/ogg/webm/mp4/mov/mkv，先用 `ffprobe` 验证文件完整性 |
 | 任务一直 `queued` | worker 未运行：默认内嵌线程应自动启动；检查日志 `worker started`；独立 worker 场景确认 `echoic-worker` 容器在跑 |
 | 任务 `failed` 且提示 ASR/LLM 连接失败 | 「设置 → AI 服务」点「测试连接」；检查 base_url / Key / 出站网络；日志中不含明文 Key |
+| 放入 consume 目录的文件未自动导入（v0.2） | 确认 `ECHOIC_CONSUME_ENABLED=true`、目录在容器内可写（默认 `/data/consume`）、扩展名受支持；查看日志 `consume`；修改 `ECHOIC_CONSUME_INTERVAL_SEC` 可调整扫描间隔；归属用户由 `ECHOIC_CONSUME_OWNER_USERNAME` 指定（空=首个管理员） |
+| 公开分享链接无法解锁 | 检查 `ECHOIC_SHARE_COOKIE_HOURS`（默认 2 小时）与链接是否过期；分享解锁 Cookie 仅对该分享记录有效 |
 | 登录 429 | 登录限速 5 次/分钟/IP；等待 1 分钟，或确认反向代理传递了真实 `X-Forwarded-For` |
 | 麦克风无法录音 | 非 HTTPS 且非 localhost 时浏览器禁止 `getUserMedia`；配置 HTTPS 或改用文件上传 |
 | 忘记管理员密码 | 停止服务 → 用 sqlite 删除/重置用户后重启会重建管理员：`docker compose exec echoic python -c "..."`（或恢复备份）；更简单：删除空库重来仅适用于演示数据场景 |
 | API Key 解密失败 | `secret.key` 与数据库不匹配（更换过卷/密钥）；在设置页重新填写 Key |
-| 浏览器打开是 404 / 空白 | 构建产物缺失：确认 `docker build` 前端阶段成功；本地运行需设置 `ECHOIC_STATIC_DIR` 或先 `npm run build` |
+| 浏览器打开是 404 / 空白 | 官方镜像自带前端产物；若源码构建，确认 Dockerfile 前端阶段成功；本地非 Docker 运行需设置 `ECHOIC_STATIC_DIR` 或先 `npm run build` |
 | 中文文件名导出乱码 | 导出使用 RFC5987 `filename*`，确保反向代理未改写 `Content-Disposition` |
 
 日志与诊断：
@@ -402,11 +464,23 @@ docker stats echoic                           # 资源占用
 - [ ] 限制 API Key 权限范围，优先使用可随时吊销的子账号 Key；
 - [ ] 如部署在公网：结合防火墙限制来源 IP、启用登录限速与 fail2ban；
 - [ ] 关注上传上限与磁盘水位，防止磁盘写满导致 SQLite 损坏；
-- [ ] 多用户/团队权限、分享链接等能力尚未实现（见 Roadmap），**当前定位为单管理员私有部署**。
+- [ ] v0.2 多用户 / 分享能力默认关闭或受限：保持 `ECHOIC_ALLOW_REGISTRATION=false`（禁止匿名注册），按需在用户管理创建账号；公开分享链接只在需要时创建，并注意 `ECHOIC_SHARE_COOKIE_HOURS` 时效；
+- [ ] 定期 `docker compose pull` 获取安全更新（或固定语义化版本并关注 [CHANGELOG](../CHANGELOG.md)）。
 
 ---
 
 ## 13. 构建与镜像说明
+
+### 13.1 官方镜像（推荐）
+
+- 地址：`ghcr.io/wpcwzy/echoic`，多架构 `linux/amd64` + `linux/arm64`；
+- 由 GitHub Actions 自动构建发布：[`.github/workflows/docker-publish.yml`](../.github/workflows/docker-publish.yml)
+  （QEMU + Buildx、GHCR 登录、BuildKit GHA 缓存、provenance 构建证明、latest/semver/sha 标签）；
+- CI 构建参数：`NPM_REGISTRY=https://registry.npmjs.org`、`PIP_INDEX_URL=https://pypi.org/simple`；
+- 发布新版本：推送 `v*` tag 即可（详见 [README 容器镜像与 CI/CD](../README.md#容器镜像与-cicd)）；
+- 首次发布后需将 GHCR 包可见性设为 Public（见 §3.2）。
+
+### 13.2 源码构建（本地自建镜像）
 
 `Dockerfile` 为两阶段构建：
 
@@ -431,7 +505,7 @@ Stage 2  python:3.12-slim    runtime
 - 入口脚本负责：数据目录可写校验、可选等待数据库、`exec` 主进程（信号直达）；
 - 可自定义构建参数：`NODE_VERSION`、`PYTHON_VERSION`、`NPM_REGISTRY`、`PIP_INDEX_URL`；
 - 镜像内以非 root（uid 1000）运行；bind mount 宿主机目录时需 `sudo chown -R 1000:1000 <目录>`；
-- 本仓库开发环境无 Docker CLI，Dockerfile 仅做静态审查 + YAML 解析校验（见 `e2e/REPORT.md`）。
+- 本仓库开发机无 Docker CLI，本地未运行过容器；但官方镜像已由 GitHub Actions 在真实 Docker 环境**成功构建并推送 GHCR**（多架构），首次 Actions 运行记录见 GitHub Actions 页面。
 
 ---
 
