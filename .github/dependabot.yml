@@ -4,7 +4,8 @@
 #   - npm：frontend/package.json + lockfile（每周）
 #   - github-actions：.github/workflows/*（每周）
 #   - docker：Dockerfile 基础镜像（每周）
-# 分组策略：minor/patch 合并为一个 PR，major 单独 PR 便于评审。
+# 策略：minor/patch 合并为单个 PR；**忽略 semver-major**（主版本升级涉及兼容性改造，
+#       v0.2/P1 开发期由维护者按需手动升级，避免 PR 噪音）。
 # 注意：e2e/package-lock.json 不入库（本地工具目录），故不配置其更新。
 # ============================================================================
 version: 2
@@ -20,12 +21,15 @@ updates:
       day: "monday"
       time: "04:00"
       timezone: "Asia/Shanghai"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "backend"
     commit-message:
       prefix: "deps(backend)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       python-minor-patch:
         patterns: ["*"]
@@ -41,12 +45,15 @@ updates:
       day: "monday"
       time: "04:30"
       timezone: "Asia/Shanghai"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "frontend"
     commit-message:
       prefix: "deps(frontend)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-minor-patch:
         patterns: ["*"]
@@ -62,12 +69,15 @@ updates:
       day: "monday"
       time: "05:00"
       timezone: "Asia/Shanghai"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 2
     labels:
       - "dependencies"
       - "ci"
     commit-message:
       prefix: "deps(actions)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       actions-minor-patch:
         patterns: ["*"]
@@ -83,9 +93,16 @@ updates:
       day: "monday"
       time: "05:30"
       timezone: "Asia/Shanghai"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 1
     labels:
       - "dependencies"
       - "docker"
     commit-message:
       prefix: "deps(docker)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
