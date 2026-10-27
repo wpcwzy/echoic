@@ -11,7 +11,7 @@
 > Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
 - Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
-- Version: **v0.3.4** — P1 complete (dark theme, trash & batch, object storage, live transcription Beta, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
+- Version: **v0.3.5** — P1 complete (dark theme, trash & batch, object storage, live transcription Beta, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
 - License: MIT
 
 ## 📸 Screenshots
@@ -74,6 +74,7 @@
 | 🗑 Trash & batch operations | Soft delete with 30-day retention, restore or permanently purge, automatic share revocation; multi-select batch trash/restore/purge/reprocess/tag, partial-success reporting and undo toast |
 | 🪣 Object storage | Pluggable `local` / S3-compatible backend (MinIO); pipeline staging, Range media proxy, optional presigned redirects, delete cascades and local↔S3 migration CLI |
 | 🎙 Live transcription (Beta) | In-browser live captions via WebSocket + PCM worklet; mock provider offline, DashScope paraformer-realtime provider; merge policies `replace` / `promote` into the final transcript |
+| 🗣 Independent ASR slots | File transcription (whole recording, speaker diarization) and realtime captions can use separate providers / models / API keys / regions simultaneously; realtime defaults to reusing the file-transcription key |
 | 🔎 Semantic & hybrid search | Vector index over transcript chunks (numpy by default, experimental pgvector), hybrid RRF retrieval with ACL; semantic search UI, index status/rebuild, and hybrid RAG for AI Q&A |
 | 📤 Export | Transcript export as TXT / SRT / Markdown / JSON |
 | 🐳 One-command deploy | Prebuilt multi-arch **GHCR image** (amd64/arm64, published by CI) + image-first docker compose: `pull && up -d`; source builds supported; optional standalone worker / PostgreSQL |
@@ -197,7 +198,7 @@ docker pull ghcr.io/wpcwzy/echoic:latest
 |---|---|---|
 | GitHub Actions CI | **Passing**: backend pytest + frontend tsc/vite build; PR also validates the amd64 image build | [CI runs](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
 | Multi-arch image publish | **Succeeded**: linux/amd64 + linux/arm64 pushed to GHCR (`latest` / `sha-*`; semver tags on releases) | [Publish runs](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR package](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
-| Backend tests | **401 passed** (v0.1 129 + v0.2 + v0.3 trash/live/vector/storage/migrations); includes a moto S3 end-to-end upload → pipeline → Range test | `cd backend && .venv/bin/pytest -q` |
+| Backend tests | **406 passed** (v0.1 129 + v0.2 + v0.3 trash/live/vector/storage/migrations); includes a moto S3 end-to-end upload → pipeline → Range test | `cd backend && .venv/bin/pytest -q` |
 | Frontend build | **Passing** (`tsc --noEmit` clean; ~613 KB JS + 22 KB CSS gzipped) | `cd frontend && npm run build` |
 | End-to-end smoke (mock, fresh database) | v0.1 **30/30** + v0.2 **34/34** + v0.3 **34/34 PASS**: trash/batch invariants, live mock WebSocket → upload → replace/promote merge, vector reindex + semantic/hybrid search with ACL, storage Range, regression suites | [`e2e/REPORT-v0.3.md`](e2e/REPORT-v0.3.md) |
 | UI screenshot audit | v0.1 6/6 + v0.2 7/7 + v0.3 8/8 (light/dark, desktop/mobile), no overflow, no uncaught exceptions, no 5xx | [`docs/screenshots/`](docs/screenshots/) · [`docs/screenshots/v0.3/`](docs/screenshots/v0.3/) |
@@ -268,8 +269,9 @@ Everything is configurable through `ECHOIC_*` environment variables or `.env` (s
 | `ECHOIC_CONSUME_DIR` | empty (`<data>/consume`) | v0.2: consume directory (`/data/consume` in Docker, persisted with the data volume) |
 | `ECHOIC_CONSUME_INTERVAL_SEC` | `15` | v0.2: consume scan interval (seconds) |
 | `ECHOIC_CONSUME_OWNER_USERNAME` | empty (first admin) | v0.2: owner of imported recordings |
-| `ECHOIC_ASR_PROVIDER` / `ECHOIC_LLM_PROVIDER` | `mock` / `mock` | AI providers (`mock` / `dashscope_realtime` / `openai` …) |
-| `ECHOIC_ASR_API_KEY` / `ECHOIC_LLM_API_KEY` | empty | Provider keys (seeded into the database on first start; settings UI takes precedence) |
+| `ECHOIC_ASR_PROVIDER` / `ECHOIC_LLM_PROVIDER` | `mock` / `mock` | File-transcription / LLM providers (`mock` / `dashscope_file` / `openai` …) |
+| `ECHOIC_REALTIME_ASR_PROVIDER` | `auto` | Realtime caption provider (`auto` / `mock` / `dashscope_realtime`; auto reuses the file-transcription key) |
+| `ECHOIC_ASR_API_KEY` / `ECHOIC_REALTIME_ASR_API_KEY` / `ECHOIC_LLM_API_KEY` | empty | Provider keys (seeded into the database on first start; settings UI takes precedence) |
 
 > Note: `ECHOIC_*AI*` values from `.env` are written into the database **only on first start**. Change them later in **Settings** (effective immediately, keys encrypted at rest).
 

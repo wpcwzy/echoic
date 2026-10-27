@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Echoic"
-    version: str = "0.3.4"
+    version: str = "0.3.5"
     debug: bool = False
     log_level: str = "INFO"
 
@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     asr_model: str = ""
     asr_language: str = "zh"
     asr_diarization: bool = True
+    # v0.3.5: independent realtime ASR configuration (fallback to the ASR key/base when empty)
+    realtime_asr_provider: str = "auto"
+    realtime_asr_api_key: str = ""
+    realtime_asr_base_url: str = ""
+    realtime_asr_model: str = ""
+    realtime_asr_language: str = "zh"
 
     llm_provider: str = "mock"
     llm_api_key: str = ""

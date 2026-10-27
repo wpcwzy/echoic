@@ -201,6 +201,9 @@ interface JobInfo { id: number; status: 'queued'|'running'|'done'|'failed'|'canc
   "ai": {
     "asr":  { "provider":"mock", "base_url":"", "model":"", "language":"zh", "diarization":true,
               "has_api_key":false, "api_key_masked":"", "configured":true },
+    "realtime_asr": { "provider":"auto", "base_url":"wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+              "model":"paraformer-realtime-v2", "language":"zh",
+              "has_api_key":false, "api_key_masked":"", "configured":false },
     "llm":  { "provider":"mock", "base_url":"", "model":"", "temperature":0.3,
               "has_api_key":false, "api_key_masked":"", "configured":true },
     "embeddings": { "provider":"none", "base_url":"", "model":"", "dimensions":1024,
@@ -208,10 +211,11 @@ interface JobInfo { id: number; status: 'queued'|'running'|'done'|'failed'|'canc
   },
   "prompts": { "summary":"…","chapters":"…","viewpoint_tree":"…","suggested_questions":"…","chat":"…" },
   "system": { "demo_mode":true, "auto_process":true, "max_upload_mb":2048, "default_language":"zh",
-              "version":"0.1.0", "worker": { "embedded":true, "running":true, "queue_depth":0 } }
+              "live_enabled":true, "live_merge_mode":"replace", "version":"0.3.5",
+              "worker": { "embedded":true, "running":true, "queue_depth":0 } }
 }
 ```
-- `provider` 取值：ASR：`mock|dashscope_file|dashscope_realtime|openai`；LLM：`mock|openai`（`openai` 兼容 DashScope/DeepSeek/Ollama/vLLM，靠 base_url 区分）；embeddings：`none|openai|dashscope`。
+- `provider` 取值：ASR（文件转写）：`mock|dashscope_file|dashscope_realtime|openai`；`realtime_asr`（录音页实时字幕）：`auto|dashscope_realtime|mock`，`auto` 且 Key 留空时复用文件转写的 Key；LLM：`mock|openai`（`openai` 兼容 DashScope/DeepSeek/Ollama/vLLM，靠 base_url 区分）；embeddings：`none|openai|dashscope`。
 - API Key 仅返回掩码（如 `sk-****3f9a`）；空串表示未配置。
 
 ### PUT /api/settings
@@ -227,7 +231,7 @@ interface JobInfo { id: number; status: 'queued'|'running'|'done'|'failed'|'canc
 → `200` 同 GET。
 ### POST /api/settings/test
 ```json
-{ "kind": "llm", "draft": { "provider":"openai","base_url":"...","model":"...","api_key":"sk-xxx" } }
+{ "kind": "llm | asr | realtime_asr | embeddings", "draft": { "provider":"openai","base_url":"...","model":"...","api_key":"sk-xxx" } }
 ```
 draft 可选，用未保存的配置测试。→ `{ "ok": true, "latency_ms": 812, "message": "连接成功，模型响应正常" }`；失败 `{ok:false,message:"..."}`（HTTP 仍 200）。
 ### POST /api/settings/prompts/reset → 恢复默认提示词 → GET settings 结构。

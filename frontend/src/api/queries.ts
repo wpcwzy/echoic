@@ -307,7 +307,7 @@ export function useTestProvider() {
   return useMutation<
     ProviderTestResult,
     Error,
-    { kind: 'asr' | 'llm' | 'embeddings'; draft: Record<string, unknown> }
+    { kind: 'asr' | 'realtime_asr' | 'llm' | 'embeddings'; draft: Record<string, unknown> }
   >({
     mutationFn: (payload) => api.post<ProviderTestResult>('/api/settings/test', payload),
   })

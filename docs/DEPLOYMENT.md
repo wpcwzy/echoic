@@ -241,6 +241,10 @@ curl -fsS http://localhost:8000/api/system/health   # storage 状态应为 ok
 > 若开启实时字幕，最终稿仍会用文件转写（`ECHOIC_LIVE_MERGE_MODE=replace`）。
 > 文件转写开说话人分离时官方建议单文件 ≤2 小时；模型支持与参数详见
 > [百炼说话人分离调研](research/bailian-diarization.md)。
+>
+> v0.3.5 起「设置 → AI 服务」把两者拆成独立卡片：**语音识别 · 文件转写** 与
+> **实时转写 · 录音页字幕**。实时转写默认 `auto`，即复用文件转写的 Key；也可单独填写不同
+> 账号/地域的 Key。实时字幕仍需 `ECHOIC_LIVE_ENABLED=true` 才在录音页显示。
 
 ### 5.3 OpenAI 兼容端点（DeepSeek / Ollama / vLLM / LM Studio …）
 

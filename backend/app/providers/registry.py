@@ -23,6 +23,8 @@ from ..services.settings_store import (
     ASRConfig,
     EmbeddingConfig,
     LLMConfig,
+    RealtimeASRConfig,
+    effective_realtime_config,
     load_ai_config,
 )
 from .base import ASRProvider, EmbeddingProvider, LLMProvider
@@ -172,6 +174,24 @@ def _merged_config(db, kind: str, draft: dict[str, Any] | None) -> tuple[Any, fl
             ),
             0.3,
         )
+    if kind == "realtime_asr":
+        provider = pick("provider", full.realtime_asr.provider)
+        base_url, model = _apply_defaults(
+            "realtime_asr",
+            provider,
+            pick("base_url", full.realtime_asr.base_url),
+            pick("model", full.realtime_asr.model),
+        )
+        return (
+            RealtimeASRConfig(
+                provider=provider,
+                base_url=base_url,
+                model=model,
+                api_key=pick_key(full.realtime_asr.api_key),
+                language=pick("language", full.realtime_asr.language),
+            ),
+            0.3,
+        )
     if kind == "llm":
         provider = pick("provider", full.llm.provider)
         base_url, model = _apply_defaults("llm", provider, pick("base_url", full.llm.base_url), pick("model", full.llm.model))
@@ -221,7 +241,7 @@ async def test_provider(db, kind: str, draft: dict | None = None) -> dict:
     """Return ``{"ok": bool, "latency_ms": int|None, "message": str, "detail": ...}``."""
     started = time.perf_counter()
     kind = (kind or "").strip()
-    if kind not in ("asr", "llm", "embeddings"):
+    if kind not in ("asr", "realtime_asr", "llm", "embeddings"):
         raise ProviderError(f"未知的 provider 类型：{kind}")
     try:
         cfg, temperature = _merged_config(db, kind, draft)
@@ -232,6 +252,28 @@ async def test_provider(db, kind: str, draft: dict | None = None) -> dict:
         return {"ok": False, "latency_ms": None, "message": f"读取配置失败：{type(exc).__name__}"}
 
     try:
+        if kind == "realtime_asr":
+            # Resolve auto/fallback against the saved file-ASR config, then reuse the
+            # realtime check implementation (WebSocket handshake, no audio).
+            full = load_ai_config(db)
+            full.realtime_asr = cfg
+            effective = effective_realtime_config(full)
+            if effective.provider == "mock":
+                return _ok(started, "演示模式：未调用外部实时转写服务", model=effective.model)
+            realtime_cfg = ASRConfig(
+                provider="dashscope_realtime",
+                base_url=effective.base_url,
+                model=effective.model,
+                api_key=effective.api_key,
+                language=effective.language,
+                diarization=False,
+            )
+            provider = build_asr_provider(realtime_cfg)
+            check = getattr(provider, "check", None)
+            if callable(check):
+                message = await asyncio.wait_for(check(), timeout=60)
+                return _ok(started, str(message), model=effective.model)
+            return _ok(started, "连接成功，实时转写服务可用", model=effective.model)
         if kind == "llm":
             provider = build_llm_provider(cfg)
             if cfg.provider == "mock":

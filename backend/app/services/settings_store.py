@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_PROVIDERS: dict[str, set[str]] = {
     "asr": {"mock", "dashscope_realtime", "dashscope_file", "openai"},
+    # v0.3.5: realtime ASR is configured independently from the file/upload ASR.
+    # "auto" reuses the file ASR DashScope key/base when realtime.api_key is empty.
+    "realtime_asr": {"auto", "mock", "dashscope_realtime"},
     "llm": {"mock", "openai"},
     "embeddings": {"none", "openai", "dashscope", "mock"},
 }
@@ -23,6 +26,11 @@ DEFAULT_BASE_URLS: dict[str, dict[str, str]] = {
         "dashscope_realtime": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
         "dashscope_file": "https://dashscope.aliyuncs.com",
         "openai": "https://api.openai.com/v1",
+    },
+    "realtime_asr": {
+        "auto": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+        "dashscope_realtime": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+        "mock": "",
     },
     "llm": {"openai": "https://api.openai.com/v1"},
     "embeddings": {
@@ -37,6 +45,11 @@ DEFAULT_MODELS: dict[str, dict[str, str]] = {
         "dashscope_file": "paraformer-v2",
         "openai": "whisper-1",
     },
+    "realtime_asr": {
+        "auto": "paraformer-realtime-v2",
+        "dashscope_realtime": "paraformer-realtime-v2",
+        "mock": "mock-realtime",
+    },
     "llm": {"openai": "qwen-plus"},
     "embeddings": {
         "openai": "text-embedding-3-small",
@@ -45,7 +58,7 @@ DEFAULT_MODELS: dict[str, dict[str, str]] = {
     },
 }
 
-SETTING_KEYS = ("ai.asr", "ai.llm", "ai.embeddings", "prompts", "system")
+SETTING_KEYS = ("ai.asr", "ai.realtime_asr", "ai.llm", "ai.embeddings", "prompts", "system")
 
 
 @dataclass
@@ -56,6 +69,15 @@ class ASRConfig:
     api_key: str = ""
     language: str = "zh"
     diarization: bool = True
+
+
+@dataclass
+class RealtimeASRConfig:
+    provider: str = "auto"
+    base_url: str = ""
+    model: str = ""
+    api_key: str = ""
+    language: str = "zh"
 
 
 @dataclass
@@ -79,6 +101,7 @@ class EmbeddingConfig:
 @dataclass
 class AIConfig:
     asr: ASRConfig = field(default_factory=ASRConfig)
+    realtime_asr: RealtimeASRConfig = field(default_factory=RealtimeASRConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     embeddings: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     prompts: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_PROMPTS))
@@ -98,6 +121,13 @@ def _env_defaults() -> dict[str, dict[str, Any]]:
             "api_key_enc": encrypt_secret(settings.asr_api_key),
             "language": settings.asr_language,
             "diarization": settings.asr_diarization,
+        },
+        "ai.realtime_asr": {
+            "provider": settings.realtime_asr_provider,
+            "base_url": settings.realtime_asr_base_url,
+            "model": settings.realtime_asr_model,
+            "api_key_enc": encrypt_secret(settings.realtime_asr_api_key),
+            "language": settings.realtime_asr_language,
         },
         "ai.llm": {
             "provider": settings.llm_provider,
@@ -161,7 +191,13 @@ def ensure_default_settings(db) -> None:
 
 
 def _apply_provider_defaults(kind: str, data: dict[str, Any]) -> dict[str, Any]:
-    provider = data.get("provider") or ("none" if kind == "embeddings" else "mock")
+    if kind == "embeddings":
+        fallback = "none"
+    elif kind == "realtime_asr":
+        fallback = "auto"
+    else:
+        fallback = "mock"
+    provider = data.get("provider") or fallback
     if not data.get("base_url"):
         data["base_url"] = DEFAULT_BASE_URLS.get(kind, {}).get(provider, "")
     if not data.get("model"):
@@ -172,6 +208,7 @@ def _apply_provider_defaults(kind: str, data: dict[str, Any]) -> dict[str, Any]:
 def load_ai_config(db) -> AIConfig:
     ensure_default_settings(db)
     asr_raw = _apply_provider_defaults("asr", dict(_get_value(db, "ai.asr")))
+    realtime_raw = _apply_provider_defaults("realtime_asr", dict(_get_value(db, "ai.realtime_asr")))
     llm_raw = _apply_provider_defaults("llm", dict(_get_value(db, "ai.llm")))
     emb_raw = _apply_provider_defaults("embeddings", dict(_get_value(db, "ai.embeddings")))
     system_raw = dict(_get_value(db, "system"))
@@ -184,6 +221,13 @@ def load_ai_config(db) -> AIConfig:
         api_key=decrypt_secret(asr_raw.get("api_key_enc", "")),
         language=asr_raw.get("language") or "zh",
         diarization=bool(asr_raw.get("diarization", True)),
+    )
+    realtime_asr = RealtimeASRConfig(
+        provider=realtime_raw.get("provider", "auto"),
+        base_url=realtime_raw.get("base_url", ""),
+        model=realtime_raw.get("model", ""),
+        api_key=decrypt_secret(realtime_raw.get("api_key_enc", "")),
+        language=realtime_raw.get("language") or "zh",
     )
     llm = LLMConfig(
         provider=llm_raw.get("provider", "mock"),
@@ -209,7 +253,14 @@ def load_ai_config(db) -> AIConfig:
         "max_upload_mb": int(system_raw.get("max_upload_mb", settings.max_upload_mb) or settings.max_upload_mb),
         "allow_registration": bool(system_raw.get("allow_registration", settings.allow_registration)),
     }
-    return AIConfig(asr=asr, llm=llm, embeddings=embeddings, prompts=prompts, system=system)
+    return AIConfig(
+        asr=asr,
+        realtime_asr=realtime_asr,
+        llm=llm,
+        embeddings=embeddings,
+        prompts=prompts,
+        system=system,
+    )
 
 
 def _provider_out(kind: str, raw: dict[str, Any]) -> dict[str, Any]:
@@ -224,8 +275,9 @@ def _provider_out(kind: str, raw: dict[str, Any]) -> dict[str, Any]:
         "api_key_masked": mask_secret(api_key),
         "configured": configured,
     }
-    if kind == "asr":
+    if kind in ("asr", "realtime_asr"):
         data["language"] = raw.get("language") or "zh"
+    if kind == "asr":
         data["diarization"] = bool(raw.get("diarization", True))
     if kind == "llm":
         data["temperature"] = float(raw.get("temperature", 0.3) or 0.3)
@@ -246,6 +298,7 @@ def masked_settings(db) -> dict[str, Any]:
     return {
         "ai": {
             "asr": _provider_out("asr", _get_value(db, "ai.asr")),
+            "realtime_asr": _provider_out("realtime_asr", _get_value(db, "ai.realtime_asr")),
             "llm": _provider_out("llm", _get_value(db, "ai.llm")),
             "embeddings": _provider_out("embeddings", _get_value(db, "ai.embeddings")),
         },
@@ -264,6 +317,9 @@ def masked_settings(db) -> dict[str, Any]:
                 "dir": str(settings.consume_path),
                 "interval_sec": int(settings.consume_interval_sec),
             },
+            "live_enabled": bool(settings.live_enabled),
+            "live_merge_mode": settings.live_merge_mode,
+            "live_max_minutes": int(settings.live_max_minutes or 60),
             "version": settings.version,
             "worker": {
                 "embedded": settings.embedded_worker,
@@ -310,11 +366,11 @@ def _merge_provider(
         merged["base_url"] = _validate_base_url(str(patch.get("base_url") or ""))
     if "model" in patch:
         merged["model"] = str(patch.get("model") or "")[:120]
-    if kind == "asr":
+    if kind in ("asr", "realtime_asr"):
         if "language" in patch:
             merged["language"] = str(patch.get("language") or "zh")[:16]
-        if "diarization" in patch:
-            merged["diarization"] = bool(patch["diarization"])
+    if kind == "asr" and "diarization" in patch:
+        merged["diarization"] = bool(patch["diarization"])
     if kind == "llm" and "temperature" in patch:
         try:
             temperature = float(patch["temperature"])
@@ -343,7 +399,7 @@ def update_settings(db, payload: dict[str, Any]) -> None:
         raise bad_request("请求体格式错误")
     ai = payload.get("ai") or {}
     if ai:
-        for kind in ("asr", "llm", "embeddings"):
+        for kind in ("asr", "realtime_asr", "llm", "embeddings"):
             patch = ai.get(kind)
             if not patch:
                 continue
@@ -400,7 +456,45 @@ def current_prompts(db) -> dict[str, str]:
     return load_ai_config(db).prompts
 
 
+def effective_realtime_config(cfg: AIConfig) -> RealtimeASRConfig:
+    """Resolve ``ai.realtime_asr`` including ``auto`` fallback to the file ASR.
+
+    ``auto`` (default) uses DashScope realtime when either the realtime slot or
+    the file-transcription slot has a DashScope API key; otherwise mock. An
+    explicitly configured realtime provider wins, and an empty realtime key
+    falls back to the file ASR key/base (same Bailian account is the common case).
+    """
+    realtime = cfg.realtime_asr
+    provider = (realtime.provider or "auto").strip() or "auto"
+    file_dashscope = cfg.asr.provider in ("dashscope_file", "dashscope_realtime")
+    if provider == "auto":
+        # A DashScope file-ASR slot implies the same Bailian account should power
+        # realtime; a missing key is reported later at session creation, not here.
+        use_dashscope = bool(realtime.api_key) or file_dashscope
+        provider = "dashscope_realtime" if use_dashscope else "mock"
+    if provider not in ("dashscope_realtime", "mock"):
+        provider = "mock"
+    api_key = realtime.api_key
+    base_url = realtime.base_url
+    if provider == "dashscope_realtime" and not api_key and file_dashscope:
+        api_key = cfg.asr.api_key
+        if not base_url or "/compatible-mode" in base_url:
+            base_url = cfg.asr.base_url or base_url
+    if provider == "dashscope_realtime" and base_url and "/compatible-mode" in base_url:
+        base_url = ""
+    model = realtime.model or DEFAULT_MODELS["realtime_asr"].get(provider, "paraformer-realtime-v2")
+    return RealtimeASRConfig(
+        provider=provider,
+        base_url=base_url,
+        model=model or "paraformer-realtime-v2",
+        api_key=api_key,
+        language=realtime.language or cfg.asr.language or "zh",
+    )
+
+
 __all__ = [
+    "RealtimeASRConfig",
+    "effective_realtime_config",
     "ASRConfig",
     "LLMConfig",
     "EmbeddingConfig",

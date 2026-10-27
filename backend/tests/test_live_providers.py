@@ -21,7 +21,7 @@ from app.providers.realtime_mock import (
     PARTIAL_INTERVAL_MS,
 )
 from app.services import live as live_service
-from app.services.settings_store import ensure_default_settings
+from app.services.settings_store import ensure_default_settings, update_settings
 
 FRAME = b"\x00\x00" * 1600  # 100 ms of 16 kHz mono PCM16LE
 BYTES_PER_MS = 32
@@ -232,3 +232,68 @@ async def test_dashscope_realtime_connection_error_is_provider_error(monkeypatch
     message = str(excinfo.value)
     assert "sk-test-key" not in message
     assert "连接失败" in message or "启动失败" in message
+
+
+def test_realtime_asr_is_configured_independently(database, monkeypatch):
+    update_settings(
+        database,
+        {
+            "ai": {
+                "asr": {
+                    "provider": "dashscope_file",
+                    "api_key": "sk-file-key-123456",
+                    "base_url": "https://dashscope.aliyuncs.com",
+                    "model": "qwen-audio-3.1-asr-flash-filetrans",
+                },
+                "realtime_asr": {
+                    "provider": "dashscope_realtime",
+                    "api_key": "sk-realtime-key-123456",
+                    "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+                    "model": "paraformer-realtime-v2",
+                    "language": "en",
+                },
+            }
+        },
+    )
+    monkeypatch.setattr(settings, "live_provider", "auto")
+    assert live_service.resolve_live_provider(database) == ("dashscope_realtime", "paraformer-realtime-v2")
+    provider = live_service.build_live_provider(database, "dashscope_realtime")
+    assert provider.api_key == "sk-realtime-key-123456"
+    assert provider.language == "en"
+
+
+def test_auto_realtime_falls_back_to_file_asr_key(database, monkeypatch):
+    update_settings(
+        database,
+        {
+            "ai": {
+                "asr": {
+                    "provider": "dashscope_file",
+                    "api_key": "sk-file-only-key-123456",
+                    "base_url": "https://dashscope.aliyuncs.com",
+                },
+                "realtime_asr": {"provider": "auto", "api_key": "__clear__"},
+            }
+        },
+    )
+    monkeypatch.setattr(settings, "live_provider", "auto")
+    provider, model = live_service.resolve_live_provider(database)
+    assert provider == "dashscope_realtime"
+    assert model == "paraformer-realtime-v2"
+    built = live_service.build_live_provider(database, "dashscope_realtime")
+    assert built.api_key == "sk-file-only-key-123456"
+    assert built.base_url == "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+
+
+def test_explicit_mock_realtime_overrides_file_asr(database, monkeypatch):
+    update_settings(
+        database,
+        {
+            "ai": {
+                "asr": {"provider": "dashscope_file", "api_key": "sk-file-key-123456"},
+                "realtime_asr": {"provider": "mock"},
+            }
+        },
+    )
+    monkeypatch.setattr(settings, "live_provider", "auto")
+    assert live_service.resolve_live_provider(database) == ("mock", "mock-realtime")

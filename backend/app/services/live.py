@@ -47,7 +47,7 @@ from ..models import LiveSegment, LiveSession, User
 from ..providers.realtime_dashscope import DEFAULT_MODEL as DASHSCOPE_DEFAULT_MODEL
 from ..providers.realtime_dashscope import DashScopeRealtimeProvider
 from ..providers.realtime_mock import LiveASRProvider, MockRealtimeProvider
-from .settings_store import load_ai_config
+from .settings_store import effective_realtime_config, load_ai_config
 
 logger = logging.getLogger(__name__)
 
@@ -103,21 +103,17 @@ def resolve_live_provider(db: Session | None = None) -> tuple[str, str]:
             config = load_ai_config(db)
         except Exception:  # noqa: BLE001 - provider resolution must not crash requests
             config = None
-    if raw not in ALLOWED_PROVIDERS:
+    effective = effective_realtime_config(config) if config is not None else None
+    if raw in ("mock", "dashscope_realtime"):
+        provider = raw
+    else:
         if raw not in ("", "auto"):
             logger.warning("unknown ECHOIC_LIVE_PROVIDER=%r, falling back to auto", raw)
-        asr_provider = getattr(getattr(config, "asr", None), "provider", "mock")
-        provider = "mock" if asr_provider == "mock" else "dashscope_realtime"
-    else:
-        provider = raw
+        provider = effective.provider if effective is not None else "mock"
     if provider == "mock":
         return "mock", "mock-realtime"
-    model = ""
-    if config is not None:
-        model = str(getattr(config.asr, "model", "") or "")
-    if not model or model in ("mock-asr", "mock"):
-        model = DASHSCOPE_DEFAULT_MODEL
-    return provider, model
+    model = effective.model if effective is not None else DASHSCOPE_DEFAULT_MODEL
+    return provider, model or DASHSCOPE_DEFAULT_MODEL
 
 
 def live_features(db: Session | None = None) -> dict[str, Any]:
@@ -141,27 +137,30 @@ def build_live_provider(
     provider: str,
     model: str = "",
     *,
-    language: str = "zh",
+    language: str | None = None,
 ) -> LiveASRProvider:
     """Create the streaming provider for a session (no network yet)."""
     if provider == "mock":
-        return MockRealtimeProvider(model=model or "mock-realtime", language=language)
+        return MockRealtimeProvider(model=model or "mock-realtime", language=language or "zh")
     if provider == "dashscope_realtime":
         try:
             config = load_ai_config(db)
         except Exception as exc:  # noqa: BLE001
-            raise ProviderError("无法读取实时转写配置，请先在设置中完成 ASR 配置") from exc
-        api_key = str(config.asr.api_key or "")
+            raise ProviderError("无法读取实时转写配置，请先在设置中完成实时转写配置") from exc
+        effective = effective_realtime_config(config)
+        api_key = str(effective.api_key or "")
         if not api_key:
-            raise ProviderError("实时转写未配置 DashScope API Key，请在设置中填写")
-        base_url = str(config.asr.base_url or "").strip()
+            raise ProviderError(
+                "实时转写未配置 DashScope API Key：可在「设置 → AI 服务 → 实时转写」单独填写，或复用文件转写的 Key"
+            )
+        base_url = str(effective.base_url or "").strip()
         if not base_url or "/compatible-mode" in base_url:  # compatible-mode URL is not the WS endpoint
             base_url = ""
         return DashScopeRealtimeProvider(
             base_url=base_url,
-            model=model or config.asr.model or DASHSCOPE_DEFAULT_MODEL,
+            model=model or effective.model or DASHSCOPE_DEFAULT_MODEL,
             api_key=api_key,
-            language=language,
+            language=language or effective.language or "zh",
         )
     raise ProviderError(f"不支持的实时转写 provider：{provider}")
 
@@ -178,12 +177,15 @@ def create_live_session(
     if not settings.live_enabled:
         raise ApiError(403, "实时转写未启用（管理员可在设置或环境变量中开启）", "LIVE_DISABLED")
     provider, model = resolve_live_provider(db)
-    if provider == "dashscope_realtime" and not str(getattr(load_ai_config(db).asr, "api_key", "") or ""):
-        raise ApiError(
-            400,
-            "实时转写需要 DashScope API Key，请先在设置页配置 ASR 服务商与密钥",
-            "LIVE_PROVIDER_ERROR",
-        )
+    if provider == "dashscope_realtime":
+        effective = effective_realtime_config(load_ai_config(db))
+        if not effective.api_key:
+            raise ApiError(
+                400,
+                "实时转写需要 DashScope API Key：请在「设置 → AI 服务 → 实时转写」填写，"
+                "或复用文件转写的 Key",
+                "LIVE_PROVIDER_ERROR",
+            )
     requested_mode = str(merge_mode or "").strip().lower()
     resolved_mode = requested_mode if requested_mode in ALLOWED_MERGE_MODES else _settings_merge_mode()
     language_value = (language or _default_language(db) or "zh")[:16]

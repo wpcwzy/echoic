@@ -216,7 +216,7 @@ export interface ProviderSettings {
 }
 
 export interface Settings {
-  ai: { asr: ProviderSettings; llm: ProviderSettings; embeddings: ProviderSettings }
+  ai: { asr: ProviderSettings; realtime_asr: ProviderSettings; llm: ProviderSettings; embeddings: ProviderSettings }
   prompts: Record<string, string>
   prompt_overrides: string[]
   system: {
@@ -226,6 +226,8 @@ export interface Settings {
     default_language: string
     allow_registration: boolean
     consume?: { enabled: boolean; dir: string; interval_sec: number }
+    live_enabled?: boolean
+    live_merge_mode?: 'replace' | 'promote'
     version: string
     worker: { embedded: boolean; running: boolean; queue_depth: number }
   }
@@ -314,7 +316,7 @@ export interface SystemInfo {
   consume?: ConsumeInfo
 }
 
-export type AiKind = 'asr' | 'llm' | 'embeddings'
+export type AiKind = 'asr' | 'realtime_asr' | 'llm' | 'embeddings'
 export type AnalysisKindName = 'summary' | 'chapters' | 'viewpoint_tree' | 'insights' | 'action_items' | 'suggested_questions' | 'keywords'
 
 export interface UpdateRecordingPayload {

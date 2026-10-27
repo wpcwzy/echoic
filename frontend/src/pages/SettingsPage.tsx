@@ -82,8 +82,13 @@ const PROVIDER_OPTIONS: Record<AiKind, { label: string; value: string }[]> = {
   asr: [
     { label: '内置演示（Mock）', value: 'mock' },
     { label: '阿里云百炼 · 文件转写', value: 'dashscope_file' },
-    { label: '阿里云百炼 · 实时转写', value: 'dashscope_realtime' },
+    { label: '阿里云百炼 · 实时转写（旧配置兼容，不分离）', value: 'dashscope_realtime' },
     { label: 'OpenAI 兼容接口', value: 'openai' },
+  ],
+  realtime_asr: [
+    { label: '自动（复用文件转写的 Key）', value: 'auto' },
+    { label: '内置演示（Mock）', value: 'mock' },
+    { label: '阿里云百炼 · 实时转写', value: 'dashscope_realtime' },
   ],
   llm: [
     { label: '内置演示（Mock）', value: 'mock' },
@@ -99,11 +104,18 @@ const PROVIDER_OPTIONS: Record<AiKind, { label: string; value: string }[]> = {
 
 const PROVIDER_META: Record<AiKind, { title: string; desc: string; icon: React.ReactNode; modelPlaceholder: string; basePlaceholder: string }> = {
   asr: {
-    title: '语音识别（ASR）',
-    desc: '负责把录音转换成带说话人与时间戳的逐字稿',
+    title: '语音识别 · 文件转写',
+    desc: '处理上传的录音/视频，生成带说话人与时间戳的最终转录（整场会议）',
     icon: <AudioOutlined />,
-    modelPlaceholder: '如 paraformer-v2 / whisper-1',
-    basePlaceholder: 'https://dashscope.aliyuncs.com/api/v1',
+    modelPlaceholder: '如 qwen-audio-3.1-asr-flash-filetrans / paraformer-v2',
+    basePlaceholder: 'https://dashscope.aliyuncs.com',
+  },
+  realtime_asr: {
+    title: '实时转写 · 录音页字幕',
+    desc: '录音页边录边出字（Beta），单独配置；不支持说话人分离，最终稿以文件转写为准',
+    icon: <ThunderboltOutlined />,
+    modelPlaceholder: '如 paraformer-realtime-v2',
+    basePlaceholder: 'wss://dashscope.aliyuncs.com/api-ws/v1/inference',
   },
   llm: {
     title: '大语言模型（LLM）',
@@ -118,6 +130,15 @@ const PROVIDER_META: Record<AiKind, { title: string; desc: string; icon: React.R
     icon: <DatabaseOutlined />,
     modelPlaceholder: '如 text-embedding-v3',
     basePlaceholder: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  },
+}
+
+const REALTIME_ASR_PROVIDER_DEFAULTS: Record<string, { base: string; model: string }> = {
+  auto: { base: 'wss://dashscope.aliyuncs.com/api-ws/v1/inference', model: 'paraformer-realtime-v2' },
+  mock: { base: '', model: 'mock-realtime' },
+  dashscope_realtime: {
+    base: 'wss://dashscope.aliyuncs.com/api-ws/v1/inference',
+    model: 'paraformer-realtime-v2',
   },
 }
 
@@ -172,7 +193,7 @@ export default function SettingsPage() {
   const vectorReindex = useVectorReindex()
 
   const [aiDrafts, setAiDrafts] = useState<Settings['ai'] | null>(null)
-  const [keys, setKeys] = useState<Record<AiKind, string>>({ asr: '', llm: '', embeddings: '' })
+  const [keys, setKeys] = useState<Record<AiKind, string>>({ asr: '', realtime_asr: '', llm: '', embeddings: '' })
   const [promptsDraft, setPromptsDraft] = useState<Record<string, string> | null>(null)
   const [systemDraft, setSystemDraft] = useState<Settings['system'] | null>(null)
   const [testResults, setTestResults] = useState<Partial<Record<AiKind, ProviderTestResult>>>({})
@@ -218,10 +239,10 @@ export default function SettingsPage() {
       base_url: draft.base_url,
       model: draft.model,
     }
-    if (kind === 'asr') {
+    if (kind === 'asr' || kind === 'realtime_asr') {
       payload.language = draft.language ?? 'zh'
-      payload.diarization = draft.diarization ?? true
     }
+    if (kind === 'asr') payload.diarization = draft.diarization ?? true
     if (kind === 'llm') payload.temperature = draft.temperature ?? 0.3
     if (kind === 'embeddings') payload.dimensions = draft.dimensions ?? 1024
     if (keys[kind].trim()) payload.api_key = keys[kind].trim()
@@ -248,10 +269,10 @@ export default function SettingsPage() {
       base_url: draft.base_url,
       model: draft.model,
     }
-    if (kind === 'asr') {
+    if (kind === 'asr' || kind === 'realtime_asr') {
       payload.language = draft.language ?? 'zh'
-      payload.diarization = draft.diarization ?? true
     }
+    if (kind === 'asr') payload.diarization = draft.diarization ?? true
     if (kind === 'llm') payload.temperature = draft.temperature ?? 0.3
     if (kind === 'embeddings') payload.dimensions = draft.dimensions ?? 1024
     if (keys[kind].trim()) payload.api_key = keys[kind].trim()
@@ -412,9 +433,14 @@ export default function SettingsPage() {
           const meta = PROVIDER_META[kind]
           const draft = aiDrafts[kind]
           const result = testResults[kind]
-          const asrDefaults = kind === 'asr' ? ASR_PROVIDER_DEFAULTS[draft.provider] : undefined
-          const basePlaceholder = asrDefaults?.base ?? meta.basePlaceholder
-          const modelPlaceholder = asrDefaults?.model ?? meta.modelPlaceholder
+          const providerDefaults =
+            kind === 'asr'
+              ? ASR_PROVIDER_DEFAULTS[draft.provider]
+              : kind === 'realtime_asr'
+                ? REALTIME_ASR_PROVIDER_DEFAULTS[draft.provider]
+                : undefined
+          const basePlaceholder = providerDefaults?.base ?? meta.basePlaceholder
+          const modelPlaceholder = providerDefaults?.model ?? meta.modelPlaceholder
           return (
             <section className="settings-card" key={kind}>
               <header className="settings-card__head">
@@ -436,6 +462,29 @@ export default function SettingsPage() {
                 </div>
               </header>
 
+              {kind === 'realtime_asr' && (
+                <Alert
+                  type={systemDraft?.live_enabled ? 'info' : 'warning'}
+                  showIcon
+                  style={{ marginBottom: 14 }}
+                  message={systemDraft?.live_enabled ? '实时转写已启用' : '实时转写当前未启用'}
+                  description={
+                    systemDraft?.live_enabled
+                      ? '录音页会显示实时字幕；先点「测试连接」验证实时 WebSocket 可用，再保存。选“自动”时若 API Key 留空，会复用上方文件转写配置的 Key。'
+                      : '需要在 .env 设置 ECHOIC_LIVE_ENABLED=true 并重启服务后，录音页才会出现实时字幕。此处的配置会提前保存，启用后立即生效。'
+                  }
+                />
+              )}
+              {kind === 'asr' && (
+                <Alert
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 14 }}
+                  message="文件转写用于整场录音的最终转录，支持说话人分离"
+                  description="可选择 qwen-audio-3.1-asr-flash-filetrans / paraformer-v2 / fun-asr；录音页的实时字幕在下方单独配置。"
+                />
+              )}
+
               <div className="settings-form-grid">
                 <label className="settings-field">
                   <span className="settings-field__label">服务提供商</span>
@@ -443,17 +492,24 @@ export default function SettingsPage() {
                     value={draft.provider}
                     options={PROVIDER_OPTIONS[kind]}
                     onChange={(value) => {
-                      if (kind !== 'asr') {
+                      if (kind !== 'asr' && kind !== 'realtime_asr') {
                         updateProvider(kind, { provider: value })
                         return
                       }
-                      const defaults = ASR_PROVIDER_DEFAULTS[value]
+                      const defaults =
+                        kind === 'asr' ? ASR_PROVIDER_DEFAULTS[value] : REALTIME_ASR_PROVIDER_DEFAULTS[value]
                       const patch: Partial<ProviderSettings> = { provider: value }
                       if (defaults) {
-                        const knownBases = Object.values(ASR_PROVIDER_DEFAULTS).map((item) => item.base)
-                        const knownModels = Object.values(ASR_PROVIDER_DEFAULTS).map((item) => item.model)
-                        if (!draft.base_url || knownBases.includes(draft.base_url)) patch.base_url = defaults.base
-                        if (!draft.model || knownModels.includes(draft.model)) patch.model = defaults.model
+                        const knownDefaults =
+                          kind === 'asr'
+                            ? Object.values(ASR_PROVIDER_DEFAULTS)
+                            : Object.values(REALTIME_ASR_PROVIDER_DEFAULTS)
+                        if (!draft.base_url || knownDefaults.some((item) => item.base === draft.base_url)) {
+                          patch.base_url = defaults.base
+                        }
+                        if (!draft.model || knownDefaults.some((item) => item.model === draft.model)) {
+                          patch.model = defaults.model
+                        }
                       }
                       updateProvider(kind, patch)
                     }}
@@ -477,13 +533,19 @@ export default function SettingsPage() {
                   {kind === 'asr' && (
                     <span className="settings-field__hint">
                       文件转写填 <code>https://dashscope.aliyuncs.com</code>（不要带 /api/v1 或
-                      /compatible-mode/v1）；实时转写填
-                      <code> wss://dashscope.aliyuncs.com/api-ws/v1/inference</code>，只填域名时服务端会自动补全。
+                      /compatible-mode/v1）；使用工作空间域名时填到域名根即可，服务端会自动补全。
+                    </span>
+                  )}
+                  {kind === 'realtime_asr' && (
+                    <span className="settings-field__hint">
+                      填 <code>wss://dashscope.aliyuncs.com/api-ws/v1/inference</code>，或只填域名
+                      <code> dashscope.aliyuncs.com</code>（服务端自动补全路径）。选“自动”且 API Key
+                      留空时，会复用文件转写配置的 Key。
                     </span>
                   )}
                 </label>
 
-                {kind === 'asr' && (
+                {(kind === 'asr' || kind === 'realtime_asr') && (
                   <>
                     <label className="settings-field">
                       <span className="settings-field__label">识别语言</span>
@@ -493,13 +555,22 @@ export default function SettingsPage() {
                         onChange={(value) => updateProvider(kind, { language: value })}
                       />
                     </label>
-                    <div className="settings-field settings-field--switch">
-                      <span className="settings-field__label">说话人分离（Diarization）</span>
-                      <Switch
-                        checked={draft.diarization ?? true}
-                        onChange={(checked) => updateProvider(kind, { diarization: checked })}
-                      />
-                    </div>
+                    {kind === 'asr' ? (
+                      <div className="settings-field settings-field--switch">
+                        <span className="settings-field__label">说话人分离（Diarization）</span>
+                        <Switch
+                          checked={draft.diarization ?? true}
+                          onChange={(checked) => updateProvider(kind, { diarization: checked })}
+                        />
+                      </div>
+                    ) : (
+                      <div className="settings-field settings-field--wide">
+                        <span className="settings-field__hint">
+                          实时转写不支持说话人分离；若要区分说话人，请用上面的「文件转写」处理整场录音。
+                          最终稿会以文件转写为准（replace 模式）。
+                        </span>
+                      </div>
+                    )}
                   </>
                 )}
 

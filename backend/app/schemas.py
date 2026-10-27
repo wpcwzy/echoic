@@ -339,7 +339,7 @@ class ChatIn(BaseModel):
 
 # ---------------------------------------------------------------- settings
 class ProviderTestIn(BaseModel):
-    kind: Literal["asr", "llm", "embeddings"]
+    kind: Literal["asr", "realtime_asr", "llm", "embeddings"]
     draft: dict[str, Any] | None = None
 
 

@@ -11,7 +11,7 @@
 > 上传或网页录制声音，自动获得**转录稿、AI 纪要、观点树 & 思维导图、章节、关键洞察、待办与 AI 问答**——所有数据都留在你自己的服务器上。
 
 - 定位：paperless-ngx 之于纸质文档 = **Echoic 之于录音**
-- 版本：**v0.3.4**（P1 全部交付：暗色主题 / 回收站与批量 / 对象存储 / 实时转写 Beta / 向量混合检索 + 多用户分享 + GitHub CI + GHCR 多架构镜像）
+- 版本：**v0.3.5**（P1 全部交付：暗色主题 / 回收站与批量 / 对象存储 / 实时转写 Beta / 向量混合检索 + 多用户分享 + GitHub CI + GHCR 多架构镜像）
 - 许可：MIT
 
 ## 📸 界面预览
@@ -74,6 +74,7 @@
 | 🗑 回收站与批量操作 | 软删除（默认保留 30 天）、恢复、彻底删除、删除时自动撤销分享；多选批量移入回收站/恢复/重跑/打标签，部分成功提示与撤销 Toast |
 | 🪣 对象存储 | 可插拔 `local` / S3 兼容（MinIO）后端；管线 staging、Range 媒体代理、可选 307 预签名、删除级联、local↔S3 迁移 CLI |
 | 🎙 实时转写（Beta） | WebSocket + PCM 采集的录音实时字幕；Mock 离线可演示、DashScope paraformer-realtime；`replace` / `promote` 合并策略 |
+| 🗣 ASR 双配置 | 文件转写（整场录音、支持说话人分离）与实时转写（录音页字幕）可分别配置 provider / 模型 / API Key / 地域并同时启用；实时转写默认复用文件转写 Key |
 | 🔎 语义与混合检索 | 转录切片向量索引（默认 numpy，实验性 pgvector）+ RRF 混合检索与 ACL；搜索页语义/混合模式、索引状态与重建、AI 问答混合 RAG |
 | 📤 数据导出 | 转录稿导出 TXT / SRT / Markdown / JSON |
 | 🐳 一键部署 | **GHCR 预构建多架构镜像**（amd64/arm64，CI 自动发布）+ docker compose 镜像优先部署，`pull && up -d` 即用；亦可源码构建；可切独立 worker / PostgreSQL |
@@ -194,7 +195,7 @@ docker pull ghcr.io/wpcwzy/echoic:latest
 |---|---|---|
 | GitHub Actions CI | **通过**：后端 pytest + 前端 tsc/vite 构建；PR 额外验证 amd64 镜像构建 | [CI 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
 | 多架构镜像发布 | **成功**：linux/amd64 + linux/arm64 已推送 GHCR（`latest` / `sha-*`；tag 发布语义化版本） | [Publish 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR 包](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
-| 后端测试 | **401 passed**（v0.1 129 + v0.2 + v0.3 回收站/实时/向量/存储/迁移）；含 moto S3 上传→管线→Range 端到端用例 | `cd backend && .venv/bin/pytest -q` |
+| 后端测试 | **406 passed**（v0.1 129 + v0.2 + v0.3 回收站/实时/向量/存储/迁移）；含 moto S3 上传→管线→Range 端到端用例 | `cd backend && .venv/bin/pytest -q` |
 | 前端构建 | **通过**（`tsc --noEmit` 零错误；gzip ≈ 613 KB JS + 22 KB CSS） | `cd frontend && npm run build` |
 | 端到端冒烟（Mock，全新数据库） | v0.1 **30/30** + v0.2 **34/34** + v0.3 **34/34 PASS**：回收站/批量不变量、实时 Mock WS→上传→replace/promote、向量重建+语义/混合检索 ACL、Range、回归 | [`e2e/REPORT-v0.3.md`](e2e/REPORT-v0.3.md) |
 | UI 截图巡检 | v0.1 6/6 + v0.2 7/7 + v0.3 8/8（明暗、桌面/移动），无溢出、无未捕获异常、无 5xx | [`docs/screenshots/`](docs/screenshots/) · [`docs/screenshots/v0.3/`](docs/screenshots/v0.3/) |
@@ -265,8 +266,9 @@ e2e/                                        端到端冒烟脚本与验收报告
 | `ECHOIC_CONSUME_DIR` | 空（`<data>/consume`） | v0.2：consume 目录（Docker 内即 `/data/consume`，随数据卷持久化） |
 | `ECHOIC_CONSUME_INTERVAL_SEC` | `15` | v0.2：consume 扫描间隔（秒） |
 | `ECHOIC_CONSUME_OWNER_USERNAME` | 空（首个管理员） | v0.2：导入录音归属用户 |
-| `ECHOIC_ASR_PROVIDER` / `ECHOIC_LLM_PROVIDER` | `mock` / `mock` | AI provider（mock / dashscope_realtime / openai …） |
-| `ECHOIC_ASR_API_KEY` / `ECHOIC_LLM_API_KEY` | 空 | 服务商密钥（首次启动写入数据库；网页设置优先） |
+| `ECHOIC_ASR_PROVIDER` / `ECHOIC_LLM_PROVIDER` | `mock` / `mock` | 文件转写 / LLM provider（mock / dashscope_file / openai …） |
+| `ECHOIC_REALTIME_ASR_PROVIDER` | `auto` | 实时字幕 provider（auto / mock / dashscope_realtime；auto 复用文件转写 Key） |
+| `ECHOIC_ASR_API_KEY` / `ECHOIC_REALTIME_ASR_API_KEY` / `ECHOIC_LLM_API_KEY` | 空 | 服务商密钥（首次启动写入数据库；网页设置优先） |
 
 > 提示：`.env` 中的 `ECHOIC_*AI*` 配置**只在首次启动写入数据库**，之后请在「设置」页面修改（即时生效、Key 加密存储）。
 

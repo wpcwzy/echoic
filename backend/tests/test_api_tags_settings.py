@@ -88,10 +88,13 @@ def test_get_settings_shape_and_masking(auth_client, db):
     response = auth_client.get("/api/settings")
     assert response.status_code == 200
     body = response.json()
-    assert set(body["ai"].keys()) == {"asr", "llm", "embeddings"}
+    assert set(body["ai"].keys()) == {"asr", "realtime_asr", "llm", "embeddings"}
     asr = body["ai"]["asr"]
     for key in ("provider", "base_url", "model", "language", "diarization", "has_api_key", "api_key_masked", "configured"):
         assert key in asr
+    realtime_asr = body["ai"]["realtime_asr"]
+    for key in ("provider", "base_url", "model", "language", "has_api_key", "api_key_masked", "configured"):
+        assert key in realtime_asr
     assert body["ai"]["llm"]["temperature"] == 0.3
     assert body["ai"]["embeddings"]["dimensions"] == 1024
     assert set(body["prompts"].keys()) == {
@@ -206,6 +209,69 @@ def test_provider_test_endpoint(auth_client, monkeypatch):
     assert failed.status_code == 200
     assert failed.json()["ok"] is False
     assert "鉴权失败" in failed.json()["message"]
+
+
+
+
+def test_realtime_asr_settings_are_independent(auth_client):
+    file_key = "sk-file-asr-1234567890"
+    realtime_key = "sk-realtime-asr-0987654321"
+    response = auth_client.put(
+        "/api/settings",
+        json={
+            "ai": {
+                "asr": {
+                    "provider": "dashscope_file",
+                    "base_url": "https://dashscope.aliyuncs.com",
+                    "model": "qwen-audio-3.1-asr-flash-filetrans",
+                    "api_key": file_key,
+                    "language": "zh",
+                    "diarization": True,
+                },
+                "realtime_asr": {
+                    "provider": "dashscope_realtime",
+                    "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+                    "model": "paraformer-realtime-v2",
+                    "api_key": realtime_key,
+                    "language": "en",
+                },
+            }
+        },
+    )
+    assert response.status_code == 200, response.text
+    ai = response.json()["ai"]
+    assert ai["asr"]["provider"] == "dashscope_file"
+    assert ai["asr"]["diarization"] is True
+    assert ai["realtime_asr"]["provider"] == "dashscope_realtime"
+    assert ai["realtime_asr"]["language"] == "en"
+    assert ai["realtime_asr"]["has_api_key"] is True
+    assert ("****" in ai["asr"]["api_key_masked"]) and ("****" in ai["realtime_asr"]["api_key_masked"])
+    serialized = response.text
+    assert file_key not in serialized and realtime_key not in serialized
+
+    # auto mode is accepted for the realtime slot
+    auto = auth_client.put("/api/settings", json={"ai": {"realtime_asr": {"provider": "auto"}}})
+    assert auto.status_code == 200
+    assert auto.json()["ai"]["realtime_asr"]["provider"] == "auto"
+
+    invalid = auth_client.put(
+        "/api/settings", json={"ai": {"realtime_asr": {"provider": "dashscope_file"}}}
+    )
+    assert invalid.status_code == 400
+
+
+def test_provider_test_accepts_realtime_asr_kind(auth_client, monkeypatch):
+    async def fake_test(db, kind, draft=None):
+        assert kind == "realtime_asr"
+        return {"ok": True, "latency_ms": 12, "message": "实时转写连接成功", "detail": None}
+
+    monkeypatch.setattr("app.providers.registry.test_provider", fake_test)
+    response = auth_client.post(
+        "/api/settings/test",
+        json={"kind": "realtime_asr", "draft": {"provider": "auto"}},
+    )
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
 
 
 def test_settings_require_auth(client):

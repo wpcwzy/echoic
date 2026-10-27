@@ -2,6 +2,20 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.3.5] - 2026-10-27
+
+### 新增
+
+- **文件转写与实时转写可同时独立配置**：AI 服务页把 ASR 拆成两张卡片——「语音识别 · 文件转写」（整场录音最终转录，支持说话人分离）与「实时转写 · 录音页字幕」（Beta，单说话人）。两者各自保存 provider/base_url/model/API Key/语言，可分别使用不同百炼账号或地域。
+- 实时转写默认 `auto`：未单独填 Key 时自动复用文件转写的 DashScope Key；也可显式选择 `mock` 或单独的 `dashscope_realtime`。新增 `ECHOIC_REALTIME_ASR_*` 环境变量（provider/api_key/base_url/model/language），与 `ECHOIC_ASR_*` 独立。
+- 实时转写卡片会显示当前是否已启用（`ECHOIC_LIVE_ENABLED`）；配置可先保存，开启实时功能后立即生效。测试连接会按 `auto` 规则解析实际使用的 Key/地址。
+- 后端新增独立实时 ASR 配置存储/脱敏/校验、`realtime_asr` 连接测试类型与 7 个相关测试；同步更新 API/部署文档。
+
+### 兼容
+
+- 旧数据的 `ai.asr` 配置保持不变并继续作为文件转写；首次升级会自动初始化 `ai.realtime_asr.provider=auto`，实时字幕会自动复用文件转写的 Key。
+- 文件转写 ASR 下拉保留 `dashscope_realtime` 旧选项（标注“旧配置兼容，不分离”），避免已有配置失效。
+
 ## [0.3.4] - 2026-10-27
 
 ### 新增
