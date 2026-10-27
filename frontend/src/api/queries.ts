@@ -25,6 +25,7 @@ import type {
   SoftDeleteResponse,
   SystemFeatures,
   ProviderTestResult,
+  Tag,
   SearchResult,
 } from '../types'
 
@@ -306,6 +307,16 @@ export function useTags(enabled = true) {
     queryFn: () => api.get<TagListResponse>('/api/tags'),
     enabled,
     staleTime: 5 * 60_000,
+  })
+}
+
+export function useCreateTag() {
+  const queryClient = useQueryClient()
+  return useMutation<Tag, Error, { name: string; color?: string }>({
+    mutationFn: (payload) => api.post<Tag>('/api/tags', payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.tags })
+    },
   })
 }
 

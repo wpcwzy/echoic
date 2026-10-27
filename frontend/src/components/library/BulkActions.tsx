@@ -69,11 +69,9 @@ export function BatchActionBar({
           <Button type="text" danger icon={<DeleteOutlined />} loading={busy} onClick={onTrash}>
             移入回收站
           </Button>
-          {isAdmin && (
-            <Button type="text" icon={<TagsOutlined />} loading={busy} onClick={onTag}>
-              打标签
-            </Button>
-          )}
+          <Button type="text" icon={<TagsOutlined />} loading={busy} onClick={onTag}>
+            打标签
+          </Button>
           <Dropdown
             menu={{ items: reprocessItems, onClick: ({ key }) => onReprocess(key as 'all' | 'asr' | 'insights') }}
             trigger={['click']}
@@ -175,7 +173,7 @@ export function BatchTagDialog({ open, tags, loading, onCancel, onSubmit }: Batc
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有标签，可在录音详情页创建" />
         )}
         <div className="muted-text batch-tag-dialog__hint">
-          标签批量操作仅管理员可用，作用于所选的 {tagIds.length > 0 ? '全部' : '所有'}录音。
+          标签为全站共享；成员只能修改自己录音的标签。尚未创建标签时，可在录音详情页「添加标签」中新建。
         </div>
       </div>
     </Modal>

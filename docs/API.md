@@ -198,8 +198,9 @@ interface JobInfo { id: number; status: 'queued'|'running'|'done'|'failed'|'canc
 ```
 
 ### GET /api/tags → `{ "items": [Tag & { recording_count: number }] }`
-### POST /api/tags → body `{ "name":"论文","color":"#1677ff" }` → `201 Tag`；重名 409。
-### PATCH /api/tags/{id} → `Tag`；### DELETE /api/tags/{id} → `{ "ok": true }`（同时解除关联）
+### POST /api/tags → body `{ "name":"论文","color":"#1677ff" }` → `201 Tag`；重名 409。**所有登录用户可创建自定义标签**。
+### PATCH /api/tags/{id} → `Tag`；### DELETE /api/tags/{id} → `{ "ok": true }`（同时解除关联）；改名/删除仅 admin。
+- 录音标签通过 `PATCH /api/recordings/{id}` 的 `tag_ids` 设置（owner/admin）；批量 `tag_add`/`tag_remove` 对成员仅作用于自己的录音，对他人录音逐项返回失败（不泄露存在性）。
 
 ### GET /api/dashboard
 ```json
@@ -335,7 +336,7 @@ data: {"type":"done","message_id":42}
 ### 9.4 设置
 
 - `GET/PUT /api/settings` 仅 admin；`system` 增加 `allow_registration`、只读 `consume:{enabled,dir,interval_sec}`。
-- 标签写操作（POST/PATCH/DELETE `/api/tags*`）仅 admin；读取所有登录用户可用。
+- 标签：所有登录用户可 **创建** 标签并给自己可见的录音打标签；标签改名/删除仅 admin；读取所有登录用户可用。
 
 ## 8. 引擎/进程行为
 

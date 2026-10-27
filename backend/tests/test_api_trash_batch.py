@@ -466,34 +466,54 @@ def test_batch_reprocess(client, db, monkeypatch):
     assert db.get(Recording, active.id).status == "queued"
 
 
-def test_batch_tag_actions_admin_only(client, db):
+def test_batch_tag_actions_member_scope(client, db):
     admin = _admin(db)
     member, member_token = _member(client, db)
     admin_token = _admin_token(client)
-    first = make_recording(db, title="一", owner_id=admin.id)
-    second = make_recording(db, title="二", owner_id=admin.id)
+    admin_recording = make_recording(db, title="管理员录音", owner_id=admin.id)
+    member_recording = make_recording(db, title="成员录音", owner_id=member.id)
     tag = add_tag(db, "批量标签")
 
+    # A member cannot tag someone else's recording: the item fails without leaking existence.
     forbidden = api_request(
         client,
         member_token,
         "post",
         "/api/recordings/batch",
-        json={"action": "tag_add", "recording_ids": [first.id], "tag_ids": [tag.id]},
+        json={"action": "tag_add", "recording_ids": [admin_recording.id], "tag_ids": [tag.id]},
     )
-    assert forbidden.status_code == 403
-    assert forbidden.json()["code"] == "FORBIDDEN"
+    assert forbidden.status_code == 200
+    assert forbidden.json()["succeeded"] == 0 and forbidden.json()["failed"] == 1
 
+    # Members may tag their own recordings.
+    own = api_request(
+        client,
+        member_token,
+        "post",
+        "/api/recordings/batch",
+        json={"action": "tag_add", "recording_ids": [member_recording.id], "tag_ids": [tag.id]},
+    )
+    assert own.status_code == 200 and own.json()["succeeded"] == 1
+    assert api_request(client, member_token, "get", f"/api/recordings/{member_recording.id}").json()["tags"][0]["name"] == "批量标签"
+    removed_own = api_request(
+        client,
+        member_token,
+        "post",
+        "/api/recordings/batch",
+        json={"action": "tag_remove", "recording_ids": [member_recording.id], "tag_ids": [tag.id]},
+    )
+    assert removed_own.status_code == 200 and removed_own.json()["succeeded"] == 1
+
+    # Admin batch tagging across both records still works.
     added = api_request(
         client,
         admin_token,
         "post",
         "/api/recordings/batch",
-        json={"action": "tag_add", "recording_ids": [first.id, second.id], "tag_ids": [tag.id]},
+        json={"action": "tag_add", "recording_ids": [admin_recording.id, member_recording.id], "tag_ids": [tag.id]},
     )
-    assert added.status_code == 200
-    assert added.json()["succeeded"] == 2
-    for recording_id in (first.id, second.id):
+    assert added.status_code == 200 and added.json()["succeeded"] == 2
+    for recording_id in (admin_recording.id, member_recording.id):
         tags = api_request(client, admin_token, "get", f"/api/recordings/{recording_id}").json()["tags"]
         assert [item["name"] for item in tags] == ["批量标签"]
 
@@ -502,19 +522,17 @@ def test_batch_tag_actions_admin_only(client, db):
         admin_token,
         "post",
         "/api/recordings/batch",
-        json={"action": "tag_remove", "recording_ids": [first.id, second.id], "tag_ids": [tag.id]},
+        json={"action": "tag_remove", "recording_ids": [admin_recording.id, member_recording.id], "tag_ids": [tag.id]},
     )
-    assert removed.status_code == 200
-    assert removed.json()["succeeded"] == 2
-    tags = api_request(client, admin_token, "get", f"/api/recordings/{first.id}").json()["tags"]
-    assert tags == []
+    assert removed.status_code == 200 and removed.json()["succeeded"] == 2
+    assert api_request(client, admin_token, "get", f"/api/recordings/{admin_recording.id}").json()["tags"] == []
 
     missing_tags = api_request(
         client,
         admin_token,
         "post",
         "/api/recordings/batch",
-        json={"action": "tag_add", "recording_ids": [first.id]},
+        json={"action": "tag_add", "recording_ids": [admin_recording.id]},
     )
     assert missing_tags.status_code == 400
     unknown_tags = api_request(
@@ -522,7 +540,7 @@ def test_batch_tag_actions_admin_only(client, db):
         admin_token,
         "post",
         "/api/recordings/batch",
-        json={"action": "tag_add", "recording_ids": [first.id], "tag_ids": [9999]},
+        json={"action": "tag_add", "recording_ids": [admin_recording.id], "tag_ids": [9999]},
     )
     assert unknown_tags.status_code == 400
 

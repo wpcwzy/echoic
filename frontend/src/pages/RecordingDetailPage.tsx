@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Button, Drawer, Dropdown, Input, Modal, Select, Skeleton, Tooltip } from 'antd'
+import { Button, Drawer, Dropdown, Input, Modal, Select, Skeleton, Tag, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -11,12 +11,14 @@ import {
   ExportOutlined,
   InfoCircleOutlined,
   LikeOutlined,
+  PlusOutlined,
   MoreOutlined,
   LinkOutlined,
   ReloadOutlined,
   RobotOutlined,
   ShareAltOutlined,
   SwapOutlined,
+  TagsOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
 import { useQueryClient } from '@tanstack/react-query'
@@ -29,9 +31,11 @@ import {
   useDeleteRecording,
   useInsights,
   useRecording,
+  useCreateTag,
   useRegenerateInsights,
   useReprocessRecording,
   useSystemFeatures,
+  useTags,
   useTranscript,
   useUpdateRecording,
 } from '../api/queries'
@@ -171,6 +175,9 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   const [transferUserId, setTransferUserId] = useState<number | null>(null)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameTitle, setRenameTitle] = useState('')
+  const [tagOpen, setTagOpen] = useState(false)
+  const [tagDraftIds, setTagDraftIds] = useState<number[]>([])
+  const [newTagName, setNewTagName] = useState('')
   const [pollInsights, setPollInsights] = useState(false)
   const pollTimerRef = useRef<number | null>(null)
 
@@ -183,6 +190,8 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   const deleteRecording = useDeleteRecording()
   const regenerate = useRegenerateInsights(id)
   const updateRecording = useUpdateRecording(id)
+  const tagsQuery = useTags(tagOpen)
+  const createTag = useCreateTag()
   const featuresQuery = useSystemFeatures()
   const retentionDays = featuresQuery.data?.trash.retention_days ?? 30
   const currentUser = useAuthStore((state) => state.user)
@@ -402,6 +411,48 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
     )
   }
 
+  const openTagEditor = () => {
+    setTagDraftIds((recording.tags ?? []).map((tag) => tag.id))
+    setNewTagName('')
+    setTagOpen(true)
+  }
+
+  const addNewTag = () => {
+    const name = newTagName.trim()
+    if (!name) {
+      toast.warning('请输入标签名称')
+      return
+    }
+    if (name.length > 30) {
+      toast.warning('标签名称最多 30 个字符')
+      return
+    }
+    createTag.mutate(
+      { name },
+      {
+        onSuccess: (tag) => {
+          setTagDraftIds((prev) => (prev.includes(tag.id) ? prev : [...prev, tag.id]))
+          setNewTagName('')
+          toast.success(`标签「${tag.name}」已创建并选中`)
+        },
+        onError: (error) => toastError(error, '创建标签失败'),
+      },
+    )
+  }
+
+  const saveTags = () => {
+    updateRecording.mutate(
+      { tag_ids: tagDraftIds },
+      {
+        onSuccess: () => {
+          toast.success('标签已更新')
+          setTagOpen(false)
+        },
+        onError: (error) => toastError(error, '保存标签失败'),
+      },
+    )
+  }
+
   const handleTransferOwner = () => {
     if (!transferUserId) {
       toast.warning('请选择新的归属用户')
@@ -517,6 +568,22 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
         <div className="detail-scroll">
           <div className="detail-scroll__inner">
             <DemoModeBanner />
+
+            <div className="detail-tags">
+              <TagsOutlined className="detail-tags__icon" />
+              {(recording.tags ?? []).length > 0 ? (
+                (recording.tags ?? []).map((tag) => (
+                  <Tag key={tag.id} color={tag.color} bordered={false}>
+                    {tag.name}
+                  </Tag>
+                ))
+              ) : (
+                <span className="detail-tags__empty">暂无标签</span>
+              )}
+              <Button type="link" size="small" icon={<PlusOutlined />} onClick={openTagEditor}>
+                {(recording.tags ?? []).length > 0 ? '编辑标签' : '添加标签'}
+              </Button>
+            </div>
 
             {isReady ? (
               <>
@@ -746,6 +813,47 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
           onChange={(event) => setRenameTitle(event.target.value)}
           onPressEnter={handleRename}
         />
+      </Modal>
+
+      <Modal
+        open={tagOpen}
+        title="编辑标签"
+        okText="保存标签"
+        cancelText="取消"
+        confirmLoading={updateRecording.isPending}
+        onOk={saveTags}
+        onCancel={() => setTagOpen(false)}
+        destroyOnClose
+      >
+        <p className="muted-text">标签为全站共享，可用于资料库筛选、搜索与批量操作。</p>
+        <Select
+          mode="multiple"
+          allowClear
+          className="tag-editor__select"
+          placeholder="选择已有标签（可多选）"
+          value={tagDraftIds}
+          loading={tagsQuery.isLoading}
+          options={(tagsQuery.data?.items ?? []).map((tag) => ({
+            value: tag.id,
+            label: tag.name,
+          }))}
+          onChange={(values) => setTagDraftIds(values)}
+        />
+        <div className="tag-editor__create">
+          <Input
+            value={newTagName}
+            maxLength={30}
+            placeholder="新建标签，例如：项目 A / 待跟进 / 重要"
+            onChange={(event) => setNewTagName(event.target.value)}
+            onPressEnter={addNewTag}
+          />
+          <Button icon={<PlusOutlined />} loading={createTag.isPending} onClick={addNewTag}>
+            创建并添加
+          </Button>
+        </div>
+        <p className="muted-text tag-editor__hint">
+          每个录音可添加多个标签；成员可创建标签并为自己的录音打标签（标签改名/删除仅管理员可操作）。
+        </p>
       </Modal>
 
       <Modal

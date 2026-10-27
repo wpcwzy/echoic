@@ -633,8 +633,6 @@ def batch_recordings(
 
     tags: list[Tag] = []
     if action in ("tag_add", "tag_remove"):
-        if not is_admin(user):
-            raise forbidden("仅管理员可以批量修改标签")
         if not payload.tag_ids:
             raise bad_request("tag_ids 不能为空")
         tags = list(db.scalars(select(Tag).where(Tag.id.in_(payload.tag_ids))).all())

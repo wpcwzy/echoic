@@ -537,7 +537,10 @@ def test_member_cannot_use_admin_surfaces(client, db):
     assert api_request(client, token, "get", "/api/system/logs").status_code == 403
     assert api_request(client, token, "post", "/api/system/seed-demo").status_code == 403
     assert api_request(client, token, "post", "/api/system/consume/scan").status_code == 403
-    assert api_request(client, token, "post", "/api/tags", json={"name": "新标签"}).status_code == 403
+    # Members may create custom tags, but cannot rename/delete the global catalogue.
+    created = api_request(client, token, "post", "/api/tags", json={"name": "成员新标签"})
+    assert created.status_code == 201
+    assert created.json()["name"] == "成员新标签"
     assert api_request(client, token, "patch", f"/api/tags/{tag.id}", json={"name": "改名"}).status_code == 403
     assert api_request(client, token, "delete", f"/api/tags/{tag.id}").status_code == 403
     # tag catalogue stays readable for members

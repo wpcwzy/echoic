@@ -1,7 +1,7 @@
 """Tag endpoints (docs/API.md §5).
 
-v0.2: every logged-in user can browse the shared tag catalogue (counts scoped to
-their own recordings); only admins may create/rename/delete tags.
+Every logged-in user can browse the shared tag catalogue and create custom tags;
+tag rename/delete remains admin-only so a member cannot alter global labels.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ def list_tags(
 def create_tag(
     payload: TagCreateIn,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _user: User = Depends(get_current_user),
 ):
     name = payload.name.strip()
     if not name:

@@ -11,7 +11,7 @@
 > Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
 - Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
-- Version: **v0.3.11** — P1 complete + sqlite-vec, live captions GA, registration/profile, auto descriptions (dark theme, trash & batch, object storage, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
+- Version: **v0.3.12** — P1 complete + sqlite-vec, live captions GA, registration/profile, auto descriptions (dark theme, trash & batch, object storage, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
 - License: MIT
 
 ## 📸 Screenshots
@@ -65,6 +65,7 @@
 | 📚 Library | Search / status filters / tags / sorting / stats; global search jumps to the matching transcript segment |
 | 🎧 Player | Drag-to-seek, ±15 s, playback speed, chapter ticks, active-line highlighting, HTTP Range streaming |
 | 👥 Speaker tools | Rename speakers, edit segments, and merge multiple mis-diarized speakers into one (transcript/timestamps preserved) |
+| 🏷 Custom tags | Any user can create tags and add/remove them on recordings (detail editor + batch); tag rename/delete stays admin-only |
 | 💾 Data ownership | SQLite (optional PostgreSQL) + local media directory; backup = archive one data volume |
 | 🔐 Security | HttpOnly cookie JWT, bcrypt passwords, Fernet-encrypted API keys (masked in responses), upload validation, login rate limiting |
 | 👤 Registration & profile | Public /register (gated by admin toggle) with auto-login; self-service /profile for display name/email/password; admin user management unchanged |
