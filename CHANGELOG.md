@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.3.6] - 2026-10-27
+
+### 修复
+
+- **Qwen-Audio Filetrans 临时上传凭证获取失败**：部分文件转写模型（`qwen-audio-3.1-asr-flash-filetrans` 等）调用百炼 `getPolicy` 临时上传凭证接口时会返回 HTTP 200 但 `output` 为空，导致「缺少 upload_host/upload_dir/policy/signature/oss_access_key_id」。现已支持跨模型回退：先尝试当前模型，再回退到 `paraformer-v2`/`fun-asr` 获取通用 OSS 上传凭证（凭证本身与业务模型无关），并递归解析 `output/data/upload_info` 等常见包装；错误信息会附带实际返回摘要，便于排查账号权限。
+- 新增该场景的回归测试；全量后端 407 passed。
+
 ## [0.3.5] - 2026-10-27
 
 ### 新增

@@ -213,8 +213,9 @@ async def test_file_provider_404_has_actionable_message():
     async with httpx.AsyncClient(trust_env=False) as client:
         with pytest.raises(ProviderError) as excinfo:
             await provider._get_policy(client)
-    assert "接口不存在" in excinfo.value.message
+    assert "临时上传凭证获取失败" in excinfo.value.message
     assert "https://dashscope.aliyuncs.com" in excinfo.value.message
+    assert "paraformer-v2" in excinfo.value.message
 
 
 @respx.mock
@@ -238,3 +239,38 @@ async def test_file_provider_falls_back_to_legacy_domain():
     assert result["upload_host"] == "https://oss.example.com"
     assert provider._effective_base == "https://dashscope.aliyuncs.com"
     assert old_route.called and legacy_route.called
+
+
+@respx.mock
+async def test_qwen_filetrans_policy_falls_back_to_paraformer_model():
+    """Qwen-Audio Filetrans returns empty output from getPolicy; use a classic policy model."""
+    policy = {
+        "upload_host": "https://oss.example.com",
+        "upload_dir": "dashscope/asr/tmp",
+        "policy": "p",
+        "signature": "s",
+        "oss_access_key_id": "ak",
+        "x_oss_object_acl": "private",
+        "x_oss_forbid_overwrite": "true",
+    }
+    requested_models: list[str] = []
+
+    def _handler(request):
+        requested_models.append(request.url.params.get("model", ""))
+        if request.url.params.get("model") == "qwen-audio-3.1-asr-flash-filetrans":
+            return httpx.Response(200, json={"output": {}, "request_id": "x"})
+        return httpx.Response(200, json={"output": policy})
+
+    respx.get("https://dashscope.aliyuncs.com/api/v1/uploads").mock(side_effect=_handler)
+    provider = DashScopeFileASRProvider(
+        "https://dashscope.aliyuncs.com",
+        "qwen-audio-3.1-asr-flash-filetrans",
+        "sk-test-key",
+    )
+    async with httpx.AsyncClient(trust_env=False) as client:
+        result = await provider._get_policy(client)
+    assert result["upload_host"] == "https://oss.example.com"
+    assert requested_models[:2] == [
+        "qwen-audio-3.1-asr-flash-filetrans",
+        "paraformer-v2",
+    ]

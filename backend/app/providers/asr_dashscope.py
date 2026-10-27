@@ -422,55 +422,105 @@ class DashScopeFileASRProvider:
             candidates.append(DEFAULT_FILE_BASE_URL)
         return candidates
 
+    def _policy_models(self) -> list[str]:
+        """Models to try for getPolicy, most specific first.
+
+        Some file-transcription models (notably the Qwen-Audio Filetrans
+        family) are not accepted by the legacy temporary-upload-policy
+        endpoint and return HTTP 200 with an empty ``output``. The policy
+        itself is model-agnostic OSS credentials, so fall back to the
+        classic Paraformer/Fun-ASR policy models before giving up.
+        """
+        seen: list[str] = []
+        for model in (self.model, "paraformer-v2", "fun-asr"):
+            value = (model or "").strip()
+            if value and value not in seen:
+                seen.append(value)
+        return seen
+
+    @staticmethod
+    def _find_policy_payload(data: dict) -> dict | None:
+        required = ("upload_host", "upload_dir", "policy", "signature", "oss_access_key_id")
+        queue: list[Any] = [data]
+        seen_ids: set[int] = set()
+        while queue:
+            item = queue.pop(0)
+            if not isinstance(item, dict) or id(item) in seen_ids:
+                continue
+            seen_ids.add(id(item))
+            if all(item.get(key) for key in required):
+                return item
+            for key in ("output", "data", "result", "credentials", "upload_info", "upload", "oss"):
+                nested = item.get(key)
+                if isinstance(nested, dict):
+                    queue.append(nested)
+        return None
+
     async def _get_policy(self, client: httpx.AsyncClient) -> dict:
         last_error: ProviderError | None = None
         attempted: list[str] = []
+        missing_details: list[str] = []
         for candidate in self._policy_candidates():
-            attempted.append(candidate)
-            try:
-                response = await request(
-                    client,
-                    "GET",
-                    api_url(candidate, "/api/v1/uploads"),
-                    provider=self.name,
-                    timeout=30.0,
-                    headers=self._headers(),
-                    params={"action": "getPolicy", "model": self.model},
-                )
-                data = json_or_error(response, self.name)
-            except ProviderError as exc:
-                if getattr(exc, "status_code", None) == 404:
-                    last_error = exc
+            for policy_model in self._policy_models():
+                attempted.append(f"{candidate} model={policy_model}")
+                try:
+                    response = await request(
+                        client,
+                        "GET",
+                        api_url(candidate, "/api/v1/uploads"),
+                        provider=self.name,
+                        timeout=30.0,
+                        headers=self._headers(),
+                        params={"action": "getPolicy", "model": policy_model},
+                    )
+                    data = json_or_error(response, self.name)
+                except ProviderError as exc:
+                    if getattr(exc, "status_code", None) in (401, 403):
+                        raise
+                    if getattr(exc, "status_code", None) == 404:
+                        last_error = exc
+                        logger.warning(
+                            "dashscope_file: policy endpoint 404 on %s, trying fallback if available",
+                            candidate,
+                        )
+                        continue
+                    missing_details.append(f"{candidate} model={policy_model}: {exc.message}")
+                    continue
+                policy = self._find_policy_payload(data)
+                if policy is None:
+                    snippet = redact(str(data))
+                    missing_details.append(f"{candidate} model={policy_model}: 未包含上传凭证（{snippet}）")
                     logger.warning(
-                        "dashscope_file: policy endpoint 404 on %s, trying fallback if available",
-                        candidate,
+                        "dashscope_file: getPolicy returned no usable credentials for model=%s: %s",
+                        policy_model,
+                        snippet,
                     )
                     continue
-                raise
-            output = data.get("output") if isinstance(data.get("output"), dict) else data
-            required = ("upload_host", "upload_dir", "policy", "signature", "oss_access_key_id")
-            missing = [key for key in required if not output.get(key)]
-            if missing:
-                raise ProviderError(
-                    f"DashScope 临时上传凭证返回异常（缺少 {', '.join(missing)}）", provider=self.name
-                )
-            if candidate != self.base_url:
-                logger.warning(
-                    "dashscope_file: custom base_url %s returned 404 for policy; "
-                    "fell back to %s. Consider setting ECHOIC_ASR_BASE_URL=%s.",
-                    self.base_url,
-                    candidate,
-                    candidate,
-                )
-            self._effective_base = candidate
-            return output
+                if candidate != self.base_url:
+                    logger.warning(
+                        "dashscope_file: custom base_url %s failed; fell back to %s. "
+                        "Consider setting ECHOIC_ASR_BASE_URL=%s.",
+                        self.base_url,
+                        candidate,
+                        candidate,
+                    )
+                if policy_model != self.model:
+                    logger.warning(
+                        "dashscope_file: %s is not accepted by the upload-policy endpoint; "
+                        "using model=%s for the temporary OSS policy only.",
+                        self.model,
+                        policy_model,
+                    )
+                self._effective_base = candidate
+                return policy
+        detail = ("；".join(missing_details[-3:]))[:600]
         raise ProviderError(
-            "DashScope 录音文件识别接口不存在（HTTP 404）：请把 ASR Base URL 设为 "
-            "https://dashscope.aliyuncs.com（不要包含 /compatible-mode/v1 或 /api/v1；"
-            "使用工作空间专属域名时填到域名根即可）。"
-            f"当前 Base URL={self.base_url}，模型={self.model}，已尝试={', '.join(attempted)}",
+            "DashScope 临时上传凭证获取失败：请确认 API Key 已开通录音文件识别、Base URL 为 "
+            "https://dashscope.aliyuncs.com（工作空间域名填到域名根）。"
+            f"当前模型={self.model}，已尝试={len(attempted)} 次"
+            + (f"；最后一次返回：{detail}" if detail else "；接口未返回上传凭证"),
             provider=self.name,
-            status_code=404,
+            status_code=404 if last_error is not None and not missing_details else None,
         ) from last_error
 
     async def _upload(self, client: httpx.AsyncClient, audio_path: Path, policy: dict) -> str:
