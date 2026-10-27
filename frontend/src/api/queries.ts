@@ -10,6 +10,7 @@ import type {
   RecordingListParams,
   Settings,
   Speaker,
+  SpeakerMergeResult,
   SystemHealth,
   SystemInfo,
   ConsumeScanResponse,
@@ -250,6 +251,22 @@ export function useUpdateSpeaker(recordingId: number) {
         display_name,
         ...(color ? { color } : {}),
       }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.transcript(recordingId) })
+      void queryClient.invalidateQueries({ queryKey: qk.recording(recordingId) })
+    },
+  })
+}
+
+export function useMergeSpeakers(recordingId: number) {
+  const queryClient = useQueryClient()
+  return useMutation<
+    SpeakerMergeResult,
+    Error,
+    { source_ids: number[]; target_id: number; target_name?: string }
+  >({
+    mutationFn: (payload) =>
+      api.post<SpeakerMergeResult>(`/api/recordings/${recordingId}/speakers/merge`, payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: qk.transcript(recordingId) })
       void queryClient.invalidateQueries({ queryKey: qk.recording(recordingId) })

@@ -153,3 +153,73 @@ def test_export_invalid_format(auth_client, db):
 @pytest.mark.parametrize("suffix", ["/transcript", "/transcript/export?format=txt"])
 def test_transcript_requires_auth(client, suffix):
     assert client.get(f"/api/recordings/1{suffix}").status_code == 401
+
+
+def test_merge_speakers_reassigns_segments_and_deletes_sources(auth_client, db):
+    from app.models import Speaker
+
+    recording, speakers, _segments = _transcript_recording(db)
+    target, source = speakers[0], speakers[1]
+    response = auth_client.post(
+        f"/api/recordings/{recording.id}/speakers/merge",
+        json={"source_ids": [source.id], "target_id": target.id, "target_name": "吴克强（合并）"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["merged_segments"] == 1
+    assert body["deleted_speaker_ids"] == [source.id]
+    assert [item["id"] for item in body["speakers"]] == [target.id]
+    assert body["speakers"][0]["display_name"] == "吴克强（合并）"
+
+    transcript = auth_client.get(f"/api/recordings/{recording.id}/transcript").json()
+    assert [item["id"] for item in transcript["speakers"]] == [target.id]
+    assert all(segment["speaker_id"] == target.id for segment in transcript["segments"])
+    from sqlalchemy import func, select
+
+    assert (
+        db.scalar(select(func.count()).select_from(Speaker).where(Speaker.id == source.id)) == 0
+    )
+    assert [segment["idx"] for segment in transcript["segments"]] == [0, 1, 2]
+
+
+def test_merge_speakers_validation(auth_client, db):
+    recording, speakers, _ = _transcript_recording(db)
+    target = speakers[0]
+    same_target = auth_client.post(
+        f"/api/recordings/{recording.id}/speakers/merge",
+        json={"source_ids": [target.id], "target_id": target.id},
+    )
+    assert same_target.status_code == 400
+    missing = auth_client.post(
+        f"/api/recordings/{recording.id}/speakers/merge",
+        json={"source_ids": [99999], "target_id": target.id},
+    )
+    assert missing.status_code == 400
+    wrong_target = auth_client.post(
+        f"/api/recordings/{recording.id}/speakers/merge",
+        json={"source_ids": [speakers[1].id], "target_id": 99999},
+    )
+    assert wrong_target.status_code == 404
+
+
+def test_merge_speakers_member_cannot_merge_admin_recording(auth_client, db):
+    from app.core.security import hash_password
+    from app.models import User
+
+    recording, speakers, _ = _transcript_recording(db)
+    member = User(
+        username="mergeowner",
+        password_hash=hash_password("memberpass123"),
+        display_name="成员",
+        is_admin=False,
+        role="member",
+    )
+    db.add(member)
+    db.commit()
+    login = auth_client.post("/api/auth/login", json={"username": "mergeowner", "password": "memberpass123"})
+    assert login.status_code == 200
+    response = auth_client.post(
+        f"/api/recordings/{recording.id}/speakers/merge",
+        json={"source_ids": [speakers[1].id], "target_id": speakers[0].id},
+    )
+    assert response.status_code == 404

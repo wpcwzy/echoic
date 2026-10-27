@@ -138,6 +138,20 @@ class SpeakerUpdateIn(BaseModel):
     color: str | None = Field(default=None, max_length=16)
 
 
+class SpeakerMergeIn(BaseModel):
+    """Merge one or more diarization speakers into a target speaker."""
+
+    source_ids: list[int] = Field(min_length=1, max_length=50)
+    target_id: int
+    target_name: str | None = Field(default=None, max_length=120)
+
+
+class SpeakerMergeOut(BaseModel):
+    speakers: list[SpeakerOut] = Field(default_factory=list)
+    merged_segments: int = 0
+    deleted_speaker_ids: list[int] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------- recordings
 class JobInfo(ORMModel):
     id: int

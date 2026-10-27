@@ -143,6 +143,20 @@ interface JobInfo { id: number; status: 'queued'|'running'|'done'|'failed'|'canc
 ```
 → `Speaker`
 
+### POST /api/recordings/{id}/speakers/merge
+当同一个说话人被识别成多个说话人时合并（owner/admin）：
+
+```json
+{ "source_ids": [4, 5], "target_id": 3, "target_name": "吴克强（可选）" }
+```
+
+→ `{ "speakers":[Speaker], "merged_segments": 12, "deleted_speaker_ids":[4,5] }`
+
+- 所有属于 source 的转录片段会改归属 target，source 说话人行删除；转录文字/时间不变；
+- `target_name` 省略时保留目标原名（目标为空时继承某个来源名称）；
+- source/target 必须属于该录音，source 不得包含 target；校验失败 → 400/404；
+- 合并后如需按新说话人重算 AI 分析，请调用重新生成 AI 分析。
+
 ### PATCH /api/recordings/{id}/segments/{segment_id}
 ```json
 { "text": "修改后的文本", "speaker_id": 3 }

@@ -49,6 +49,12 @@ export interface Speaker {
   is_auto: boolean
 }
 
+export interface SpeakerMergeResult {
+  speakers: Speaker[]
+  merged_segments: number
+  deleted_speaker_ids: number[]
+}
+
 export interface JobInfo {
   id: number
   status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'

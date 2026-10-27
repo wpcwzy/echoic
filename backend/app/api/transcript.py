@@ -6,14 +6,22 @@ import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..core.errors import bad_request, not_found
 from ..db import get_db
 from ..deps import get_current_user, get_recording_for_user
 from ..models import Recording, Speaker, TranscriptSegment, User
-from ..schemas import SegmentOut, SegmentUpdateIn, SpeakerOut, SpeakerUpdateIn, TranscriptOut
+from ..schemas import (
+    SegmentOut,
+    SegmentUpdateIn,
+    SpeakerMergeIn,
+    SpeakerMergeOut,
+    SpeakerOut,
+    SpeakerUpdateIn,
+    TranscriptOut,
+)
 from ._common import content_disposition, title_for_download
 
 logger = logging.getLogger(__name__)
@@ -106,6 +114,78 @@ def update_speaker(
         speaker.color = payload.color.strip()[:16] or speaker.color
     db.commit()
     return SpeakerOut.model_validate(speaker)
+
+
+@router.post("/{recording_id}/speakers/merge", response_model=SpeakerMergeOut)
+def merge_speakers(
+    recording_id: int,
+    payload: SpeakerMergeIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Merge diarization speakers that were split by mistake.
+
+    All segments of ``source_ids`` are reassigned to ``target_id`` and the source
+    speaker rows are deleted. User-edited text is untouched. AI analyses built
+    from the previous speaker labels can be regenerated from the UI.
+    """
+    get_recording_for_user(db, user, recording_id)
+    target = db.get(Speaker, payload.target_id)
+    if target is None or target.recording_id != recording_id:
+        raise not_found("目标说话人不存在")
+
+    source_ids: list[int] = []
+    for source_id in payload.source_ids:
+        if source_id == payload.target_id or source_id in source_ids:
+            continue
+        source = db.get(Speaker, source_id)
+        if source is None or source.recording_id != recording_id:
+            raise bad_request(f"说话人 {source_id} 不属于该录音")
+        source_ids.append(source_id)
+    if not source_ids:
+        raise bad_request("请选择至少一个要合并的说话人")
+
+    sources = [db.get(Speaker, source_id) for source_id in source_ids]
+    merged_segments = int(
+        db.execute(
+            update(TranscriptSegment)
+            .where(
+                TranscriptSegment.recording_id == recording_id,
+                TranscriptSegment.speaker_id.in_(source_ids),
+            )
+            .values(speaker_id=target.id)
+        ).rowcount
+        or 0
+    )
+
+    target_name = (payload.target_name or "").strip()[:120]
+    if target_name:
+        target.display_name = target_name
+    elif not (target.display_name or "").strip():
+        # Keep a meaningful name when the target was an auto "说话人N".
+        for source in sources:
+            if source is not None and (source.display_name or "").strip():
+                target.display_name = source.display_name.strip()[:120]
+                break
+    target.is_auto = False
+    db.add(target)
+    for source in sources:
+        if source is not None:
+            db.delete(source)
+    db.commit()
+    db.refresh(target)
+    logger.info(
+        "merged speakers %s into %s for recording %s (%s segments)",
+        source_ids,
+        target.id,
+        recording_id,
+        merged_segments,
+    )
+    return SpeakerMergeOut(
+        speakers=[SpeakerOut.model_validate(item) for item in _speakers_for(db, recording_id)],
+        merged_segments=merged_segments,
+        deleted_speaker_ids=source_ids,
+    )
 
 
 @router.patch("/{recording_id}/segments/{segment_id}", response_model=SegmentOut)

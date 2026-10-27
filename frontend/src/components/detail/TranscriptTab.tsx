@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Dropdown, Input, Modal, Popover, Tooltip } from 'antd'
+import { Button, Dropdown, Input, Modal, Popover, Select, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   CheckOutlined,
@@ -8,13 +8,14 @@ import {
   DownloadOutlined,
   EditOutlined,
   ExportOutlined,
+  MergeCellsOutlined,
   SearchOutlined,
   TeamOutlined,
   ThunderboltOutlined,
   UpOutlined,
 } from '@ant-design/icons'
 import type { RecordingLive, Segment, Speaker, Transcript } from '../../types'
-import { useUpdateSegment, useUpdateSpeaker, exportUrl } from '../../api/queries'
+import { useMergeSpeakers, useUpdateSegment, useUpdateSpeaker, exportUrl } from '../../api/queries'
 import { formatMs } from '../../utils/format'
 import { toast, toastError } from '../../utils/toast'
 import { EmptyState } from '../common/EmptyState'
@@ -146,10 +147,14 @@ export function TranscriptTab({
   const [editText, setEditText] = useState('')
   const [speakerModalOpen, setSpeakerModalOpen] = useState(false)
   const [speakerDraft, setSpeakerDraft] = useState<Record<number, string>>({})
+  const [mergeOpen, setMergeOpen] = useState(false)
+  const [mergeTargetId, setMergeTargetId] = useState<number | null>(null)
+  const [mergeSourceIds, setMergeSourceIds] = useState<number[]>([])
   const rowRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const updateSegment = useUpdateSegment(recordingId)
   const updateSpeaker = useUpdateSpeaker(recordingId)
   const updateSpeakerBulk = useUpdateSpeaker(recordingId)
+  const mergeSpeakers = useMergeSpeakers(recordingId)
 
   const speakers = useMemo(() => transcript?.speakers ?? [], [transcript])
   const speakerMap = useMemo(() => new Map(speakers.map((speaker) => [speaker.id, speaker])), [speakers])
@@ -234,6 +239,34 @@ export function TranscriptTab({
     }
   }
 
+  const openMergeModal = () => {
+    setMergeTargetId(speakers[0]?.id ?? null)
+    setMergeSourceIds([])
+    setMergeOpen(true)
+  }
+
+  const submitMerge = () => {
+    if (!mergeTargetId) {
+      toast.warning('请选择目标说话人')
+      return
+    }
+    const sourceIds = mergeSourceIds.filter((id) => id !== mergeTargetId)
+    if (!sourceIds.length) {
+      toast.warning('请选择至少一个要合并的说话人')
+      return
+    }
+    mergeSpeakers.mutate(
+      { source_ids: sourceIds, target_id: mergeTargetId },
+      {
+        onSuccess: (result) => {
+          toast.success(`已合并 ${sourceIds.length} 个说话人，更新 ${result.merged_segments} 段转录`)
+          setMergeOpen(false)
+        },
+        onError: (mutationError) => toastError(mutationError, '合并说话人失败'),
+      },
+    )
+  }
+
   if (loading) return <TabContentSkeleton rows={6} />
   if (error) {
     return <ErrorState title="转录加载失败" description="转录稿获取失败，请稍后重试。" onRetry={onRetry} />
@@ -273,6 +306,11 @@ export function TranscriptTab({
             <Button icon={<TeamOutlined />} onClick={openSpeakerModal}>
               说话人
             </Button>
+            <Tooltip title={speakers.length < 2 ? '至少需要 2 位说话人才能合并' : '把被误识别的多个说话人合并为一位'}>
+              <Button icon={<MergeCellsOutlined />} disabled={speakers.length < 2} onClick={openMergeModal}>
+                合并说话人
+              </Button>
+            </Tooltip>
             <Dropdown
               menu={{
                 items: exportItems,
@@ -490,6 +528,55 @@ export function TranscriptTab({
               />
             </div>
           ))}
+        </div>
+      </Modal>
+
+      <Modal
+        open={mergeOpen}
+        title="合并说话人"
+        onCancel={() => setMergeOpen(false)}
+        onOk={submitMerge}
+        okText="确认合并"
+        cancelText="取消"
+        confirmLoading={mergeSpeakers.isPending}
+        destroyOnClose
+      >
+        <p className="muted-text">
+          当同一个人被识别成多个说话人时，选择一个目标说话人，把其他说话人合并进去。所有转录片段会归属目标说话人，
+          来源说话人将被删除；转录文字与时间戳不变。AI 纪要/观点树若需要按新说话人重算，可在详情页「重新生成 AI 分析」。
+        </p>
+        <div className="speaker-merge">
+          <label className="speaker-merge__field">
+            <span>目标说话人（合并后保留）</span>
+            <Select
+              value={mergeTargetId ?? undefined}
+              placeholder="选择目标说话人"
+              options={speakers.map((speaker) => ({
+                value: speaker.id,
+                label: `${speaker.display_name || speaker.label}（${speaker.label}）`,
+              }))}
+              onChange={(value) => {
+                setMergeTargetId(value)
+                setMergeSourceIds((prev) => prev.filter((id) => id !== value))
+              }}
+            />
+          </label>
+          <label className="speaker-merge__field">
+            <span>要合并到目标的说话人（可多选）</span>
+            <Select
+              mode="multiple"
+              allowClear
+              value={mergeSourceIds}
+              placeholder="选择被误识别的说话人"
+              options={speakers
+                .filter((speaker) => speaker.id !== mergeTargetId)
+                .map((speaker) => ({
+                  value: speaker.id,
+                  label: `${speaker.display_name || speaker.label}（${speaker.label}）`,
+                }))}
+              onChange={(values) => setMergeSourceIds(values)}
+            />
+          </label>
         </div>
       </Modal>
     </div>

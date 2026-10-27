@@ -7983,3 +7983,24 @@ mark {
   color: var(--brand, #1677ff);
   background: var(--brand-soft, rgba(22, 119, 255, 0.1));
 }
+
+
+/* v0.3.11: merge diarization speakers */
+.speaker-merge {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.speaker-merge__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.speaker-merge__field .ant-select {
+  width: 100%;
+}
