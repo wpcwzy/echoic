@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.utils import format_timestamp, truncate
+from ..db import SessionLocal
 from ..models import Analysis, Recording, Speaker, TranscriptSegment
 from ..providers.base import LLMProvider
 
@@ -562,6 +563,176 @@ def delete_analyses(db: Session, recording_id: int, kinds: list[str] | None = No
     db.commit()
 
 
+# ---------------------------------------------------- recording descriptions
+DESCRIPTION_MAX_CHARS = 120
+DESCRIPTION_MAX_SEGMENTS = 3
+
+_MARKDOWN_PREFIX_RE = re.compile(r"^(?:#{1,6}\s*|[-*+•]\s+|\d+[.)]\s+|>\s*)", re.MULTILINE)
+_MARKDOWN_INLINE_RE = re.compile(r"[*_`~]+")
+_OVERVIEW_HEADING_RE = re.compile(r"^#{1,6}\s*会议概述\s*$")
+_HEADING_RE = re.compile(r"^#{1,6}\s")
+
+
+def _collapse_markdown(text: str) -> str:
+    """Flatten markdown into a single readable line (no headings/bullets/bold)."""
+    if not text:
+        return ""
+    text = re.sub(r"```.*?```", " ", str(text), flags=re.DOTALL)
+    text = _MARKDOWN_PREFIX_RE.sub("", text)
+    text = _MARKDOWN_INLINE_RE.sub("", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def shorten_description(text: str, limit: int = DESCRIPTION_MAX_CHARS) -> str | None:
+    """Collapse markdown and cut to a <=120-char one-liner (sentence boundary aware)."""
+    cleaned = _collapse_markdown(text)
+    if not cleaned:
+        return None
+    if len(cleaned) <= limit:
+        return cleaned
+    head = cleaned[:limit]
+    cut = -1
+    for separator in ("。", "！", "？", "；", "!", "?", ";", ". "):
+        index = head.rfind(separator)
+        if index >= 30:
+            cut = index + len(separator)
+            break
+    if cut > 0:
+        return head[:cut].strip()
+    return head[: limit - 1].strip() + "…"
+
+
+def derive_description_from_summary(markdown: str | None) -> str | None:
+    """One-liner from the AI summary's 会议概述 paragraph (fallback: first text line)."""
+    if not markdown or not str(markdown).strip():
+        return None
+    lines = [line.strip() for line in str(markdown).splitlines()]
+    collecting = False
+    buffer: list[str] = []
+    for line in lines:
+        if _OVERVIEW_HEADING_RE.match(line):
+            collecting = True
+            continue
+        if collecting and _HEADING_RE.match(line):
+            break
+        if collecting and line:
+            buffer.append(line)
+    body = " ".join(buffer) if buffer else ""
+    if not body:
+        for line in lines:
+            if line and not _HEADING_RE.match(line):
+                body = line
+                break
+    return shorten_description(body)
+
+
+def _join_sentences(parts: list[str]) -> str:
+    joined = ""
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        if not joined:
+            joined = part
+        elif joined[-1] in "。！？；.!?;":
+            joined += part
+        else:
+            joined += "；" + part
+    return joined
+
+
+def derive_description_from_segments(texts) -> str | None:
+    """One-liner from the first transcript segments (fallback when no summary)."""
+    parts: list[str] = []
+    for raw in texts:
+        text = _collapse_markdown(str(raw or ""))
+        if not text:
+            continue
+        candidate = _join_sentences([*parts, text])
+        if parts and len(candidate) > DESCRIPTION_MAX_CHARS:
+            break
+        parts.append(text)
+        if len(parts) >= DESCRIPTION_MAX_SEGMENTS:
+            break
+    if not parts:
+        return None
+    return shorten_description(_join_sentences(parts))
+
+
+def derive_auto_description(recording_id: int, db: Session | None = None) -> str | None:
+    """Derive a one-line description for a recording **without writing** it.
+
+    Returns ``None`` when the recording already has a (user-provided) description
+    or when no text is available yet.
+    """
+    own_session = db is None
+    session = db or SessionLocal()
+    try:
+        recording = session.get(Recording, int(recording_id))
+        if recording is None:
+            return None
+        if (recording.description or "").strip():
+            return None
+        summary = session.scalar(
+            select(Analysis)
+            .where(Analysis.recording_id == recording_id, Analysis.kind == "summary")
+            .order_by(Analysis.id.desc())
+            .limit(1)
+        )
+        markdown: str | None = None
+        if summary is not None:
+            try:
+                payload = json.loads(summary.payload_json or "{}")
+                if isinstance(payload, dict):
+                    markdown = str(payload.get("markdown") or "")
+            except (ValueError, TypeError):
+                markdown = None
+        description = derive_description_from_summary(markdown)
+        if description:
+            return description
+        texts = session.scalars(
+            select(TranscriptSegment.text)
+            .where(TranscriptSegment.recording_id == recording_id)
+            .order_by(TranscriptSegment.idx, TranscriptSegment.id)
+            .limit(DESCRIPTION_MAX_SEGMENTS * 2)
+        ).all()
+        return derive_description_from_segments(list(texts))
+    except Exception:  # noqa: BLE001 - description is cosmetic, never fatal
+        logger.warning("auto description derivation failed for recording %s", recording_id, exc_info=True)
+        return None
+    finally:
+        if own_session:
+            session.close()
+
+
+def apply_auto_description(recording_id: int, db: Session | None = None) -> str | None:
+    """Fill ``recordings.description`` when empty; never overwrites user text."""
+    own_session = db is None
+    session = db or SessionLocal()
+    try:
+        recording = session.get(Recording, int(recording_id))
+        if recording is None:
+            return None
+        if (recording.description or "").strip():
+            return None
+        description = derive_auto_description(recording_id, session)
+        if not description:
+            return None
+        recording.description = description[:DESCRIPTION_MAX_CHARS]
+        session.commit()
+        logger.info("auto-filled recording %s description (%s chars)", recording_id, len(recording.description))
+        return recording.description
+    except Exception:  # noqa: BLE001 - never break processing because of a description
+        logger.warning("auto description fill failed for recording %s", recording_id, exc_info=True)
+        if own_session:
+            session.rollback()
+        return None
+    finally:
+        if own_session:
+            session.close()
+
+
 # ------------------------------------------------------------------ LLM calls
 def _task_messages(prompt: str, extra: str = "") -> list[dict[str, str]]:
     messages = [
@@ -733,6 +904,12 @@ async def generate_analyses(
 __all__ = [
     "AnalysisCancelled",
     "CHUNK_HARD_LIMIT",
+    "DESCRIPTION_MAX_CHARS",
+    "apply_auto_description",
+    "derive_auto_description",
+    "derive_description_from_segments",
+    "derive_description_from_summary",
+    "shorten_description",
     "CHUNK_MAX_CHARS",
     "CHUNK_MAX_MS",
     "build_chunk_payloads",

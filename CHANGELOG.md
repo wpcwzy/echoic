@@ -2,6 +2,23 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.3.10] - 2026-10-27
+
+### 新增
+
+- **sqlite-vec 向量后端**：SQLite 部署新增 `sqlite_vec` 后端（依赖 `sqlite-vec`，镜像内安装）；`ECHOIC_VECTOR_BACKEND=auto` 在 SQLite 上优先 sqlite-vec，扩展不可用时自动降级 numpy 并在状态接口说明原因。新增 14 个后端契约/降级测试；后端切换重建索引直接复用 chunks 中的 embedding BLOB，不重新调用 Embedding API。
+- **实时字幕 GA（R-19）**：默认开启（无 Key 时自动使用 mock，零网络/零费用）；WebSocket 异常断开支持 **120 秒内断线重连/续传**（同一会话、时间戳连续、无重复片段），新增 `ready {resumed, base_ms, total_ms, connection}` 事件与 `ping/pong`、会话超时清理、stop/cancel 幂等；前端新增「重连中（N/3）」状态与 1s/2s/4s 退避重连，移除全部 Beta 标识。
+- **注册页与个人资料页**：登录页按 `health.allow_registration` 显示注册入口；新增公开 `/register`（注册后自动登录）与登录用户 `/profile`（修改昵称/邮箱、修改密码、查看账号信息）；后端新增 `PATCH /api/auth/me` 自助资料接口与公开健康检查字段 `allow_registration`。
+- **录音描述自动生成**：上传录音完成转写/AI 分析后，若描述为空，自动从 AI 纪要的会议概述（回退到前几段转录）生成 ≤120 字描述；不覆盖用户已填写内容。新增 `python -m app.tools.backfill_descriptions [--apply]` 用于回填历史录音。
+
+### 修复
+
+- 资料库中新上传录音不再显示“暂无描述”（见上方自动生成；历史数据可用 backfill 工具补齐）。
+- 转移录音归属弹窗打开时不再显示未格式化的数字 ID（初始值为空，选中后才显示用户选项）。
+- 编辑用户对话框中“启用账号”开关的视觉状态与文字说明现在一致（开=启用，关=停用）。
+- 开发模式 Vite `/api` 代理补上 `ws: true`，`npm run dev` 下实时字幕 WebSocket 可正常连接。
+- 全量后端 **456 passed**。
+
 ## [0.3.9] - 2026-10-27
 
 ### 修复

@@ -62,6 +62,16 @@ def _demo_mode(db: Session) -> bool:
         return False
 
 
+def _allow_registration(db: Session) -> bool:
+    """Public flag for the login page ("open registration" link)."""
+    try:
+        from ..services.settings_store import load_ai_config
+
+        return bool(load_ai_config(db).system.get("allow_registration", False))
+    except Exception:
+        return bool(settings.allow_registration)
+
+
 def _worker_state(db: Session) -> dict:
     embedded = bool(settings.embedded_worker)
     running = False
@@ -178,6 +188,7 @@ def health(db: Session = Depends(get_db)) -> HealthOut:
         storage_backend=storage_state.get("backend", settings.storage_backend),
         storage_detail=str(storage_state.get("detail") or ""),
         demo_mode=_demo_mode(db),
+        allow_registration=_allow_registration(db),
         time=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     )
 
@@ -290,10 +301,17 @@ def _resolve_live_provider(db: Session) -> str:
 
 def _resolve_vector_backend() -> str:
     configured = (settings.vector_backend or "auto").strip().lower()
-    if configured in ("numpy", "pgvector"):
+    if configured in ("numpy", "pgvector", "sqlite_vec"):
         return configured
-    # auto: pgvector is optional/experimental, numpy is always available.
-    return "numpy"
+    # auto: report the backend that get_vector_store() would actually use
+    # (pgvector on PG → sqlite_vec on SQLite when loadable → numpy).
+    try:
+        from ..services.vector_store import get_vector_store
+
+        store = get_vector_store()
+        return str(getattr(store, "backend", "numpy") or "numpy")
+    except Exception:  # noqa: BLE001 - feature discovery must never fail
+        return "numpy"
 
 
 def _embeddings_configured(db: Session) -> bool:

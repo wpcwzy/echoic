@@ -277,6 +277,18 @@ export interface LoginResponse {
   token: string
 }
 
+export interface RegisterPayload {
+  username: string
+  password: string
+  display_name?: string
+  email?: string
+}
+
+export interface ProfileUpdatePayload {
+  display_name?: string
+  email?: string
+}
+
 export interface MeResponse {
   user: User
 }
@@ -302,6 +314,7 @@ export interface SystemHealth {
   ffmpeg?: string
   worker?: string
   demo_mode?: boolean
+  allow_registration?: boolean
   time?: string
 }
 

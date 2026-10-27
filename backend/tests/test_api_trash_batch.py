@@ -645,7 +645,7 @@ def test_features_shape(client, db):
     assert body["live"]["merge_mode"] in ("replace", "promote")
     assert set(body["vector"].keys()) == {"backend", "search_enabled", "embeddings_configured"}
     assert body["vector"]["search_enabled"] is True
-    assert body["vector"]["backend"] in ("numpy", "pgvector")
+    assert body["vector"]["backend"] in ("numpy", "sqlite_vec", "pgvector")
     assert set(body["storage"].keys()) == {"backend"}
     assert set(body["trash"].keys()) == {"retention_days"}
     assert body["trash"]["retention_days"] >= 1

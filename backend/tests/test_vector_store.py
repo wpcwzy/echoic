@@ -209,7 +209,13 @@ def test_get_vector_store_backend_selection_and_fallback(monkeypatch):
 
     reset_vector_store_cache()
     monkeypatch.setattr(settings, "vector_backend", "auto")
-    assert get_vector_store().backend == "numpy"  # sqlite → numpy
+    auto_store = get_vector_store()
+    if auto_store.backend == "sqlite_vec":
+        assert getattr(auto_store, "fallback_reason", None) is None
+    else:
+        # sqlite-vec wheel/extension unavailable → graceful numpy fallback
+        assert auto_store.backend == "numpy"
+        assert "sqlite-vec" in (auto_store.fallback_reason or "")
 
     reset_vector_store_cache()
     monkeypatch.setattr(settings, "vector_backend", "pgvector")

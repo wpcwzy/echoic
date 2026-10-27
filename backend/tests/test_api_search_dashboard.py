@@ -165,7 +165,9 @@ def test_system_logs_admin_only(auth_client):
 def test_health_public(client):
     response = client.get("/api/system/health")
     assert response.status_code == 200
-    assert response.json()["status"] in ("ok", "degraded")
+    body = response.json()
+    assert body["status"] in ("ok", "degraded")
+    assert isinstance(body["allow_registration"], bool)
 
 
 @pytest.mark.parametrize("path", ["/api/dashboard", "/api/tags", "/api/settings", "/api/auth/me"])

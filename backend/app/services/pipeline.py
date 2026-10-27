@@ -39,6 +39,7 @@ from ..providers.registry import build_asr_provider, build_embedding_provider
 from .analysis import (
     AnalysisCancelled,
     AnalysisError,
+    apply_auto_description,
     build_chunk_payloads,
     delete_analyses,
     generate_analyses,
@@ -628,6 +629,11 @@ def _finalize(recording_id: int, job_id: int) -> None:
                     asr_wav.unlink()
         except Exception:  # noqa: BLE001 - cleanup must never fail finalization
             logger.warning("failed to clean pipeline staging for recording %s", recording_id)
+        if not (recording.description or "").strip():
+            try:
+                apply_auto_description(recording_id, db)
+            except Exception:  # noqa: BLE001 - cosmetic metadata, never fatal
+                logger.warning("finalize description auto-fill failed for recording %s", recording_id, exc_info=True)
         now = utcnow()
         recording.status = RecordingStatus.READY
         recording.stage = Stage.DONE
@@ -712,6 +718,13 @@ async def _run(recording_id: int, from_: str) -> None:
             if check_cancel():
                 _mark_cancelled(recording_id, job_id)
                 return
+            # v0.3.10: uploads often have no description -> derive a one-liner
+            # from the AI summary (or first transcript segments as fallback).
+            try:
+                if apply_auto_description(recording_id):
+                    logger.info("recording %s: auto-filled description", recording_id)
+            except Exception:  # noqa: BLE001 - cosmetic metadata, never fatal
+                logger.warning("description auto-fill failed for recording %s", recording_id, exc_info=True)
 
         progress = _Progress(recording_id, job_id, Stage.EMBEDDING)
         _set_stage(recording_id, job_id, Stage.EMBEDDING, STAGE_RANGES[Stage.EMBEDDING][0])

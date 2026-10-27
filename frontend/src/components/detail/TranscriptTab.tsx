@@ -35,7 +35,7 @@ interface TranscriptTabProps {
   onRetry: () => void
   /** Public share page mode: hide editing / renaming / exports. */
   readOnly?: boolean
-  /** Live transcript produced during browser recording (R-19 Beta). */
+  /** Live transcript produced during browser recording (R-19). */
   live?: RecordingLive | null
 }
 
@@ -296,8 +296,7 @@ export function TranscriptTab({
           >
             <span className="live-transcript__title">
               <ThunderboltOutlined /> 实时稿
-              <span className="beta-chip">Beta</span>
-              <span className="live-transcript__sub">未区分说话人</span>
+              <span className="live-transcript__sub">实时字幕 · 未区分说话人</span>
             </span>
             <span className="live-transcript__meta">
               {live.segments.length} 段 · {live.session.provider || 'live'}
@@ -308,7 +307,7 @@ export function TranscriptTab({
           {liveOpen && (
             <div className="live-transcript__body">
               <div className="live-transcript__note">
-                实时稿是录音过程中的即时识别结果，可能存在错漏，且不区分说话人；最终请以离线转写为准。
+                实时稿由录音过程中的实时字幕生成，可能存在错漏，且不区分说话人；最终请以离线转写为准。
               </div>
               {live.segments.map((segment) => (
                 <div className="live-transcript__segment" key={segment.id}>

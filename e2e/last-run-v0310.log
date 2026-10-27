@@ -1,0 +1,93 @@
+Echoic v0.3.10 E2E Smoke — 2026-10-27 20:29:39
+目标服务: http://127.0.0.1:8100 | data dir: /home/wpcwzy/echoic/.cache/e2e-v0310-data | 期望向量后端: sqlite_vec
+Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
+==============================================================================
+
+[1;36m━━━ 0. health / features（v0.3.10） ━━━[0m
+[1;32m[PASS][0m v0310.health (0.01s)
+        version=0.3.10 storage=ok/local allow_registration=True
+[1;32m[PASS][0m v0310.auth.login-admin (0.21s)
+        user=管理员 cookie 标志齐全
+[1;32m[PASS][0m v0310.features (0.01s)
+        live={'enabled': True, 'provider': 'mock', 'max_minutes': 60, 'merge_mode': 'replace'} vector={'backend': 'sqlite_vec', 'search_enabled': True, 'embeddings_configured': False} storage={'backend': 'local'}
+
+[1;36m━━━ 1. 注册开关 / 注册 / 登录 ━━━[0m
+[1;32m[PASS][0m v0310.register.flag-toggle (0.06s)
+        health.allow_registration 与设置同步：true → false(注册 403) → true
+[1;32m[PASS][0m v0310.register.create (0.21s)
+        注册成功 id=2 username=e2e_v0310_member_202939 role=member
+[1;32m[PASS][0m v0310.register.duplicate-409 (0.01s)
+[1;32m[PASS][0m v0310.register.weak-password-422 (0.01s)
+[1;32m[PASS][0m v0310.register.login (0.21s)
+        注册用户登录成功（role=member email=e2e_v0310_member_202939@example.com）
+
+[1;36m━━━ 2. 个人资料（PATCH /api/auth/me）+ 改密 ━━━[0m
+[1;32m[PASS][0m v0310.profile.patch (0.01s)
+        PATCH /auth/me 生效：display_name='QA 资料名' email=qa_202939@example.com
+[1;32m[PASS][0m v0310.profile.privileged-ignored (0.01s)
+        role/disabled/username 等特权字段被忽略（仍为 member / 启用）
+[1;32m[PASS][0m v0310.profile.password-validation (1.03s)
+        改密校验：未登录 401/403、旧密码错 400、新密码过短 400；成功改密后旧密码失效、新密码可登录
+
+[1;36m━━━ 3. sqlite-vec 向量后端 / 检索 ━━━[0m
+[1;32m[PASS][0m v0310.vector.status (0.02s)
+        backend=sqlite_vec available=False chunks=0/138 stale=0 fallback=未配置 Embedding 模型，语义检索不可用
+[1;32m[PASS][0m v0310.vector.embeddings (0.02s)
+        embeddings=mock → backend=sqlite_vec available=True fallback=None
+[1;32m[PASS][0m v0310.vector.reindex (0.06s)
+        reindex: recordings=4 chunks=138 indexed=138/138
+[1;32m[PASS][0m v0310.vector.semantic (0.02s)
+        semantic 命中 3 条（top=0.336296 backend=sqlite_vec fallback=None）
+[1;32m[PASS][0m v0310.vector.hybrid (0.01s)
+        hybrid 命中 8 条
+
+[1;36m━━━ 4. 实时转写 GA（WS ready/ping/片段） ━━━[0m
+[1;32m[PASS][0m v0310.live.ready-fields (0.02s)
+        ready 字段完整：{'resumed': False, 'base_ms': 0, 'total_ms': 0, 'connection': 1}
+[1;32m[PASS][0m v0310.live.ping-pong (0.00s)
+        ping→pong 正常（ts=1793104181102）
+[1;32m[PASS][0m v0310.live.stop-segments (0.97s)
+        stop 后 ended，segments=2 total_ms=6000 done_total_ms=6000
+
+[1;36m━━━ 5. 描述自动生成 / backfill CLI ━━━[0m
+[1;32m[PASS][0m v0310.description.autofill (1.14s)
+        id=5 自动描述(49字)=本次会议共 2 位发言人参与，围绕准备、安排、文档、方案等主题展开讨论，转录稿共 8 个发言片段。…
+[1;32m[PASS][0m v0310.description.user-preserved (1.13s)
+        id=6 用户描述保持不变
+[1;32m[PASS][0m v0310.description.demo-unchanged (0.02s)
+        demo id=1 描述保持不变（96 字）
+[1;32m[PASS][0m v0310.description.backfill (0.87s)
+        dry-run derivable=1 filled=0；--apply filled=1 新描述(49字)=本次会议共 2 位发言人参与，围绕准备、安排、文档、方案等主题展开讨论，转录稿共…
+
+==============================================================================
+[1mv0.3.10 PASS/FAIL 矩阵[0m
+------------------------------------------------------------------------------
+[1;32mPASS[0m v0310.health                                     0.01s  version=0.3.10 storage=ok/local allow_registration=True
+[1;32mPASS[0m v0310.auth.login-admin                           0.21s  user=管理员 cookie 标志齐全
+[1;32mPASS[0m v0310.features                                   0.01s  live={'enabled': True, 'provider': 'mock', 'max_minutes': 60, 'merge_mode': 'replace'} vector={'backend': 'sqlite_vec', 'search_enabled': True, 'embeddings_configured': False} storage={'backend': 'local'}
+[1;32mPASS[0m v0310.register.flag-toggle                       0.06s  health.allow_registration 与设置同步：true → false(注册 403) → true
+[1;32mPASS[0m v0310.register.create                            0.21s  注册成功 id=2 username=e2e_v0310_member_202939 role=member
+[1;32mPASS[0m v0310.register.duplicate-409                     0.01s  
+[1;32mPASS[0m v0310.register.weak-password-422                 0.01s  
+[1;32mPASS[0m v0310.register.login                             0.21s  注册用户登录成功（role=member email=e2e_v0310_member_202939@example.com）
+[1;32mPASS[0m v0310.profile.patch                              0.01s  PATCH /auth/me 生效：display_name='QA 资料名' email=qa_202939@example.com
+[1;32mPASS[0m v0310.profile.privileged-ignored                 0.01s  role/disabled/username 等特权字段被忽略（仍为 member / 启用）
+[1;32mPASS[0m v0310.profile.password-validation                1.03s  改密校验：未登录 401/403、旧密码错 400、新密码过短 400；成功改密后旧密码失效、新密码可登录
+[1;32mPASS[0m v0310.vector.status                              0.02s  backend=sqlite_vec available=False chunks=0/138 stale=0 fallback=未配置 Embedding 模型，语义检索不可用
+[1;32mPASS[0m v0310.vector.embeddings                          0.02s  embeddings=mock → backend=sqlite_vec available=True fallback=None
+[1;32mPASS[0m v0310.vector.reindex                             0.06s  reindex: recordings=4 chunks=138 indexed=138/138
+[1;32mPASS[0m v0310.vector.semantic                            0.02s  semantic 命中 3 条（top=0.336296 backend=sqlite_vec fallback=None）
+[1;32mPASS[0m v0310.vector.hybrid                              0.01s  hybrid 命中 8 条
+[1;32mPASS[0m v0310.live.ready-fields                          0.02s  ready 字段完整：{'resumed': False, 'base_ms': 0, 'total_ms': 0, 'connection': 1}
+[1;32mPASS[0m v0310.live.ping-pong                             0.00s  ping→pong 正常（ts=1793104181102）
+[1;32mPASS[0m v0310.live.stop-segments                         0.97s  stop 后 ended，segments=2 total_ms=6000 done_total_ms=6000
+[1;32mPASS[0m v0310.description.autofill                       1.14s  id=5 自动描述(49字)=本次会议共 2 位发言人参与，围绕准备、安排、文档、方案等主题展开讨论，转录稿共 8 个发言片段。…
+[1;32mPASS[0m v0310.description.user-preserved                 1.13s  id=6 用户描述保持不变
+[1;32mPASS[0m v0310.description.demo-unchanged                 0.02s  demo id=1 描述保持不变（96 字）
+[1;32mPASS[0m v0310.description.backfill                       0.87s  dry-run derivable=1 filled=0；--apply filled=1 新描述(49字)=本次会议共 2 位发言人参与，围绕准备、安排、文档、方案等主题展开讨论，转录稿共…
+------------------------------------------------------------------------------
+总计 23 项：[1;32m23 通过[0m，[1;31m0 失败[0m，0 跳过
+
+[1;32mE2E v0.3.10 SMOKE: PASS ✔[0m
+
+日志已保存：e2e/last-run-v0310.log

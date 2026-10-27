@@ -3,7 +3,7 @@
 > 本文面向**自托管部署**：用 Docker Compose 一条命令跑起「录音 → 转录 → AI 纪要 → 观点树 / 思维导图 → RAG 问答」完整链路。
 > 开发调试见 [README 开发指南](../README.md#开发指南)；接口与架构分别见 [API.md](API.md)、[ARCHITECTURE.md](ARCHITECTURE.md)。
 >
-> **v0.3.0 新增（均为可选项，默认行为与 v0.2 一致）**：对象存储（S3/MinIO，§10）、实时转写 Beta（§11）、
+> **v0.3.0 新增（均为可选项，默认行为与 v0.2 一致）**：对象存储（S3/MinIO，§10）、实时字幕（§11）、
 > 向量 / 混合检索（§12）、回收站与批量操作（§13）。默认仍为单容器 + SQLite + 本地存储，零外部依赖可运行。
 
 ---
@@ -25,7 +25,7 @@
 - **单容器**：FastAPI 同时提供 API 与前端，无 Redis / Celery 依赖；
 - **无外部服务**也能完整运行（默认 mock AI + SQLite + 本地存储 + 内嵌任务线程）；
 - **可选扩展**（v0.3.0，均不改变默认部署）：对象存储 `--profile minio`、PostgreSQL `--profile postgres`、独立 worker `--profile worker`；
-- 真实 AI 服务只需**出站 HTTPS** 访问用户配置的服务商（阿里云百炼 / OpenAI 兼容端点 / Whisper 兼容服务）；实时转写 Beta（开启时）与语义检索也走同一出站网络。
+- 真实 AI 服务只需**出站 HTTPS** 访问用户配置的服务商（阿里云百炼 / OpenAI 兼容端点 / Whisper 兼容服务）；实时字幕（开启时）与语义检索也走同一出站网络。
 
 | 项目 | 默认值 | 说明 |
 |---|---|---|
@@ -475,6 +475,27 @@ docker compose --profile postgres --profile worker up -d
 - worker 的 `depends_on` 只能等待主服务健康；与 postgres 组合时由 `ECHOIC_WAIT_FOR_DB=true` 保证数据库就绪；
 - 任务状态在 DB 中持久化，worker 重启会自动恢复未完成任务。
 
+### 9.3 内嵌 worker vs 独立 worker：怎么选？
+
+**没有绝对的“性能更好”，取决于负载形态**；默认的内嵌模式对个人/小团队通常是更优解：
+
+| 维度 | 内嵌（`ECHOIC_EMBEDDED_WORKER=true`，默认） | 独立（`--profile worker`） |
+|---|---|---|
+| 部署复杂度 | 最低：一个容器/进程 | 多一个容器，需共享数据卷与数据库 |
+| 资源开销 | 少一个进程，内存/启动开销更低 | 多约 100–300MB 常驻内存；CPU 可独立限制 |
+| API 延迟 | 转写/ffmpeg/嵌入等重任务与 API 同进程，长任务可能抢占 CPU/磁盘 IO，接口偶发变慢 | API 与处理彻底隔离，重任务不拖慢页面/上传/播放 |
+| 并发/扩展 | 单进程内线程队列；适合个人或少量并发 | worker 可独立重启/扩容；配合 PostgreSQL 可多 worker |
+| 故障影响 | worker 崩溃/重启可能影响 API 进程（内嵌线程同进程） | worker 崩溃不导致 API 不可用，任务在 DB 中可恢复 |
+| 数据库 | SQLite 足够 | SQLite 可用但只建议 1 个 worker；多 worker/更高中并发建议 PostgreSQL |
+| 适用场景 | 单人/家庭、每周少量会议、追求简单 | 团队多人、长录音多、需要稳定 API 响应、定时批量导入 |
+
+**实践建议**：
+
+- 个人私有部署（大多数 Echoic 用户）：保持默认**内嵌**，少一个服务、少一份运维成本；实际瓶颈通常是 ASR/LLM 网络调用而不是 worker 线程本身。
+- 团队/多用户、经常同时上传长录音：改为**独立 worker**，API 保持流畅；如任务量大再上 PostgreSQL。
+- 使用 SQLite 时不要同时开内嵌 worker 和独立 worker（会争抢写锁）；只保留一种。
+- 内嵌/独立只是“执行位置”，任务数据、进度与恢复逻辑一致；切换时改 `ECHOIC_EMBEDDED_WORKER` 并重启即可（已有排队任务会由新 worker 接管）。
+
 ---
 
 ## 10. 对象存储（S3 / MinIO，v0.3.0）
@@ -557,15 +578,16 @@ docker compose exec echoic python -m app.tools.storage_migrate --from local --to
 
 ---
 
-## 11. 实时转写 Beta（R-19，v0.3.0 默认关闭）
+## 11. 实时字幕（R-19，v0.3.10 GA，默认开启）
 
-> **Beta 说明**：实时字幕用于录音过程中的即时参考，**处理完成后的离线转写仍是最终稿**；
-> 实时转写不做说话人分离，且为单进程设计（多副本部署不支持共享实时会话）。
+> **说明**：实时字幕用于录音过程中的即时参考，**处理完成后的离线转写仍是最终稿**；
+> 实时转写不做说话人分离；WebSocket 异常断开支持 120 秒内自动重连/续传。
+> 实时会话状态在进程内，单副本部署（不支持多 worker 共享实时会话）。
 
 ### 11.1 开启方式
 
 ```bash
-# .env（或启动环境变量）
+# .env（或启动环境变量；v0.3.10 起默认 true，可设 false 关闭）
 ECHOIC_LIVE_ENABLED=true          # 总开关（kill switch）
 ECHOIC_LIVE_PROVIDER=auto         # auto / mock / dashscope_realtime
 ECHOIC_LIVE_MAX_MINUTES=60        # 单次会话上限（成本护栏）
@@ -573,9 +595,9 @@ ECHOIC_LIVE_MERGE_MODE=replace    # replace（默认）/ promote
 docker compose up -d              # 重启生效
 ```
 
-- 开启后录音页出现「实时字幕（Beta）」入口（前端通过 `GET /api/system/features` 探测）；
-- `ECHOIC_LIVE_PROVIDER=auto`：mock ASR → mock 实时（零 Key 演示）；DashScope ASR → `dashscope_realtime`；
-- 使用 DashScope 实时时需先在「设置 → AI 服务」配置 ASR（provider/base_url/Key/model）；
+- 开启后录音页出现「实时字幕」入口（前端通过 `GET /api/system/features` 探测）；
+- `ECHOIC_LIVE_PROVIDER=auto`：无 DashScope Key 时自动 mock（零网络/零费用）；配置了文件转写或实时转写的 DashScope Key 时走 `dashscope_realtime`；
+- 使用 DashScope 实时时需先在「设置 → AI 服务 → 实时转写」配置独立 provider/base_url/Key/model（也可复用文件转写 Key）；
 - 需要浏览器麦克风权限：非 localhost 必须 HTTPS（与普通网页录音相同）。
 
 ### 11.2 能力与接口
@@ -591,10 +613,12 @@ docker compose up -d              # 重启生效
 - WS 关闭码：未启用/无权限 → `4403`；会话不存在 → `4404`；非 active / 重复生产者 → `4409`；音频积压（约 10s 队列）→ `4413`；正常结束 → `1000`；
 - `merge_mode=replace`：保留离线 ASR 转录（含说话人）为最终稿，实时稿另存可查；
 - `merge_mode=promote`：用实时稿（单说话人）作为最终转录并重算 AI 分析；离线 ASR 失败时也会自动回退 promote。
+- **断线续传（GA）**：意外断网后 120 秒内可重连同一会话/WS URL，服务端按已接收音频位置续接时间戳并返回 `ready {resumed:true, base_ms, total_ms, connection}`；超过 120 秒未重连则会话结束（已保存片段仍保留）。
+- **心跳**：客户端可发送 `{"type":"ping"}`，服务端回 `{"type":"pong"}`；`heartbeat` 事件被忽略。
 
 ### 11.3 限制、成本与容量
 
-- **Beta**：无说话人分离、无实时 AI 分析，最终以离线转写为准；
+- 无说话人分离、无实时 AI 分析，最终以离线转写为准；
 - **单进程**：实时会话状态在内存中，多副本/多 worker 部署不支持会话共享（文档与 UI 均已标注）；
 - **成本护栏**：`ECHOIC_LIVE_MAX_MINUTES` 到时会发送 error + done 并结束；实时 ASR 按音频时长计费，
   建议仅按需开启并关注服务商计费；
@@ -614,7 +638,7 @@ docker compose up -d              # 重启生效
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `ECHOIC_VECTOR_BACKEND` | `auto` | `auto`（优先 pgvector，不可用自动降级 numpy）/ `numpy` / `pgvector` |
+| `ECHOIC_VECTOR_BACKEND` | `auto` | `auto`（PG 优先 pgvector；SQLite 优先 sqlite-vec；不可用降级 numpy）/ `numpy` / `sqlite_vec` / `pgvector` |
 | `ECHOIC_VECTOR_TOP_K` | 8 | 语义/混合检索返回条数上限 |
 | `ECHOIC_VECTOR_MIN_SCORE` | 0.2 | 语义命中最低相似度 |
 
@@ -633,7 +657,8 @@ docker compose up -d              # 重启生效
 
 | 后端 | 说明 |
 |---|---|
-| `numpy`（默认/auto 回退） | 进程内加载可见录音的 chunks 矩阵做余弦相似度；单进程内存，适合个人/小团队 |
+| `numpy`（auto 最终回退） | 进程内加载可见录音的 chunks 矩阵做余弦相似度；单进程内存，适合个人/小团队 |
+| `sqlite_vec`（SQLite 推荐） | 随镜像安装的 sqlite-vec 扩展；`vec0` 虚拟表做 KNN；auto 在 SQLite 上优先尝试，扩展不可加载时自动降级 numpy 并记录原因 |
 | `pgvector`（experimental） | 仅 PostgreSQL + pgvector 扩展可用；启动时尝试 `CREATE EXTENSION` 与建表；不可用自动降级 numpy 并记录原因 |
 
 - 未配置 Embedding 时：语义/混合搜索禁用（前端置灰并展示原因），问答行为与 v0.2 等价（字面/关键词检索）；
@@ -716,7 +741,7 @@ ECHOIC_DATA_DIR=/tmp/echoic-e2e ECHOIC_DEMO_SEED=true ECHOIC_SECRET_KEY=e2e-secr
 | 任务一直 `queued` | worker 未运行：默认内嵌线程应自动启动；检查日志 `worker started`；独立 worker 场景确认 `echoic-worker` 容器在跑 |
 | ASR「测试连接」报 `dashscope_file ... HTTP 404`／上传转写 404 | Base URL 填写错误：`dashscope_file` 应填 `https://dashscope.aliyuncs.com`（**不要**带 `/api/v1` 或 `/compatible-mode/v1`；工作空间域名填到域名根）。v0.3.1 起服务端会自动纠正常见路径并提供旧域名回退；仍失败请确认 Key 与地域一致、已开通 Paraformer 录音文件识别 |
 | ASR「测试连接」成功但上传后报「实时转写握手超时（未收到 task-started）」 | v0.3.0 的实时转写握手缺陷，升级到 **v0.3.1** 修复。若仍出现：确认 Base URL 为 `wss://dashscope.aliyuncs.com/api-ws/v1/inference`（或只填域名）、模型为 `paraformer-realtime-v2`、Key 与地域一致，并检查该 Key 的实时转写并发额度；工作日志会打印实际 endpoint/model。整场录音转写建议改用 `dashscope_file`（带说话人分离） |
-| 整场录音应该选哪个 ASR？ | 上传录音/视频做整场转写选 **`dashscope_file`（录音文件识别，paraformer-v2，支持说话人分离，无需公网 URL）**；`dashscope_realtime` 仅用于录音页实时字幕（Beta，无说话人分离），不是整场转写主路径 |
+| 整场录音应该选哪个 ASR？ | 上传录音/视频做整场转写选 **`dashscope_file`（录音文件识别，支持说话人分离，无需公网 URL）**；`dashscope_realtime` 仅用于录音页实时字幕（GA，无说话人分离），不是整场转写主路径 |
 | 任务 `failed` 且提示 ASR/LLM 连接失败 | 「设置 → AI 服务」点「测试连接」；检查 base_url / Key / 出站网络；日志中不含明文 Key |
 | 放入 consume 目录的文件未自动导入（v0.2） | 确认 `ECHOIC_CONSUME_ENABLED=true`、目录在容器内可写（默认 `/data/consume`）、扩展名受支持；查看日志 `consume`；修改 `ECHOIC_CONSUME_INTERVAL_SEC` 可调整扫描间隔；归属用户由 `ECHOIC_CONSUME_OWNER_USERNAME` 指定（空=首个管理员） |
 | 公开分享链接无法解锁 | 检查 `ECHOIC_SHARE_COOKIE_HOURS`（默认 2 小时）与链接是否过期；分享解锁 Cookie 仅对该分享记录有效 |

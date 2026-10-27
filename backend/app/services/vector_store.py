@@ -47,6 +47,7 @@ __all__ = [
     "MAX_REINDEX_RECORDINGS",
     "NumpyVectorStore",
     "PgVectorStore",
+    "SqliteVecVectorStore",
     "ReindexResult",
     "VectorHit",
     "VectorRecord",
@@ -62,6 +63,7 @@ __all__ = [
     "reindex_recordings",
     "reset_vector_store_cache",
     "run_coroutine_sync",
+    "sqlite_vec_available",
 ]
 
 #: reindex embedding request batch size (docs/10 §5.1: batches ≤ 10)
@@ -950,17 +952,530 @@ class PgVectorStore:
             )
 
 
+# ------------------------------------------------------------------ sqlite-vec store
+#: virtual table name prefix; one vec0 table per embedding dimension
+SQLITE_VEC_TABLE_PREFIX = "vec_chunks_"
+#: oversampling factor when ACL/model filtering has to happen in Python
+SQLITE_VEC_OVERSAMPLE = 8
+#: member ACL ids are pushed into SQL when the IN-list stays this small
+SQLITE_VEC_MAX_SQL_IDS = 500
+#: sqlite-vec KNN ``k`` upper bound (keeps oversampling bounded)
+SQLITE_VEC_MAX_K = 1000
+
+
+def _import_sqlite_vec():
+    """Import the optional ``sqlite-vec`` Python wheel or raise a friendly error."""
+    try:
+        import sqlite_vec
+    except Exception as exc:  # noqa: BLE001 - optional dependency
+        raise VectorStoreUnavailable(
+            "未安装 sqlite-vec Python 包（pip install \"sqlite-vec\"），无法使用该向量后端"
+        ) from exc
+    return sqlite_vec
+
+
+def _sqlite_url_path(url: str) -> str:
+    """Extract the file path from a SQLAlchemy SQLite URL."""
+    from sqlalchemy.engine import make_url
+
+    try:
+        parsed = make_url(url)
+    except Exception as exc:  # noqa: BLE001
+        raise VectorStoreUnavailable(f"无法解析 SQLite 数据库地址：{exc}") from exc
+    if parsed.get_backend_name() != "sqlite":
+        raise VectorStoreUnavailable("当前数据库不是 SQLite，sqlite-vec 后端不可用")
+    database = parsed.database or ""
+    if not database or database == ":memory:":
+        raise VectorStoreUnavailable("sqlite-vec 需要基于文件的 SQLite 数据库（不支持 :memory:）")
+    return database
+
+
+class SqliteVecVectorStore:
+    """sqlite-vec ANN backend for the single-container SQLite deployment (R-20 Phase 2).
+
+    The ``vec0`` virtual tables live in the same SQLite file as the application
+    data and are accessed through a dedicated ``sqlite3`` connection (loading the
+    bundled extension with ``sqlite_vec.load()``).  One table is kept per
+    embedding dimension (``vec_chunks_<dim>``) so a model/dimension change never
+    mixes incompatible vectors: reindexing a recording rewrites its rows into the
+    new table and drops the old ones.
+
+    Every failure raises :class:`VectorStoreUnavailable` with a friendly Chinese
+    reason; :func:`get_vector_store` then degrades to
+    :class:`NumpyVectorStore`.  ``chunks.embedding`` BLOBs stay the portable
+    source of truth and can always rebuild this mirror (no re-embedding calls).
+    """
+
+    backend = "sqlite_vec"
+
+    def __init__(self, db_url: str | None = None) -> None:
+        self._db_url = db_url or settings.resolved_database_url
+        self._lock = threading.RLock()
+        self._connection: Any = None
+        self._vec_module: Any = None
+        self._version: str | None = None
+        self._known_dims: set[int] = set()
+        self._load_error: str | None = None
+        self.fallback_reason: str | None = None
+
+    # ---------------------------------------------------------------- connection
+    @property
+    def db_path(self) -> str:
+        return _sqlite_url_path(self._db_url)
+
+    def _connect(self):
+        """Open (once, thread-safe) the dedicated extension-enabled connection."""
+        with self._lock:
+            if self._connection is not None:
+                return self._connection
+            if self._load_error:
+                raise VectorStoreUnavailable(self._load_error)
+            module = _import_sqlite_vec()
+            path = self.db_path
+            connection = None
+            try:
+                import sqlite3
+
+                if not hasattr(sqlite3.Connection, "enable_load_extension"):
+                    raise VectorStoreUnavailable(
+                        "当前 Python 的 sqlite3 未启用扩展加载（enable_load_extension 不可用），"
+                        "sqlite-vec 后端不可用"
+                    )
+                connection = sqlite3.connect(
+                    path, timeout=30.0, check_same_thread=False, isolation_level=None
+                )
+                connection.execute("PRAGMA busy_timeout = 5000")
+                connection.enable_load_extension(True)
+                module.load(connection)
+                connection.enable_load_extension(False)
+                row = connection.execute("SELECT vec_version()").fetchone()
+                self._version = str(row[0]) if row else "unknown"
+            except VectorStoreUnavailable:
+                if connection is not None:
+                    connection.close()
+                raise
+            except Exception as exc:  # noqa: BLE001 - missing wheel / extension build
+                if connection is not None:
+                    connection.close()
+                reason = f"加载 sqlite-vec 扩展失败：{type(exc).__name__}: {str(exc)[:180]}"
+                self._load_error = reason
+                raise VectorStoreUnavailable(reason) from exc
+            self._connection = connection
+            self._vec_module = module
+            return connection
+
+    def _blob(self, vector: Sequence[float]) -> bytes:
+        module = self._vec_module
+        if module is None:
+            module = _import_sqlite_vec()
+            self._vec_module = module
+        return module.serialize_float32([float(value) for value in vector])
+
+    # ---------------------------------------------------------------- schema
+    def _fetch_known_dims(self, connection) -> set[int]:
+        dims: set[int] = set()
+        try:
+            rows = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE ?",
+                (f"{SQLITE_VEC_TABLE_PREFIX}%",),
+            ).fetchall()
+        except Exception as exc:  # noqa: BLE001 - sqlite3.Error subclasses
+            raise VectorStoreUnavailable(f"读取 sqlite-vec 索引表失败：{exc}") from exc
+        for (name,) in rows:
+            suffix = str(name)[len(SQLITE_VEC_TABLE_PREFIX) :]
+            try:
+                dims.add(int(suffix))
+            except ValueError:
+                continue
+        return dims
+
+    @staticmethod
+    def _table_name(dim: int) -> str:
+        return f"{SQLITE_VEC_TABLE_PREFIX}{int(dim)}"
+
+    @staticmethod
+    def _table_exists(connection, name: str) -> bool:
+        try:
+            row = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+            ).fetchone()
+        except Exception:  # noqa: BLE001
+            return False
+        return row is not None
+
+    def _ensure_table(self, connection, dim: int) -> None:
+        if int(dim) in self._known_dims:
+            return
+        if int(dim) <= 0:
+            raise VectorStoreUnavailable("向量维度非法，无法写入 sqlite-vec")
+        name = self._table_name(dim)
+        ddl = (
+            f'CREATE VIRTUAL TABLE IF NOT EXISTS "{name}" USING vec0('
+            f"chunk_id INTEGER PRIMARY KEY, "
+            f"embedding float[{int(dim)}] distance_metric=cosine, "
+            f"recording_id INTEGER, model TEXT, "
+            f"+idx INTEGER, +start_ms INTEGER, +end_ms INTEGER)"
+        )
+        try:
+            connection.execute(ddl)
+        except Exception as exc:  # noqa: BLE001
+            raise VectorStoreUnavailable(
+                f"创建 sqlite-vec 索引表失败：{type(exc).__name__}: {str(exc)[:180]}"
+            ) from exc
+        self._known_dims.add(int(dim))
+
+    # ---------------------------------------------------------------- protocol
+    def health(self) -> tuple[bool, str]:
+        try:
+            with self._lock:
+                connection = self._connect()
+                self._known_dims = self._fetch_known_dims(connection)
+        except VectorStoreUnavailable as exc:
+            self._load_error = self._load_error or exc.reason
+            return False, exc.reason
+        return True, f"sqlite-vec {self._version} 可用（SQLite 单进程）"
+
+    def invalidate(self) -> None:
+        # The mirror is updated synchronously through sync_recording/upsert.
+        return None
+
+    def _replace_recording(self, recording_id: int, records: Sequence[VectorRecord]) -> int:
+        """Atomically replace one recording's rows across every dimension table."""
+        connection = self._connect()
+        by_dim: dict[int, list[VectorRecord]] = {}
+        for record in records:
+            dim = int(record.dim or len(record.vector))
+            if dim <= 0:
+                continue
+            by_dim.setdefault(dim, []).append(record)
+        with self._lock:
+            self._known_dims = self._fetch_known_dims(connection)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+            except Exception as exc:  # noqa: BLE001
+                raise VectorStoreUnavailable(f"sqlite-vec 写入事务失败：{exc}") from exc
+            try:
+                for dim in by_dim:
+                    self._ensure_table(connection, dim)
+                for dim in sorted(self._known_dims):
+                    table = self._table_name(dim)
+                    connection.execute(
+                        f'DELETE FROM "{table}" WHERE recording_id = ?', (int(recording_id),)
+                    )
+                written = 0
+                for dim, batch in by_dim.items():
+                    table = self._table_name(dim)
+                    connection.executemany(
+                        f'INSERT INTO "{table}" (chunk_id, embedding, recording_id, model, '
+                        f"idx, start_ms, end_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        [
+                            (
+                                int(row.chunk_id),
+                                self._blob(row.vector),
+                                int(row.recording_id),
+                                (row.model or "")[:120],
+                                int(row.idx),
+                                int(row.start_ms),
+                                int(row.end_ms),
+                            )
+                            for row in batch
+                        ],
+                    )
+                    written += len(batch)
+                connection.execute("COMMIT")
+                return written
+            except Exception as exc:  # noqa: BLE001
+                try:
+                    connection.execute("ROLLBACK")
+                except Exception:  # noqa: BLE001 - best effort
+                    pass
+                if isinstance(exc, VectorStoreUnavailable):
+                    raise
+                raise VectorStoreUnavailable(
+                    f"写入 sqlite-vec 索引失败：{type(exc).__name__}: {str(exc)[:180]}"
+                ) from exc
+
+    def sync_recording(self, db, recording_id: int) -> None:
+        """Mirror one recording's chunk embeddings into the sqlite-vec tables."""
+        rows = db.execute(
+            select(
+                Chunk.id,
+                Chunk.recording_id,
+                Chunk.idx,
+                Chunk.start_ms,
+                Chunk.end_ms,
+                Chunk.embedding,
+                Chunk.dim,
+                Chunk.embedding_model,
+            ).where(Chunk.recording_id == int(recording_id), Chunk.embedding.is_not(None))
+        ).all()
+        records: list[VectorRecord] = []
+        for row in rows:
+            try:
+                array = np.frombuffer(row.embedding, dtype=np.float32)
+            except (TypeError, ValueError):
+                continue
+            if array.size == 0:
+                continue
+            records.append(
+                VectorRecord(
+                    chunk_id=int(row.id),
+                    recording_id=int(row.recording_id),
+                    idx=int(row.idx or 0),
+                    start_ms=int(row.start_ms or 0),
+                    end_ms=int(row.end_ms or 0),
+                    vector=array.tolist(),
+                    model=(row.embedding_model or "")[:120],
+                    dim=int(row.dim or array.size),
+                )
+            )
+        self._replace_recording(int(recording_id), records)
+
+    def upsert(self, records: Sequence[VectorRecord]) -> None:
+        rows = list(records)
+        if not rows:
+            return
+        connection = self._connect()
+        by_dim: dict[int, list[VectorRecord]] = {}
+        for record in rows:
+            dim = int(record.dim or len(record.vector))
+            if dim <= 0:
+                continue
+            by_dim.setdefault(dim, []).append(record)
+        with self._lock:
+            self._known_dims = self._fetch_known_dims(connection)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+            except Exception as exc:  # noqa: BLE001
+                raise VectorStoreUnavailable(f"sqlite-vec 写入事务失败：{exc}") from exc
+            try:
+                for dim in by_dim:
+                    self._ensure_table(connection, dim)
+                for dim, batch in by_dim.items():
+                    table = self._table_name(dim)
+                    for row in batch:
+                        connection.execute(
+                            f'DELETE FROM "{table}" WHERE chunk_id = ?', (int(row.chunk_id),)
+                        )
+                    connection.executemany(
+                        f'INSERT INTO "{table}" (chunk_id, embedding, recording_id, model, '
+                        f"idx, start_ms, end_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        [
+                            (
+                                int(row.chunk_id),
+                                self._blob(row.vector),
+                                int(row.recording_id),
+                                (row.model or "")[:120],
+                                int(row.idx),
+                                int(row.start_ms),
+                                int(row.end_ms),
+                            )
+                            for row in batch
+                        ],
+                    )
+                connection.execute("COMMIT")
+            except Exception as exc:  # noqa: BLE001
+                try:
+                    connection.execute("ROLLBACK")
+                except Exception:  # noqa: BLE001
+                    pass
+                if isinstance(exc, VectorStoreUnavailable):
+                    raise
+                raise VectorStoreUnavailable(
+                    f"写入 sqlite-vec 索引失败：{type(exc).__name__}: {str(exc)[:180]}"
+                ) from exc
+
+    def delete_recording(self, recording_id: int) -> int:
+        connection = self._connect()
+        with self._lock:
+            self._known_dims = self._fetch_known_dims(connection)
+            deleted = 0
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                for dim in sorted(self._known_dims):
+                    table = self._table_name(dim)
+                    cursor = connection.execute(
+                        f'DELETE FROM "{table}" WHERE recording_id = ?', (int(recording_id),)
+                    )
+                    if cursor.rowcount and cursor.rowcount > 0:
+                        deleted += int(cursor.rowcount)
+                connection.execute("COMMIT")
+                return deleted
+            except Exception as exc:  # noqa: BLE001
+                try:
+                    connection.execute("ROLLBACK")
+                except Exception:  # noqa: BLE001
+                    pass
+                if isinstance(exc, VectorStoreUnavailable):
+                    raise
+                raise VectorStoreUnavailable(
+                    f"删除 sqlite-vec 索引失败：{type(exc).__name__}: {str(exc)[:180]}"
+                ) from exc
+
+    @staticmethod
+    def _alive_recording_ids(connection, ids: set[int]) -> set[int] | None:
+        """Return the subset of ``ids`` that still exist and are not trashed."""
+        if not ids:
+            return set()
+        alive: set[int] = set()
+        values = sorted(ids)
+        try:
+            for offset in range(0, len(values), 500):
+                chunk = values[offset : offset + 500]
+                placeholders = ",".join("?" for _ in chunk)
+                rows = connection.execute(
+                    f"SELECT id FROM recordings WHERE deleted_at IS NULL AND id IN ({placeholders})",
+                    chunk,
+                ).fetchall()
+                alive.update(int(row[0]) for row in rows)
+        except Exception:  # noqa: BLE001 - schema not ready: do not filter
+            return None
+        return alive
+
+    def search(
+        self,
+        query: Sequence[float],
+        *,
+        top_k: int = 40,
+        recording_ids: Sequence[int] | None = None,
+        min_score: float = 0.0,
+        model: str | None = None,
+        dim: int | None = None,
+    ) -> list[VectorHit]:
+        top_k = max(0, int(top_k))
+        if top_k == 0:
+            return []
+        query_array = _normalize(query)
+        if query_array is None:
+            return []
+        if dim is None:
+            dim = int(query_array.size)
+        elif int(dim) != int(query_array.size):
+            return []
+        if recording_ids is not None and len(recording_ids) == 0:
+            return []
+        filter_ids: set[int] | None = None
+        if recording_ids is not None:
+            filter_ids = {int(value) for value in recording_ids}
+        oversample = bool(model) or (
+            filter_ids is not None and len(filter_ids) > SQLITE_VEC_MAX_SQL_IDS
+        )
+        k = min(SQLITE_VEC_MAX_K, max(top_k * SQLITE_VEC_OVERSAMPLE, 64)) if oversample else top_k
+        params: list[Any] = [self._blob(query_array), int(k)]
+        sql = (
+            f'SELECT chunk_id, recording_id, idx, start_ms, end_ms, model, distance '
+            f'FROM "{self._table_name(int(dim))}" '
+            f"WHERE embedding MATCH ? AND k = ?"
+        )
+        try:
+            connection = self._connect()
+            with self._lock:
+                self._known_dims = self._fetch_known_dims(connection)
+                if int(dim) not in self._known_dims:
+                    return []
+                if filter_ids is not None and len(filter_ids) <= SQLITE_VEC_MAX_SQL_IDS:
+                    placeholders = ",".join("?" for _ in filter_ids)
+                    sql += f" AND recording_id IN ({placeholders})"
+                    params.extend(sorted(filter_ids))
+                sql += " ORDER BY distance"
+                rows = connection.execute(sql, params).fetchall()
+                alive = self._alive_recording_ids(
+                    connection, {int(row[1]) for row in rows}
+                )
+        except VectorStoreUnavailable:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise VectorStoreUnavailable(
+                f"sqlite-vec 检索失败：{type(exc).__name__}: {str(exc)[:180]}"
+            ) from exc
+        hits: list[VectorHit] = []
+        for row in rows:
+            recording_id = int(row[1])
+            if filter_ids is not None and recording_id not in filter_ids:
+                continue
+            if alive is not None and recording_id not in alive:
+                continue
+            stored_model = (row[5] or "").strip()
+            if model and stored_model and stored_model != model:
+                continue
+            try:
+                distance = float(row[6])
+            except (TypeError, ValueError):
+                continue
+            score = max(-1.0, min(1.0, 1.0 - distance))
+            if score < min_score:
+                continue
+            hits.append(
+                VectorHit(
+                    chunk_id=int(row[0]),
+                    recording_id=recording_id,
+                    score=score,
+                    idx=int(row[2] or 0),
+                    start_ms=int(row[3] or 0),
+                    end_ms=int(row[4] or 0),
+                )
+            )
+            if len(hits) >= top_k:
+                break
+        return hits
+
+    def stats(self, *, model: str | None = None, dim: int | None = None) -> VectorStoreStats:
+        try:
+            connection = self._connect()
+            with self._lock:
+                self._known_dims = self._fetch_known_dims(connection)
+                dims = [int(dim)] if dim else sorted(self._known_dims)
+                total = 0
+                for current_dim in dims:
+                    table = self._table_name(current_dim)
+                    if not self._table_exists(connection, table):
+                        continue
+                    row = connection.execute(f'SELECT count(*) FROM "{table}"').fetchone()
+                    total += int(row[0] or 0) if row else 0
+            return VectorStoreStats(
+                backend=self.backend,
+                available=True,
+                chunks_total=total,
+                chunks_indexed=total,
+                stale_chunks=0,
+                dim=dim,
+                model=model,
+                fallback_reason=self.fallback_reason,
+            )
+        except VectorStoreUnavailable as exc:
+            return VectorStoreStats(
+                backend=self.backend, available=False, fallback_reason=exc.reason
+            )
+        except Exception as exc:  # noqa: BLE001
+            return VectorStoreStats(
+                backend=self.backend,
+                available=False,
+                fallback_reason=f"sqlite-vec 统计失败：{type(exc).__name__}: {str(exc)[:160]}",
+            )
+
+
 # ------------------------------------------------------------------ selection
 _STORES: dict[tuple[str, str], Any] = {}
 _STORE_LOCK = threading.Lock()
 
 
+def sqlite_vec_available() -> tuple[bool, str]:
+    """Probe whether the optional sqlite-vec backend can load in this process."""
+    store = SqliteVecVectorStore()
+    return store.health()
+
+
 def get_vector_store():
     """Return the configured vector store, degrading to numpy when needed.
 
-    ``ECHOIC_VECTOR_BACKEND``: ``auto`` (default) picks pgvector on PostgreSQL
-    when the extension is healthy, otherwise numpy; ``numpy`` forces the in-memory
-    index; ``pgvector`` is experimental and falls back to numpy with a reason.
+    ``ECHOIC_VECTOR_BACKEND`` semantics:
+
+    * ``auto`` (default) — pgvector on PostgreSQL when the extension is healthy,
+      sqlite-vec on SQLite when the bundled extension loads, numpy otherwise;
+    * ``numpy`` — force the in-memory BLOB index;
+    * ``sqlite_vec`` — sqlite-vec on a file-backed SQLite database (falls back to
+      numpy with a friendly reason when the wheel/extension cannot load);
+    * ``pgvector`` — experimental PostgreSQL backend (same fallback rules).
     """
     requested = str(getattr(settings, "vector_backend", "auto") or "auto").strip().lower()
     from ..db import engine as db_engine
@@ -980,7 +1495,16 @@ def get_vector_store():
                 fallback = NumpyVectorStore()
                 fallback.fallback_reason = f"pgvector 后端不可用，已降级为 numpy：{reason}"
                 store = fallback
-        elif requested in ("numpy", "auto", ""):
+        elif requested == "sqlite_vec" or (requested in ("auto", "") and dialect == "sqlite"):
+            vec_store = SqliteVecVectorStore()
+            available, reason = vec_store.health()
+            if available:
+                store = vec_store
+            else:
+                fallback = NumpyVectorStore()
+                fallback.fallback_reason = f"sqlite-vec 后端不可用，已降级为 numpy：{reason}"
+                store = fallback
+        elif requested == "numpy":
             store = NumpyVectorStore()
         else:
             fallback = NumpyVectorStore()
@@ -1002,9 +1526,10 @@ def index_recording_vectors(db, recording_id: int, *, model: str | None = None) 
 
     Stamps ``chunks.embedding_model`` for the recording's embedded chunks that do
     not carry a model yet (the v0.2 pipeline wrote BLOB+dim only), then refreshes
-    the active backend (numpy cache invalidation / pgvector mirror upsert) so
-    semantic search picks the fresh vectors up without a restart.  Never raises
-    for the pgvector sync failure: the BLOB index remains the source of truth.
+    the active backend (numpy cache invalidation / pgvector / sqlite-vec mirror
+    upsert) so semantic search picks the fresh vectors up without a restart.
+    Never raises for an ANN mirror sync failure: the BLOB index remains the
+    source of truth.
 
     Returns the number of chunks whose ``embedding_model`` was stamped.
     """
@@ -1025,12 +1550,13 @@ def index_recording_vectors(db, recording_id: int, *, model: str | None = None) 
             db.commit()
     store = get_vector_store()
     store.invalidate()
-    if getattr(store, "backend", "numpy") == "pgvector":
+    if getattr(store, "backend", "numpy") in ("pgvector", "sqlite_vec"):
         try:
             store.sync_recording(db, int(recording_id))
         except VectorStoreUnavailable as exc:
             logger.warning(
-                "pgvector sync after pipeline embed failed for recording %s: %s",
+                "%s sync after pipeline embed failed for recording %s: %s",
+                getattr(store, "backend", "vector"),
                 recording_id,
                 exc.reason,
             )
@@ -1044,13 +1570,27 @@ def vector_index_chunks(db, recording_id: int, *, model: str | None = None) -> i
 
 # ------------------------------------------------------------------ reindex job
 def _sync_store_after_write(store, db, recording_id: int) -> None:
-    """Mirror a reindexed recording into pgvector; numpy only needs invalidation."""
-    if getattr(store, "backend", "numpy") == "pgvector":
+    """Mirror a reindexed recording into ANN backends; numpy only needs invalidation.
+
+    ``pgvector`` / ``sqlite_vec`` copy the already committed ``chunks.embedding``
+    BLOBs into their ANN mirror, so switching backends never re-calls embeddings.
+    """
+    if getattr(store, "backend", "numpy") in ("pgvector", "sqlite_vec"):
         sync = getattr(store, "sync_recording", None)
         if callable(sync):
             sync(db, recording_id)
     else:
         store.invalidate()
+
+
+def _try_sync_store(store, db, recording_id: int, result: ReindexResult) -> None:
+    """Mirror a recording into the ANN backend, collecting failures as errors."""
+    try:
+        _sync_store_after_write(store, db, recording_id)
+    except Exception as exc:  # noqa: BLE001 - BLOB index remains authoritative
+        reason = getattr(exc, "reason", None) or f"{type(exc).__name__}: {str(exc)[:160]}"
+        logger.warning("vector mirror sync failed for recording %s: %s", recording_id, reason)
+        result.errors.append(f"录音 {recording_id} 向量索引同步失败：{reason}")
 
 
 def reindex_recordings(
@@ -1143,6 +1683,9 @@ def reindex_recordings(
         if not candidates:
             result.processed_recordings += 1
             db.commit()
+            # Backend switch backfill: mirror already-embedded BLOBs without
+            # re-calling the embedding provider (numpy path is a cheap no-op).
+            _try_sync_store(store, db, recording_id, result)
             continue
         try:
             texts = [(chunk.text or "").strip() for chunk in candidates]
@@ -1159,11 +1702,7 @@ def reindex_recordings(
                 chunk.dim = int(normalized.size)
                 chunk.embedding_model = model_name or None
             db.commit()
-            try:
-                _sync_store_after_write(store, db, recording_id)
-            except VectorStoreUnavailable as exc:  # BLOB is source of truth
-                logger.warning("pgvector 同步失败（继续使用 BLOB 索引）: %s", exc.reason)
-                result.errors.append(f"录音 {recording_id} 向量索引同步失败：{exc.reason}")
+            _try_sync_store(store, db, recording_id, result)
             result.processed_recordings += 1
             result.chunks += len(candidates)
         except Exception as exc:  # noqa: BLE001 - keep going with remaining recordings

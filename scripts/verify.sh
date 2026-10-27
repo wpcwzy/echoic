@@ -141,7 +141,7 @@ else
   export ECHOIC_CONSUME_ENABLED="${ECHOIC_CONSUME_ENABLED:-true}"
   export ECHOIC_CONSUME_DIR="${ECHOIC_CONSUME_DIR:-$DATA_DIR/consume}"
   mkdir -p "$ECHOIC_CONSUME_DIR"
-  # v0.3 实时转写 Beta（mock provider，无需 Key）与向量检索（hot 配置由 e2e 写入 mock embedding）
+  # v0.3 实时转写（mock provider，无需 Key）与向量检索（hot 配置由 e2e 写入 mock embedding）
   export ECHOIC_LIVE_ENABLED="${ECHOIC_LIVE_ENABLED:-true}"
   export ECHOIC_LIVE_PROVIDER="${ECHOIC_LIVE_PROVIDER:-mock}"
   (
@@ -217,6 +217,22 @@ else
   else
     skip "E2E v0.3 冒烟（e2e/smoke_v03.py 不存在或服务未就绪）"
   fi
+
+  # ---- 可选：v0.3.10 e2e（sqlite-vec / 注册+资料 / 描述自动生成）----
+  if [ "$READY" = 1 ] && [ -f "$REPO_ROOT/e2e/smoke_v0310.py" ]; then
+    step "E2E v0.3.10 冒烟（e2e/smoke_v0310.py）"
+    if ( cd "$REPO_ROOT" && ECHOIC_E2E_BASE_URL="http://127.0.0.1:${PORT}" \
+           ECHOIC_E2E_LOG_V0310="$DATA_DIR/smoke-v0310.log" \
+           ECHOIC_E2E_DATA_DIR="$DATA_DIR" \
+           ECHOIC_E2E_VECTOR_BACKEND="${ECHOIC_E2E_VECTOR_BACKEND:-sqlite_vec}" \
+           "$VENV/bin/python" e2e/smoke_v0310.py --data-dir "$DATA_DIR" ); then
+      ok "E2E v0.3.10 冒烟"
+    else
+      fail "E2E v0.3.10 冒烟（详情见 $DATA_DIR/smoke-v0310.log）"
+    fi
+  else
+    skip "E2E v0.3.10 冒烟（e2e/smoke_v0310.py 不存在或服务未就绪）"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -227,5 +243,5 @@ if [ "$FAIL" -gt 0 ]; then
   exit 1
 fi
 printf '\033[1;32m全部检查通过 ✔\033[0m\n'
-printf 'e2e 冒烟日志（如已运行）：%s/smoke.log（v0.1）、%s/smoke-v02.log（v0.2）、%s/smoke-v03.log（v0.3）\n' "$DATA_DIR" "$DATA_DIR" "$DATA_DIR"
+printf 'e2e 冒烟日志（如已运行）：%s/smoke.log（v0.1）、%s/smoke-v02.log（v0.2）、%s/smoke-v03.log（v0.3）、%s/smoke-v0310.log（v0.3.10）\n' "$DATA_DIR" "$DATA_DIR" "$DATA_DIR" "$DATA_DIR"
 exit 0

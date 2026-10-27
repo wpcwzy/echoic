@@ -118,7 +118,7 @@ interface EditUserFormValues {
   display_name?: string
   email?: string
   role: UserRole
-  disabled: boolean
+  enabled: boolean
 }
 
 interface EditUserModalProps {
@@ -138,7 +138,7 @@ export function EditUserModal({ user, loading, onCancel, onSubmit }: EditUserMod
       display_name: user.display_name,
       email: user.email ?? '',
       role: user.role,
-      disabled: user.disabled,
+      enabled: !user.disabled,
     })
   }, [form, user])
 
@@ -149,7 +149,7 @@ export function EditUserModal({ user, loading, onCancel, onSubmit }: EditUserMod
         display_name: values.display_name?.trim() ?? '',
         email: values.email?.trim() ?? '',
         role: values.role,
-        disabled: values.disabled,
+        disabled: !values.enabled,
       })
     } catch {
       /* validation errors are rendered inline */
@@ -182,7 +182,7 @@ export function EditUserModal({ user, loading, onCancel, onSubmit }: EditUserMod
             </Form.Item>
             <div className="settings-field settings-field--switch user-form__switch">
               <span className="settings-field__label">启用账号（关闭后无法登录，现有会话立即失效）</span>
-              <Form.Item name="disabled" valuePropName="checked" noStyle>
+              <Form.Item name="enabled" valuePropName="checked" noStyle>
                 <Switch checkedChildren="启用" unCheckedChildren="停用" />
               </Form.Item>
             </div>

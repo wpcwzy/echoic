@@ -43,11 +43,17 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     } catch {
       /* ignore non-json error */
     }
-    // Never bounce public share visitors to the login page: `/s/:token` is
-    // anonymous by design (401 = password required / expired grant).
+    // Anonymous public pages must not be bounced to /login on a boot-time 401:
+    // `/login` + `/register` (auth entry points) and `/s/:token` (public shares,
+    // where 401 means "password required").
     const currentPath = window.location.pathname
-    const isPublicSharePage = currentPath.startsWith('/s/')
-    if (response.status === 401 && !isPublicSharePage && !currentPath.startsWith('/login')) {
+    const isPublicPage =
+      currentPath.startsWith('/s/') ||
+      currentPath === '/login' ||
+      currentPath.startsWith('/login/') ||
+      currentPath === '/register' ||
+      currentPath.startsWith('/register/')
+    if (response.status === 401 && !isPublicPage) {
       window.location.href = '/login'
     }
     throw new ApiError(response.status, message, code)

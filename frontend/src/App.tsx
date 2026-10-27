@@ -7,6 +7,8 @@ import { useAuthStore } from './store/auth'
 import { isAdminUser } from './utils/roles'
 import AppShell from './layouts/AppShell'
 import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import ProfilePage from './pages/ProfilePage'
 import LibraryPage from './pages/LibraryPage'
 import RecordPage from './pages/RecordPage'
 import RecordingDetailPage from './pages/RecordingDetailPage'
@@ -99,6 +101,8 @@ export default function App() {
       <AuthBootstrap />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* Public self-service registration (availability controlled by the server flag). */}
+        <Route path="/register" element={<RegisterPage />} />
         {/* Public share page: no AppShell, no login required, never redirects to /login. */}
         <Route path="/s/:token" element={<PublicSharePage />} />
         <Route element={<RequireAuth />}>
@@ -107,6 +111,7 @@ export default function App() {
             <Route path="/record" element={<RecordPage />} />
             <Route path="/r/:id" element={<RecordingDetailPage />} />
             <Route path="/search" element={<SearchPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route element={<RequireAdmin />}>
               <Route path="users" element={<UsersPage />} />
               <Route path="settings" element={<SettingsPage />} />

@@ -7,6 +7,7 @@ import asyncio
 import pytest
 from sqlalchemy import select
 
+from app.config import settings
 from app.core.utils import utcnow
 from app.models import Chunk
 from app.services.retrieval import (
@@ -30,6 +31,16 @@ MEMBER_SEGMENTS = [
 
 @pytest.fixture(autouse=True)
 def _clean_vector_state():
+    reset_vector_store_cache()
+    yield
+    reset_vector_store_cache()
+
+
+@pytest.fixture(autouse=True)
+def _force_numpy_backend(monkeypatch):
+    """Semantic/ACL expectations are contract-tested on the numpy backend; the
+    sqlite-vec backend has dedicated parity tests in test_vector_sqlite_vec.py."""
+    monkeypatch.setattr(settings, "vector_backend", "numpy")
     reset_vector_store_cache()
     yield
     reset_vector_store_cache()

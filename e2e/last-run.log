@@ -1,12 +1,12 @@
-Echoic E2E Smoke — 2026-10-27 04:01:52
-目标服务: http://127.0.0.1:8100
+Echoic E2E Smoke — 2026-10-27 20:20:30
+目标服务: http://127.0.0.1:8091
 Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
-临时目录: /tmp/echoic-e2e-f8g02c2b
+临时目录: /tmp/echoic-e2e-loryco36
 ==============================================================================
 
 [1;36m━━━ 0. 环境与健康检查 ━━━[0m
 [1;32m[PASS][0m health (0.01s)
-        version=0.3.0 demo_mode=True worker=ok db=ok ffmpeg=ok
+        version=0.3.10 demo_mode=True worker=ok db=ok ffmpeg=ok
 
 [1;36m━━━ 1. 鉴权 ━━━[0m
 [1;32m[PASS][0m auth.unauthorized (0.01s)
@@ -22,25 +22,25 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
 
 [1;36m━━━ 2. 系统与资料库 ━━━[0m
 [1;32m[PASS][0m system.info (0.01s)
-        recordings=4 segments=138 chunks=138 worker={'embedded': True, 'running': True, 'queue_depth': 0, 'last_error': None, 'last_trash_purge': {'purged': 0, 'ids': [], 'errors': 0, 'retention_days': 30, 'at': '2026-10-26T20:01:33.545018Z'}}
+        recordings=4 segments=138 chunks=138 worker={'embedded': True, 'running': True, 'queue_depth': 0, 'last_error': None, 'last_trash_purge': {'purged': 0, 'ids': [], 'errors': 0, 'retention_days': 30, 'at': '2026-10-27T12:19:09.697676Z'}}
 [1;32m[PASS][0m dashboard (0.02s)
         total=4 ready=4 processing=0 hours=1.5
 [1;32m[PASS][0m library.demo-recording (0.01s)
         total=4 demo_id=1 title='TraceOpt paper discussion' demo_status=ready
 [1;32m[PASS][0m library.recording-detail (0.01s)
         id=1 duration_ms=2437000 insights=['action_items', 'chapters', 'insights', 'keywords', 'suggested_questions', 'summary', 'viewpoint_tree'] job=None
-[1;32m[PASS][0m insights.demo (0.01s)
+[1;32m[PASS][0m insights.demo (0.00s)
         chapters=7 insights=6 questions=5 missing=[] model=mock-llm
-[1;32m[PASS][0m transcript.demo (0.00s)
+[1;32m[PASS][0m transcript.demo (0.01s)
         speakers=4 segments=73 language=zh
 
 [1;36m━━━ 3. 上传与 mock 管线处理 ━━━[0m
 [1;32m[PASS][0m upload.invalid-media-415 (0.00s)
         不支持的扩展名返回 415
-[1;32m[PASS][0m upload.audio (0.21s)
+[1;32m[PASS][0m upload.audio (0.15s)
         id=5 status=queued size=800078 文件=e2e-tone-25s.wav
 [1;32m[PASS][0m pipeline.process-ready (3.02s)
-        耗时 3.0s；状态阶段序列=['preparing', 'analyzing', 'done']
+        耗时 3.0s；状态阶段序列=['preparing', 'done']
 [1;32m[PASS][0m pipeline.artifacts (0.01s)
         segments=8 speakers=2 analysis_kinds=['summary', 'chapters', 'viewpoint_tree', 'insights', 'action_items', 'keywords'] chunks=138->139
 
@@ -48,9 +48,9 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
 [1;32m[PASS][0m transcript.speaker-rename (0.01s)
         speaker_id=15 display_name -> E2E说话人
 [1;32m[PASS][0m transcript.segment-edit (0.01s)
-        segment_id=139 文本已更新（【E2E已编辑】文档这块我负责整理，周五之前把初…）
+        segment_id=139 文本已更新（【E2E已编辑】那今天就先到这里，会后我把会议纪…）
 [1;32m[PASS][0m transcript.export (0.01s)
-        格式全部可导出：srt=583B, txt=408B, json=1261B, md=475B
+        格式全部可导出：srt=580B, txt=405B, json=1249B, md=472B
 [1;32m[PASS][0m search.global (0.01s)
         片段命中 1 条（本次录音 1 条），标题命中 2 条
 
@@ -79,31 +79,31 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
 [1;36m━━━ 8. 清理与登出 ━━━[0m
 [1;32m[PASS][0m recordings.delete (0.01s)
         测试录音 5 已删除（DB + 媒体目录）
-[1;32m[PASS][0m auth.logout (0.00s)
+[1;32m[PASS][0m auth.logout (0.01s)
         登出并清除会话 Cookie
 
 ==============================================================================
 [1mPASS/FAIL 矩阵[0m
 ------------------------------------------------------------------------------
-[1;32mPASS[0m health                                   0.01s  version=0.3.0 demo_mode=True worker=ok db=ok ffmpeg=ok
+[1;32mPASS[0m health                                   0.01s  version=0.3.10 demo_mode=True worker=ok db=ok ffmpeg=ok
 [1;32mPASS[0m auth.unauthorized                        0.01s  未登录访问受保护接口返回 401
 [1;32mPASS[0m auth.login-reject-bad-password           0.21s  错误密码返回 401
 [1;32mPASS[0m auth.login                               0.20s  user=管理员 cookie 标志齐全
 [1;32mPASS[0m auth.me                                  0.00s  cookie 会话有效：admin
 [1;32mPASS[0m auth.bearer                              0.01s  Authorization: Bearer <jwt> 鉴权有效
-[1;32mPASS[0m system.info                              0.01s  recordings=4 segments=138 chunks=138 worker={'embedded': True, 'running': True, 'queue_depth': 0, 'last_error': None, 'last_trash_purge': {'purged': 0, 'ids': [], 'errors': 0, 'retention_days': 30, 'at': '2026-10-26T20:01:33.545018Z'}}
+[1;32mPASS[0m system.info                              0.01s  recordings=4 segments=138 chunks=138 worker={'embedded': True, 'running': True, 'queue_depth': 0, 'last_error': None, 'last_trash_purge': {'purged': 0, 'ids': [], 'errors': 0, 'retention_days': 30, 'at': '2026-10-27T12:19:09.697676Z'}}
 [1;32mPASS[0m dashboard                                0.02s  total=4 ready=4 processing=0 hours=1.5
 [1;32mPASS[0m library.demo-recording                   0.01s  total=4 demo_id=1 title='TraceOpt paper discussion' demo_status=ready
 [1;32mPASS[0m library.recording-detail                 0.01s  id=1 duration_ms=2437000 insights=['action_items', 'chapters', 'insights', 'keywords', 'suggested_questions', 'summary', 'viewpoint_tree'] job=None
-[1;32mPASS[0m insights.demo                            0.01s  chapters=7 insights=6 questions=5 missing=[] model=mock-llm
-[1;32mPASS[0m transcript.demo                          0.00s  speakers=4 segments=73 language=zh
+[1;32mPASS[0m insights.demo                            0.00s  chapters=7 insights=6 questions=5 missing=[] model=mock-llm
+[1;32mPASS[0m transcript.demo                          0.01s  speakers=4 segments=73 language=zh
 [1;32mPASS[0m upload.invalid-media-415                 0.00s  不支持的扩展名返回 415
-[1;32mPASS[0m upload.audio                             0.21s  id=5 status=queued size=800078 文件=e2e-tone-25s.wav
-[1;32mPASS[0m pipeline.process-ready                   3.02s  耗时 3.0s；状态阶段序列=['preparing', 'analyzing', 'done']
+[1;32mPASS[0m upload.audio                             0.15s  id=5 status=queued size=800078 文件=e2e-tone-25s.wav
+[1;32mPASS[0m pipeline.process-ready                   3.02s  耗时 3.0s；状态阶段序列=['preparing', 'done']
 [1;32mPASS[0m pipeline.artifacts                       0.01s  segments=8 speakers=2 analysis_kinds=['summary', 'chapters', 'viewpoint_tree', 'insights', 'action_items', 'keywords'] chunks=138->139
 [1;32mPASS[0m transcript.speaker-rename                0.01s  speaker_id=15 display_name -> E2E说话人
-[1;32mPASS[0m transcript.segment-edit                  0.01s  segment_id=139 文本已更新（【E2E已编辑】文档这块我负责整理，周五之前把初…）
-[1;32mPASS[0m transcript.export                        0.01s  格式全部可导出：srt=583B, txt=408B, json=1261B, md=475B
+[1;32mPASS[0m transcript.segment-edit                  0.01s  segment_id=139 文本已更新（【E2E已编辑】那今天就先到这里，会后我把会议纪…）
+[1;32mPASS[0m transcript.export                        0.01s  格式全部可导出：srt=580B, txt=405B, json=1249B, md=472B
 [1;32mPASS[0m search.global                            0.01s  片段命中 1 条（本次录音 1 条），标题命中 2 条
 [1;32mPASS[0m chat.sse-stream                          0.23s  事件=['start', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta']… 回答长度=262 预览='这场会围绕 ICPE 投稿倒排了时间：**摘要两周内投出，正文再三周**，五周后'
 [1;32mPASS[0m chat.history                             0.00s  历史消息 2 条，最后回答长度=262，引用=5
@@ -114,7 +114,7 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
 [1;32mPASS[0m media.range-206                          0.02s  206 Partial Content，Content-Range=bytes 0-1023/160138，类型=audio/mp4
 [1;32mPASS[0m pipeline.reprocess-insights              1.52s  from=insights 重处理完成，阶段=['preparing', 'done']，summary/chapters 仍在
 [1;32mPASS[0m recordings.delete                        0.01s  测试录音 5 已删除（DB + 媒体目录）
-[1;32mPASS[0m auth.logout                              0.00s  登出并清除会话 Cookie
+[1;32mPASS[0m auth.logout                              0.01s  登出并清除会话 Cookie
 ------------------------------------------------------------------------------
 总计 30 项：[1;32m30 通过[0m，[1;31m0 失败[0m，0 跳过
 

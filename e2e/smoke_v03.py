@@ -152,7 +152,7 @@ class V03Smoke(Smoke):
         expect(int(live.get("max_minutes") or 0) > 0, f"live.max_minutes 异常：{live}")
         expect(live.get("merge_mode") in ("replace", "promote"), f"live.merge_mode 异常：{live}")
         vector = data["vector"]
-        expect(vector.get("backend") in ("numpy", "pgvector"), f"vector.backend 异常：{vector}")
+        expect(vector.get("backend") in ("numpy", "pgvector", "sqlite_vec"), f"vector.backend 异常：{vector}")
         expect(vector.get("search_enabled") is True, f"vector.search_enabled 应为 true：{vector}")
         storage = data["storage"]
         expect(storage.get("backend") == "local", f"storage.backend 应为 local：{storage}")
@@ -573,7 +573,7 @@ class V03Smoke(Smoke):
         self._set_embeddings("mock")
         status = self._json(self.client.get("/api/vector/status"))
         expect(status.get("embeddings_configured") is True, f"mock embeddings 未生效：{status}")
-        expect(status.get("backend") in ("numpy", "pgvector"), f"vector backend 异常：{status}")
+        expect(status.get("backend") in ("numpy", "pgvector", "sqlite_vec"), f"vector backend 异常：{status}")
         expect(status.get("available") is True, f"vector 后端不可用：{status}")
         self.ctx["vector_status"] = status
         return f"embeddings=mock backend={status.get('backend')} chunks_total={status.get('chunks_total')} " \

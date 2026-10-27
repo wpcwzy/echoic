@@ -1,4 +1,4 @@
-"""Live transcription API (R-19, v0.3.0 Beta) — docs/10 §4.1.
+"""Live transcription API (R-19, v0.3.10 GA) — docs/10 §4.1.
 
 Routes (mounted at ``/api/live`` by ``app.main``):
 

@@ -10,7 +10,7 @@ import {
   ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useLogin, useSystemHealth } from '../api/queries'
 import { useAuthStore } from '../store/auth'
@@ -229,6 +229,15 @@ export default function LoginPage() {
               一键填入
             </Button>
           </div>
+
+          {health?.allow_registration && (
+            <div style={{ marginTop: 14, textAlign: 'center', fontSize: 13, color: 'var(--text-2)' }}>
+              还没有账号？
+              <Link to="/register" style={{ color: 'var(--brand)', marginLeft: 6, fontWeight: 500 }}>
+                立即注册
+              </Link>
+            </div>
+          )}
 
           <div className="login-card__foot">
             <span className={`login-health-dot ${health ? 'is-ok' : ''}`} />

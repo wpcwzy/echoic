@@ -24,7 +24,7 @@ from ..core.utils import utcnow
 from ..db import get_db
 from ..deps import get_current_user
 from ..models import User
-from ..schemas import LoginIn, LoginOut, OkOut, RegisterIn, UserOut
+from ..schemas import LoginIn, LoginOut, OkOut, ProfileUpdateIn, RegisterIn, UserOut
 from ..services.settings_store import load_ai_config
 
 logger = logging.getLogger(__name__)
@@ -126,6 +126,33 @@ def logout(response: Response, user: User = Depends(get_current_user)):
 
 @router.get("/me", response_model=MeOut)
 def me(user: User = Depends(get_current_user)):
+    return MeOut(user=UserOut.model_validate(user))
+
+
+@router.patch("/me", response_model=MeOut)
+def update_me(
+    payload: ProfileUpdateIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Self-service profile update.
+
+    Only ``display_name`` / ``email`` are editable here; ``role``, ``disabled``,
+    ``username`` and any other field are ignored even when sent (admin surface
+    remains ``/api/users``). An empty ``display_name`` falls back to the
+    username; an empty ``email`` clears it.
+    """
+    fields = payload.model_fields_set
+    if "display_name" in fields:
+        name = (payload.display_name or "").strip()
+        user.display_name = name[:120] or user.username
+    if "email" in fields:
+        email = (payload.email or "").strip()
+        user.email = email or None
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    logger.info("user %s updated own profile", user.username)
     return MeOut(user=UserOut.model_validate(user))
 
 

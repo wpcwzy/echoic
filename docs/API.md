@@ -352,7 +352,7 @@ data: {"type":"done","message_id":42}
 → `{action,succeeded,failed,results:[{id,ok,error?}]}`；单次 ≤ `ECHOIC_BATCH_MAX_ITEMS`（默认 100）、部分成功；`tag_add/tag_remove` 仅 admin；权限逐项校验。
 - 保留期 `ECHOIC_TRASH_RETENTION_DAYS`（默认 30），worker 每小时清理过期项。
 
-### 10.2 实时转写 Beta（R-19，默认关闭）
+### 10.2 实时字幕（R-19，v0.3.10 GA，默认开启）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -360,8 +360,8 @@ data: {"type":"done","message_id":42}
 | GET | `/api/live/sessions/{id}` | owner/admin：会话状态 |
 | GET | `/api/live/sessions/{id}/segments` | `{segments:[LiveSegmentOut]}` |
 | POST | `/api/live/sessions/{id}/stop` \| `/cancel` | 幂等结束/取消 |
-| WS | `/api/live/sessions/{id}/stream` | Cookie `echoic_token` 或 `?token=`；二进制 PCM16LE 16k mono 音频帧；JSON `{type:"start"}` / `{type:"stop"}`；服务端事件 `ready/partial/final/error/done`；close codes 4403/4404/4409/4413/1000/1011 |
-| GET | `/api/recordings/{id}/live` | 绑定该录音的实时会话 + 片段（详情页“实时稿 Beta”） |
+| WS | `/api/live/sessions/{id}/stream` | Cookie `echoic_token` 或 `?token=`；二进制 PCM16LE 16k mono 音频帧；JSON `{type:"start"}` / `{type:"stop"}`；服务端事件 `ready/partial/final/error/done`（`ready` 可含 `resumed/base_ms/total_ms/connection`），心跳 `ping`→`pong`；close codes 4403/4404/4409/4413/1000/1011 |
+| GET | `/api/recordings/{id}/live` | 绑定该录音的实时会话 + 片段（详情页“实时稿”） |
 
 上传接口 `POST /api/recordings/upload` 新增可选 form 字段 `live_session_id`，绑定后按会话 `merge_mode` 合并：`replace`（默认，保留离线说话人转录）或 `promote`（用单说话人实时稿作为最终转录并重算分析；离线 ASR 失败时自动回退 promote）。
 
@@ -374,11 +374,21 @@ data: {"type":"done","message_id":42}
 | GET | `/api/vector/search?q=&mode=hybrid|semantic&limit=` | 登录用户；ACL（admin 全部/member 自己）→ `{query,mode,results:[{recording_id,title,segment_id,speaker,start_ms,end_ms,text,score}],fallback_reason}` |
 
 - Embedding provider 支持 `mock`（演示/测试，确定性 256 维）；生产可用 OpenAI 兼容或 DashScope embeddings。
-- `ECHOIC_VECTOR_BACKEND=auto|numpy|pgvector`；pgvector 不可用时自动降级 numpy 并返回 `fallback_reason`。
+- `ECHOIC_VECTOR_BACKEND=auto|numpy|sqlite_vec|pgvector`；auto 在 SQLite 优先 sqlite-vec、PG 优先 pgvector，不可用时自动降级 numpy 并返回 `fallback_reason`。
 - CLI：`python -m app.tools.vector_reindex --all [--dry-run] [--force] [--recording-id N]`。
 - AI 问答 RAG 自动使用混合检索（无向量时行为与 v0.2 等价）。
 
-### 10.4 系统
+### 10.4 个人资料 / 注册
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| PATCH | `/api/auth/me` | 登录用户修改自己的 `display_name`/`email`（其他字段忽略）→ `{user: UserOut}` |
+| POST | `/api/auth/register` | 需管理员开启 `allow_registration`；`201 UserOut`（member，不自动登录，前端注册后调用 /login） |
+
+- `GET /api/system/health` 增加公开字段 `allow_registration`，登录页据此显示注册入口。
+- `GET /api/auth/me` 返回当前用户；`POST /api/auth/change-password` 修改自己的密码（≥6 位）。
+
+### 10.5 系统
 
 - `GET /api/system/features`（登录）：`{live:{enabled,provider,max_minutes,merge_mode},vector:{backend,search_enabled,embeddings_configured},storage:{backend},trash:{retention_days}}`，供前端能力探测。
 - `GET /api/system/health` 新增 `storage/storage_backend/storage_detail` 字段；对象存储不可用时整体 `degraded`。

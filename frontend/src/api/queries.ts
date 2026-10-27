@@ -18,6 +18,8 @@ import type {
   Insights,
   UpdateRecordingPayload,
   User,
+  RegisterPayload,
+  ProfileUpdatePayload,
   Segment,
   SoftDeleteResponse,
   SystemFeatures,
@@ -91,6 +93,24 @@ export function useLogin() {
     onSuccess: (data) => {
       queryClient.setQueryData(qk.me, { user: data.user })
       void queryClient.invalidateQueries()
+    },
+  })
+}
+
+/** Public registration (no cookie set — call useLogin afterwards). */
+export function useRegister() {
+  return useMutation<User, Error, RegisterPayload>({
+    mutationFn: (payload) => api.post<User>('/api/auth/register', payload),
+  })
+}
+
+/** Self-service profile update: PATCH /api/auth/me returns {user}. */
+export function useUpdateProfile() {
+  const queryClient = useQueryClient()
+  return useMutation<MeResponse, Error, ProfileUpdatePayload>({
+    mutationFn: (payload) => api.patch<MeResponse>('/api/auth/me', payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(qk.me, data)
     },
   })
 }

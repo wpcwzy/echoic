@@ -89,6 +89,17 @@ class ChangePasswordIn(BaseModel):
     new_password: str = Field(min_length=6, max_length=200)
 
 
+class ProfileUpdateIn(BaseModel):
+    """Self-service profile update (``PATCH /api/auth/me``).
+
+    Only ``display_name``/``email`` are accepted; any other field sent by a
+    client (role/disabled/username/...) is ignored on purpose.
+    """
+
+    display_name: str | None = Field(default=None, max_length=120)
+    email: str | None = Field(default=None, max_length=255)
+
+
 class OkOut(BaseModel):
     ok: bool = True
 
@@ -413,6 +424,7 @@ class HealthOut(BaseModel):
     storage_backend: str = "local"
     storage_detail: str = ""
     demo_mode: bool = False
+    allow_registration: bool = False
     time: str = ""
 
 

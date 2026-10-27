@@ -1,0 +1,106 @@
+{
+  "upstreamPort": 8100,
+  "proxyBase": "http://127.0.0.1:44902",
+  "results": [
+    {
+      "name": "login with admin/admin123",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no \"Beta\" copy on record page",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "live captions connected (real backend)",
+      "ok": true,
+      "detail": "session=1"
+    },
+    {
+      "name": "session created with mock provider",
+      "ok": true,
+      "detail": "\"mock\""
+    },
+    {
+      "name": "final captions received before drop",
+      "ok": true,
+      "detail": "lines=1"
+    },
+    {
+      "name": "backend session active with segments",
+      "ok": true,
+      "detail": "status=active segs=1"
+    },
+    {
+      "name": "proxy dropped the live WebSocket",
+      "ok": true,
+      "detail": "dropped=1"
+    },
+    {
+      "name": "reconnecting status after unexpected drop",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "reconnect #1 resumed the same session",
+      "ok": true,
+      "detail": "{\"type\":\"ready\",\"resumed\":true,\"base_ms\":4500,\"total_ms\":4500,\"connection\":2}"
+    },
+    {
+      "name": "resume continues from audio base",
+      "ok": true,
+      "detail": "base_ms=4500"
+    },
+    {
+      "name": "server connection counter increased",
+      "ok": true,
+      "detail": "connection=2"
+    },
+    {
+      "name": "backend session still active after resume",
+      "ok": true,
+      "detail": "status=active"
+    },
+    {
+      "name": "retry after a failed attempt resumes the session",
+      "ok": true,
+      "detail": "resumes=2"
+    },
+    {
+      "name": "captions continue after reconnects",
+      "ok": true,
+      "detail": "1 -> 2"
+    },
+    {
+      "name": "session ended after stop",
+      "ok": true,
+      "detail": "status=ended"
+    },
+    {
+      "name": "live transcript persisted with audio",
+      "ok": true,
+      "detail": "segs=3 audio=9200ms"
+    },
+    {
+      "name": "resumed segments are contiguous",
+      "ok": true,
+      "detail": "0-3200,3200-6800,6800-9200"
+    },
+    {
+      "name": "no duplicated live captions",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no reconnect after intentional stop",
+      "ok": true,
+      "detail": "ready=3 creates=1"
+    },
+    {
+      "name": "no page errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

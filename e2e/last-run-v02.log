@@ -1,28 +1,28 @@
-Echoic v0.2 E2E Smoke — 2026-10-27 04:01:58
-目标服务: http://127.0.0.1:8100 | consume dir: /home/wpcwzy/echoic/.cache/e2e-v03-consume
+Echoic v0.2 E2E Smoke — 2026-10-27 20:20:36
+目标服务: http://127.0.0.1:8091 | consume dir: /home/wpcwzy/echoic/.cache/e2e-v0310-reg-consume
 Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
 ==============================================================================
 
 [1;36m━━━ 0. 环境与管理员登录 ━━━[0m
 [1;32m[PASS][0m v02.health (0.01s)
-        version=0.3.0 demo_mode=True worker=ok db=ok ffmpeg=ok
+        version=0.3.10 demo_mode=True worker=ok db=ok ffmpeg=ok
 [1;32m[PASS][0m v02.auth.login-admin (0.20s)
         user=管理员 cookie 标志齐全
-[1;32m[PASS][0m v02.system.info (0.00s)
-        recordings=4 segments=146 chunks=139 worker={'embedded': True, 'running': True, 'queue_depth': 0, 'last_error': None, 'last_trash_purge': {'purged': 0, 'ids': [], 'errors': 0, 'retention_days': 30, 'at': '2026-10-26T20:01:33.545018Z'}}
+[1;32m[PASS][0m v02.system.info (0.01s)
+        recordings=4 segments=146 chunks=139 worker={'embedded': True, 'running': True, 'queue_depth': 0, 'last_error': None, 'last_trash_purge': {'purged': 0, 'ids': [], 'errors': 0, 'retention_days': 30, 'at': '2026-10-27T12:19:09.697676Z'}}
 [1;32m[PASS][0m v02.library.demo (0.01s)
         total=4 demo_id=1 title='TraceOpt paper discussion' demo_status=ready
 
 [1;36m━━━ 1. 多用户与角色（R-18） ━━━[0m
 [1;32m[PASS][0m v02.users.list-admin (0.01s)
         用户 1 个，admin 角色正常
-[1;32m[PASS][0m v02.users.create-member (0.83s)
+[1;32m[PASS][0m v02.users.create-member (0.82s)
         创建并登录 member1/member2（id=2/3，role=member）
 [1;32m[PASS][0m v02.users.duplicate-409 (0.01s)
         重复用户名 409；密码 <8 位 422
 [1;32m[PASS][0m v02.users.disabled-login-403 (0.42s)
         停用后登录 403，恢复后可登录
-[1;32m[PASS][0m v02.auth.register-gated (0.44s)
+[1;32m[PASS][0m v02.auth.register-gated (0.45s)
         注册开关：关闭时 403；开启后 201(member) 可登录；已恢复关闭
 [1;32m[PASS][0m v02.users.last-admin-protection (0.01s)
         不能降级/删除最后一个管理员（已拦截）
@@ -30,7 +30,7 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
         member 访问 8 个 admin 接口均 403；GET /api/tags 200
 
 [1;36m━━━ 2. 权限矩阵与录音归属 ━━━[0m
-[1;32m[PASS][0m v02.perm.admin-upload (2.15s)
+[1;32m[PASS][0m v02.perm.admin-upload (2.14s)
         admin 上传 id=6 → ready，owner=admin
 [1;32m[PASS][0m v02.perm.reassign-owner (0.01s)
         录音 6 归属 → member1（owner_id=2）
@@ -40,19 +40,19 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
         member 列表仅 2 条（demo 不可见，越权访问全部 404）
 [1;32m[PASS][0m v02.perm.member-own-access (0.02s)
         member 可读自己录音：detail/transcript/insights/media(Range206)/chat，可改标题
-[1;32m[PASS][0m v02.perm.member-owner-protection (0.00s)
+[1;32m[PASS][0m v02.perm.member-owner-protection (0.01s)
         member 不能转移归属(403)；member2 访问 member1 录音 404
 [1;32m[PASS][0m v02.perm.search-dashboard-scoped (0.04s)
         admin total=6；member total=2；搜索/dashboard 均按用户隔离
 
 [1;36m━━━ 3. 分享链接（R-17） ━━━[0m
 [1;32m[PASS][0m v02.share.create-open (0.01s)
-        创建公开分享 id=1 token=jsBUE8CZvO…
+        创建公开分享 id=1 token=Fg4WJdD2gG…
 [1;32m[PASS][0m v02.share.public-metadata (0.02s)
         匿名元数据 200；view_count 1→2，无 owner 信息
 [1;32m[PASS][0m v02.share.public-content (0.01s)
         公开读取：transcript=8 段、insights OK、media Range 206
-[1;32m[PASS][0m v02.share.download-gate (0.02s)
+[1;32m[PASS][0m v02.share.download-gate (0.03s)
         allow_download=false → 403（?download 与 /download）；=true → 200 attachment
 [1;32m[PASS][0m v02.share.include-flags (0.02s)
         include_transcript/insights=false → 公开接口 403，元数据标记正确
@@ -60,7 +60,7 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
         密码分享：未解锁 401；错误密码 401；正确解锁 200 + 路径级 HttpOnly Cookie；解锁后内容可读
 [1;32m[PASS][0m v02.share.unlock-rate-limit (1.23s)
         解锁限速生效：[401, 401, 401, 401, 401, 429]
-[1;32m[PASS][0m v02.share.expiry (3.22s)
+[1;32m[PASS][0m v02.share.expiry (3.21s)
         过去时间创建被 400 拒绝；有效期 2s 的分享过期后公开访问 404
 [1;32m[PASS][0m v02.share.revoke (0.03s)
         撤销后公开 404；member2 不能撤销他人分享
@@ -69,14 +69,14 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
 
 [1;36m━━━ 4. consume 目录自动导入（R-22） ━━━[0m
 [1;32m[PASS][0m v02.consume.status (0.00s)
-        consume 状态：enabled=True dir=/home/wpcwzy/echoic/.cache/e2e-v03-consume interval=15s
-[1;32m[PASS][0m v02.consume.import-ready (3.15s)
+        consume 状态：enabled=True dir=/home/wpcwzy/echoic/.cache/e2e-v0310-reg-consume interval=15s
+[1;32m[PASS][0m v02.consume.import-ready (3.18s)
         scan={'scanned': 1, 'imported': 1, 'duplicates': 0, 'failed': 0}；导入 id=8 → ready（source=consume, 文件已移出）
 [1;32m[PASS][0m v02.consume.duplicate (0.13s)
         首次 {'scanned': 1, 'imported': 1, 'duplicates': 0, 'failed': 0}；重复 {'scanned': 1, 'imported': 0, 'duplicates': 1, 'failed': 0}；录音总数 8 不变
 [1;32m[PASS][0m v02.consume.unsupported-skip (0.01s)
         不支持扩展名跳过（scan={'scanned': 2, 'imported': 0, 'duplicates': 1, 'failed': 0}，录音数不变）
-[1;32m[PASS][0m v02.consume.invalid-failed (0.05s)
+[1;32m[PASS][0m v02.consume.invalid-failed (0.06s)
         非法媒体→failed（scan.failed=1，已移入 consume/failed/）
 
 [1;36m━━━ 5. v0.1 回归（按 v0.2 权限模型） ━━━[0m
@@ -86,39 +86,39 @@ Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
 ==============================================================================
 [1mv0.2 PASS/FAIL 矩阵[0m
 ------------------------------------------------------------------------------
-[1;32mPASS[0m v02.health                                 0.01s  version=0.3.0 demo_mode=True worker=ok db=ok ffmpeg=ok
+[1;32mPASS[0m v02.health                                 0.01s  version=0.3.10 demo_mode=True worker=ok db=ok ffmpeg=ok
 [1;32mPASS[0m v02.auth.login-admin                       0.20s  user=管理员 cookie 标志齐全
-[1;32mPASS[0m v02.system.info                            0.00s  recordings=4 segments=146 chunks=139 worker={'embedded': True, 'running': True, 'queue_depth': 0, 'last_error': None, 'last_trash_purge': {'purged': 0, 'ids': [], 'errors': 0, 'retention_days': 30, 'at': '2026-10-26T20:01:33.545018Z'}}
+[1;32mPASS[0m v02.system.info                            0.01s  recordings=4 segments=146 chunks=139 worker={'embedded': True, 'running': True, 'queue_depth': 0, 'last_error': None, 'last_trash_purge': {'purged': 0, 'ids': [], 'errors': 0, 'retention_days': 30, 'at': '2026-10-27T12:19:09.697676Z'}}
 [1;32mPASS[0m v02.library.demo                           0.01s  total=4 demo_id=1 title='TraceOpt paper discussion' demo_status=ready
 [1;32mPASS[0m v02.users.list-admin                       0.01s  用户 1 个，admin 角色正常
-[1;32mPASS[0m v02.users.create-member                    0.83s  创建并登录 member1/member2（id=2/3，role=member）
+[1;32mPASS[0m v02.users.create-member                    0.82s  创建并登录 member1/member2（id=2/3，role=member）
 [1;32mPASS[0m v02.users.duplicate-409                    0.01s  重复用户名 409；密码 <8 位 422
 [1;32mPASS[0m v02.users.disabled-login-403               0.42s  停用后登录 403，恢复后可登录
-[1;32mPASS[0m v02.auth.register-gated                    0.44s  注册开关：关闭时 403；开启后 201(member) 可登录；已恢复关闭
+[1;32mPASS[0m v02.auth.register-gated                    0.45s  注册开关：关闭时 403；开启后 201(member) 可登录；已恢复关闭
 [1;32mPASS[0m v02.users.last-admin-protection            0.01s  不能降级/删除最后一个管理员（已拦截）
 [1;32mPASS[0m v02.member.admin-api-403                   0.02s  member 访问 8 个 admin 接口均 403；GET /api/tags 200
-[1;32mPASS[0m v02.perm.admin-upload                      2.15s  admin 上传 id=6 → ready，owner=admin
+[1;32mPASS[0m v02.perm.admin-upload                      2.14s  admin 上传 id=6 → ready，owner=admin
 [1;32mPASS[0m v02.perm.reassign-owner                    0.01s  录音 6 归属 → member1（owner_id=2）
 [1;32mPASS[0m v02.perm.member-upload                     1.14s  member1 上传 id=7 → ready，owner_id=2
 [1;32mPASS[0m v02.perm.member-isolation                  0.03s  member 列表仅 2 条（demo 不可见，越权访问全部 404）
 [1;32mPASS[0m v02.perm.member-own-access                 0.02s  member 可读自己录音：detail/transcript/insights/media(Range206)/chat，可改标题
-[1;32mPASS[0m v02.perm.member-owner-protection           0.00s  member 不能转移归属(403)；member2 访问 member1 录音 404
+[1;32mPASS[0m v02.perm.member-owner-protection           0.01s  member 不能转移归属(403)；member2 访问 member1 录音 404
 [1;32mPASS[0m v02.perm.search-dashboard-scoped           0.04s  admin total=6；member total=2；搜索/dashboard 均按用户隔离
-[1;32mPASS[0m v02.share.create-open                      0.01s  创建公开分享 id=1 token=jsBUE8CZvO…
+[1;32mPASS[0m v02.share.create-open                      0.01s  创建公开分享 id=1 token=Fg4WJdD2gG…
 [1;32mPASS[0m v02.share.public-metadata                  0.02s  匿名元数据 200；view_count 1→2，无 owner 信息
 [1;32mPASS[0m v02.share.public-content                   0.01s  公开读取：transcript=8 段、insights OK、media Range 206
-[1;32mPASS[0m v02.share.download-gate                    0.02s  allow_download=false → 403（?download 与 /download）；=true → 200 attachment
+[1;32mPASS[0m v02.share.download-gate                    0.03s  allow_download=false → 403（?download 与 /download）；=true → 200 attachment
 [1;32mPASS[0m v02.share.include-flags                    0.02s  include_transcript/insights=false → 公开接口 403，元数据标记正确
 [1;32mPASS[0m v02.share.password-unlock                  0.64s  密码分享：未解锁 401；错误密码 401；正确解锁 200 + 路径级 HttpOnly Cookie；解锁后内容可读
 [1;32mPASS[0m v02.share.unlock-rate-limit                1.23s  解锁限速生效：[401, 401, 401, 401, 401, 429]
-[1;32mPASS[0m v02.share.expiry                           3.22s  过去时间创建被 400 拒绝；有效期 2s 的分享过期后公开访问 404
+[1;32mPASS[0m v02.share.expiry                           3.21s  过去时间创建被 400 拒绝；有效期 2s 的分享过期后公开访问 404
 [1;32mPASS[0m v02.share.revoke                           0.03s  撤销后公开 404；member2 不能撤销他人分享
 [1;32mPASS[0m v02.share.member-scope                     0.01s  member 可分享自己录音；不可分享他人录音（404）
-[1;32mPASS[0m v02.consume.status                         0.00s  consume 状态：enabled=True dir=/home/wpcwzy/echoic/.cache/e2e-v03-consume interval=15s
-[1;32mPASS[0m v02.consume.import-ready                   3.15s  scan={'scanned': 1, 'imported': 1, 'duplicates': 0, 'failed': 0}；导入 id=8 → ready（source=consume, 文件已移出）
+[1;32mPASS[0m v02.consume.status                         0.00s  consume 状态：enabled=True dir=/home/wpcwzy/echoic/.cache/e2e-v0310-reg-consume interval=15s
+[1;32mPASS[0m v02.consume.import-ready                   3.18s  scan={'scanned': 1, 'imported': 1, 'duplicates': 0, 'failed': 0}；导入 id=8 → ready（source=consume, 文件已移出）
 [1;32mPASS[0m v02.consume.duplicate                      0.13s  首次 {'scanned': 1, 'imported': 1, 'duplicates': 0, 'failed': 0}；重复 {'scanned': 1, 'imported': 0, 'duplicates': 1, 'failed': 0}；录音总数 8 不变
 [1;32mPASS[0m v02.consume.unsupported-skip               0.01s  不支持扩展名跳过（scan={'scanned': 2, 'imported': 0, 'duplicates': 1, 'failed': 0}，录音数不变）
-[1;32mPASS[0m v02.consume.invalid-failed                 0.05s  非法媒体→failed（scan.failed=1，已移入 consume/failed/）
+[1;32mPASS[0m v02.consume.invalid-failed                 0.06s  非法媒体→failed（scan.failed=1，已移入 consume/failed/）
 [1;32mPASS[0m v02.regression.demo-chat-sse               0.22s  事件=['start', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta', 'delta']… 回答长度=262 预览='这场会围绕 ICPE 投稿倒排了时间：**摘要两周内投出，正文再三周**，五周后'
 ------------------------------------------------------------------------------
 总计 34 项：[1;32m34 通过[0m，[1;31m0 失败[0m，0 跳过

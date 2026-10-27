@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import select
 
+from app.config import settings
 from app.db import SessionLocal
 from app.models import Chunk, User
 from app.services.vector_store import reset_vector_store_cache
@@ -22,6 +23,15 @@ MEMBER_SEGMENTS = [
 
 @pytest.fixture(autouse=True)
 def _clean_vector_state():
+    reset_vector_store_cache()
+    yield
+    reset_vector_store_cache()
+
+
+@pytest.fixture(autouse=True)
+def _force_numpy_backend(monkeypatch):
+    """These API assertions describe the numpy path; sqlite_vec has its own suite."""
+    monkeypatch.setattr(settings, "vector_backend", "numpy")
     reset_vector_store_cache()
     yield
     reset_vector_store_cache()

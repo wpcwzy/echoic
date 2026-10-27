@@ -1,11 +1,11 @@
-"""DashScope Paraformer realtime ASR provider for the live transcription Beta.
+"""DashScope Paraformer realtime ASR provider for the live transcription.
 
 Implements the WebSocket duplex protocol from docs/research/dashscope-api.md §4:
 connect with a Bearer header → ``run-task`` → ``task-started`` → binary PCM16LE
 16 kHz mono frames → ``result-generated`` (partial / final sentences) →
 ``finish-task`` → ``task-finished``.
 
-Beta limitations (documented):
+Known limitations (documented):
 * no automatic reconnect / task rolling (a dropped connection fails the session);
 * ``paraformer-realtime-v2`` has no speaker diarization → ``speaker_label`` is
   always ``None``;
@@ -114,11 +114,21 @@ class DashScopeRealtimeProvider:
         return {"type": event_type, "text": text, "start_ms": start, "end_ms": end, "speaker_label": None}
 
     # ------------------------------------------------------------ provider API
-    async def start(self, *, language: str = "") -> None:
+    async def start(self, *, language: str = "", resume_from_ms: int = 0) -> None:
+        """Open the duplex task.
+
+        ``resume_from_ms`` is accepted for interface parity with the mock
+        provider: upstream sentence timestamps are task-relative, so the live
+        session manager applies the resume offset when persisting/replaying
+        events. A resumed connection starts a fresh upstream task (GA has
+        no task rolling) which is fine because only new audio is streamed.
+        """
         import websockets
 
         if language:
             self.language = language
+        if resume_from_ms:
+            logger.info("dashscope realtime ASR resuming stream at %sms", resume_from_ms)
         if not self.api_key:
             raise ProviderError("实时转写未配置 DashScope API Key，请在设置中填写", provider=self.name)
         self.events = asyncio.Queue()

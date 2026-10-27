@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Echoic"
-    version: str = "0.3.9"
+    version: str = "0.3.10"
     debug: bool = False
     log_level: str = "INFO"
 
@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     s3_presign_redirect: bool = False
 
     # v0.3.0: live transcription (beta, default off)
-    live_enabled: bool = False
+    live_enabled: bool = True
     live_provider: str = "auto"
     live_max_minutes: int = 60
     live_merge_mode: str = "replace"

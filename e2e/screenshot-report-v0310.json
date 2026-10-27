@@ -1,0 +1,128 @@
+{
+  "baseUrl": "http://127.0.0.1:8100",
+  "viewport": {
+    "width": 1680,
+    "height": 1050
+  },
+  "savedShots": [
+    {
+      "filename": "01-login-register-entry.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3.10/01-login-register-entry.png",
+      "note": "登录页 · 注册入口（allow_registration=true）"
+    },
+    {
+      "filename": "02-register.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3.10/02-register.png",
+      "note": "注册页（用户名/显示名称/邮箱/密码）"
+    },
+    {
+      "filename": "03-profile-dark.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3.10/03-profile-dark.png",
+      "note": "个人资料（深色）：资料保存 + 改密校验"
+    },
+    {
+      "filename": "04-library-description.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3.10/04-library-description.png",
+      "note": "资料库 · 自动描述：本次会议共 2 位发言人参与，围绕同步、方案、测试、会议…"
+    },
+    {
+      "filename": "07-transfer-owner.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3.10/07-transfer-owner.png",
+      "note": "转移录音归属弹窗（初始为空、选项为「名称（@username）」）"
+    },
+    {
+      "filename": "08-user-enabled-switch.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3.10/08-user-enabled-switch.png",
+      "note": "编辑用户：启用账号开关（开=启用 / 关=停用）"
+    },
+    {
+      "filename": "09-library-light.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3.10/09-library-light.png",
+      "note": "资料库 · 浅色主题"
+    },
+    {
+      "filename": "10-library-dark.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v0.3.10/10-library-dark.png",
+      "note": "资料库 · 深色主题"
+    }
+  ],
+  "themeChecks": [
+    {
+      "page": "login-light",
+      "expected": "light",
+      "dataTheme": "light",
+      "stored": null,
+      "bodyBg": "rgb(245, 246, 247)",
+      "bodyLum": 0.9641552941176472
+    },
+    {
+      "page": "profile-dark",
+      "expected": "dark",
+      "dataTheme": "dark",
+      "stored": "dark",
+      "bodyBg": "rgb(15, 17, 21)",
+      "bodyLum": 0.06613176470588235
+    },
+    {
+      "page": "users-light",
+      "expected": "light",
+      "dataTheme": "light",
+      "stored": "light",
+      "bodyBg": "rgb(245, 246, 247)",
+      "bodyLum": 0.9641552941176472
+    },
+    {
+      "page": "library-light",
+      "expected": "light",
+      "dataTheme": "light",
+      "stored": "light",
+      "bodyBg": "rgb(245, 246, 247)",
+      "bodyLum": 0.9641552941176472
+    },
+    {
+      "page": "library-dark",
+      "expected": "dark",
+      "dataTheme": "dark",
+      "stored": "dark",
+      "bodyBg": "rgb(15, 17, 21)",
+      "bodyLum": 0.06613176470588235
+    }
+  ],
+  "consoleErrors": [
+    {
+      "page": "anon",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "anon",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "admin",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "admin",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "page": "admin",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+  ],
+  "pageErrors": [],
+  "failedRequests": [
+    {
+      "page": "admin",
+      "url": "http://127.0.0.1:8100/api/recordings/1/media",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "page": "admin",
+      "url": "http://127.0.0.1:8100/api/recordings/1/media",
+      "failure": "net::ERR_ABORTED"
+    }
+  ],
+  "overflowIssues": [],
+  "warnings": []
+}

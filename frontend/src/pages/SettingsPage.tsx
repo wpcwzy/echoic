@@ -111,8 +111,8 @@ const PROVIDER_META: Record<AiKind, { title: string; desc: string; icon: React.R
     basePlaceholder: 'https://dashscope.aliyuncs.com',
   },
   realtime_asr: {
-    title: '实时转写 · 录音页字幕',
-    desc: '录音页边录边出字（Beta），单独配置；不支持说话人分离，最终稿以文件转写为准',
+    title: '实时字幕 · 录音页字幕',
+    desc: '录音页边录边出字（实时字幕），单独配置；不支持说话人分离，最终稿以文件转写为准',
     icon: <ThunderboltOutlined />,
     modelPlaceholder: '如 paraformer-realtime-v2',
     basePlaceholder: 'wss://dashscope.aliyuncs.com/api-ws/v1/inference',

@@ -7588,6 +7588,16 @@ mark {
   background: var(--brand-tint);
 }
 
+/* automatic reconnect after an unexpected socket drop */
+.live-status--reconnecting {
+  color: var(--amber-fg);
+  background: var(--amber-tint);
+}
+
+.live-status--reconnecting .anticon {
+  animation: echoic-spin 0.9s linear infinite;
+}
+
 .live-status--ended {
   color: var(--text-2);
   background: var(--fill-1);

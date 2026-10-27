@@ -297,3 +297,79 @@ def test_explicit_mock_realtime_overrides_file_asr(database, monkeypatch):
     )
     monkeypatch.setattr(settings, "live_provider", "auto")
     assert live_service.resolve_live_provider(database) == ("mock", "mock-realtime")
+
+
+# ------------------------------------------------ GA reconnect/resume (mock)
+async def test_mock_provider_resume_continues_absolute_timeline():
+    first = MockRealtimeProvider()
+    await first.start(language="zh", resume_from_ms=0)
+    for _ in range(40):  # 4000 ms
+        await first.send_audio(FRAME)
+    await first.finish()
+    first_events = []
+    while True:
+        event = await asyncio.wait_for(first.events.get(), timeout=5)
+        if event is None:
+            break
+        first_events.append(event)
+    first_finals = [event for event in first_events if event["type"] == "final"]
+    assert first_finals[0]["start_ms"] == 0 and first_finals[0]["end_ms"] == 3200
+
+    # Reconnect at the last received audio position: the provider resumes in
+    # sentence #2 and emits stream-relative timestamps again.
+    second = MockRealtimeProvider()
+    await second.start(language="zh", resume_from_ms=4000)
+    for _ in range(40):  # 4000 -> 8000 ms absolute
+        await second.send_audio(FRAME)
+    await second.finish()
+    second_events = []
+    while True:
+        event = await asyncio.wait_for(second.events.get(), timeout=5)
+        if event is None:
+            break
+        second_events.append(event)
+    finals = [event for event in second_events if event["type"] == "final"]
+    assert finals, "resumed provider must emit finals"
+    assert finals[0]["text"] == MOCK_SENTENCES[1]
+    assert finals[0]["start_ms"] == 0  # clamped relative to resume position
+    assert finals[0]["end_ms"] == 2800  # 6800 absolute - 4000 resume
+    assert finals[-1]["end_ms"] == 4000  # flushed at 8000 absolute - 4000
+
+
+async def test_mock_provider_close_terminates_event_stream_without_finals():
+    provider = MockRealtimeProvider()
+    await provider.start(language="zh")
+    await provider.send_audio(FRAME)
+    await provider.close()
+    events = []
+    while True:
+        event = await asyncio.wait_for(provider.events.get(), timeout=5)
+        if event is None:
+            break
+        events.append(event)
+    assert not [event for event in events if event["type"] == "final"]
+    assert all(event["type"] == "partial" for event in events)
+
+
+def test_dashboard_dashscope_realtime_start_accepts_resume_offset():
+    import inspect
+
+    signature = inspect.signature(DashScopeRealtimeProvider.start)
+    assert "resume_from_ms" in signature.parameters
+    provider = DashScopeRealtimeProvider(api_key="sk-test", model=DEFAULT_MODEL)
+    assert provider.model == DEFAULT_MODEL
+
+
+def test_auto_realtime_never_uses_non_dashscope_file_asr(database, monkeypatch):
+    """File ASR may be openai/dashscope_file; live must only use DashScope realtime or mock."""
+    update_settings(
+        database,
+        {
+            "ai": {
+                "asr": {"provider": "openai", "api_key": "sk-openai-key-123456", "base_url": "https://api.openai.com/v1"},
+                "realtime_asr": {"provider": "auto", "api_key": "__clear__"},
+            }
+        },
+    )
+    monkeypatch.setattr(settings, "live_provider", "auto")
+    assert live_service.resolve_live_provider(database) == ("mock", "mock-realtime")

@@ -9,6 +9,7 @@ import {
   DesktopOutlined,
   LogoutOutlined,
   MoonOutlined,
+  ProfileOutlined,
   QuestionCircleOutlined,
   SearchOutlined,
   SettingOutlined,
@@ -57,6 +58,7 @@ const SECTION_TITLES: { match: (path: string) => boolean; title: string }[] = [
   { match: (path) => path.startsWith('/record'), title: '录音与上传' },
   { match: (path) => path.startsWith('/search'), title: '全局搜索' },
   { match: (path) => path.startsWith('/users'), title: '用户管理' },
+  { match: (path) => path.startsWith('/profile'), title: '个人资料' },
   { match: (path) => path.startsWith('/settings'), title: '设置' },
   { match: () => true, title: '资料库' },
 ]
@@ -157,12 +159,14 @@ export default function AppShell() {
         { key: 'theme-system', icon: <DesktopOutlined />, label: themeMenuLabel('system', '跟随系统') },
       ],
     },
+    { key: 'profile', icon: <ProfileOutlined />, label: '个人资料' },
     ...(isAdmin ? [{ key: 'settings', icon: <UserOutlined />, label: '账户与设置' } as const] : []),
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
   ]
 
   const onUserMenuClick: MenuProps['onClick'] = ({ key }) => {
     if (key === 'logout') handleLogout()
+    if (key === 'profile') navigate('/profile')
     if (key === 'settings') navigate('/settings?tab=account')
     if (key.startsWith('theme-')) {
       const nextMode = key.replace('theme-', '') as ThemeMode

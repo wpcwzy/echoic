@@ -11,7 +11,7 @@
 > Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
 - Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
-- Version: **v0.3.9** — P1 complete (dark theme, trash & batch, object storage, live transcription Beta, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
+- Version: **v0.3.10** — P1 complete + sqlite-vec, live captions GA, registration/profile, auto descriptions (dark theme, trash & batch, object storage, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
 - License: MIT
 
 ## 📸 Screenshots
@@ -66,6 +66,8 @@
 | 🎧 Player | Drag-to-seek, ±15 s, playback speed, chapter ticks, active-line highlighting, HTTP Range streaming |
 | 💾 Data ownership | SQLite (optional PostgreSQL) + local media directory; backup = archive one data volume |
 | 🔐 Security | HttpOnly cookie JWT, bcrypt passwords, Fernet-encrypted API keys (masked in responses), upload validation, login rate limiting |
+| 👤 Registration & profile | Public /register (gated by admin toggle) with auto-login; self-service /profile for display name/email/password; admin user management unchanged |
+| 📝 Auto descriptions | Recordings get a concise one-line description from the AI summary after processing (falls back to transcript); user edits are never overwritten |
 | 🎭 Demo mode | Full workflow with zero API keys and zero internet access (bundled demo recordings + complete AI results) |
 | 👥 Multi-user & roles | `admin` / `member`; admin user management (create / edit / disable / reset password / delete), registration switch; recordings are owner-scoped and admins can transfer ownership; disabled accounts lose sessions immediately |
 | 🔗 Share links | One-click sharing from the detail page: optional password, expiry (1 h – never), include transcript/minutes, allow download; public read-only page `/s/{token}` with revoke and view counters |
@@ -73,9 +75,9 @@
 | 🌙 Dark theme | Light / Dark / System three-state switch, persisted per browser, no flash on reload; covers every page, modal, mind map, player and the public share page |
 | 🗑 Trash & batch operations | Soft delete with 30-day retention, restore or permanently purge, automatic share revocation; multi-select batch trash/restore/purge/reprocess/tag, partial-success reporting and undo toast |
 | 🪣 Object storage | Pluggable `local` / S3-compatible backend (MinIO); pipeline staging, Range media proxy, optional presigned redirects, delete cascades and local↔S3 migration CLI |
-| 🎙 Live transcription (Beta) | In-browser live captions via WebSocket + PCM worklet; mock provider offline, DashScope paraformer-realtime provider; merge policies `replace` / `promote` into the final transcript |
+| 🎙 Live transcription (GA) | In-browser live captions via WebSocket + PCM worklet; mock provider offline, DashScope paraformer-realtime provider; automatic reconnect/resume within 120s (1s/2s/4s backoff), merge policies `replace` / `promote` |
 | 🗣 Independent ASR slots | File transcription (whole recording, speaker diarization) and realtime captions can use separate providers / models / API keys / regions simultaneously; realtime defaults to reusing the file-transcription key |
-| 🔎 Semantic & hybrid search | Vector index over transcript chunks (numpy by default, experimental pgvector), hybrid RRF retrieval with ACL; semantic search UI, index status/rebuild, and hybrid RAG for AI Q&A |
+| 🔎 Semantic & hybrid search | Vector index over transcript chunks (numpy / **sqlite-vec** / experimental pgvector with auto-degrade), hybrid RRF retrieval with ACL; semantic search UI, index status/rebuild, hybrid RAG for AI Q&A |
 | 📤 Export | Transcript export as TXT / SRT / Markdown / JSON |
 | 🐳 One-command deploy | Prebuilt multi-arch **GHCR image** (amd64/arm64, published by CI) + image-first docker compose: `pull && up -d`; source builds supported; optional standalone worker / PostgreSQL |
 
@@ -198,7 +200,7 @@ docker pull ghcr.io/wpcwzy/echoic:latest
 |---|---|---|
 | GitHub Actions CI | **Passing**: backend pytest + frontend tsc/vite build; PR also validates the amd64 image build | [CI runs](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
 | Multi-arch image publish | **Succeeded**: linux/amd64 + linux/arm64 pushed to GHCR (`latest` / `sha-*`; semver tags on releases) | [Publish runs](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR package](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
-| Backend tests | **415 passed** (v0.1 129 + v0.2 + v0.3 trash/live/vector/storage/migrations); includes a moto S3 end-to-end upload → pipeline → Range test | `cd backend && .venv/bin/pytest -q` |
+| Backend tests | **456 passed** (v0.1 129 + v0.2 + v0.3 trash/live/vector/storage/migrations); includes a moto S3 end-to-end upload → pipeline → Range test | `cd backend && .venv/bin/pytest -q` |
 | Frontend build | **Passing** (`tsc --noEmit` clean; ~613 KB JS + 22 KB CSS gzipped) | `cd frontend && npm run build` |
 | End-to-end smoke (mock, fresh database) | v0.1 **30/30** + v0.2 **34/34** + v0.3 **34/34 PASS**: trash/batch invariants, live mock WebSocket → upload → replace/promote merge, vector reindex + semantic/hybrid search with ACL, storage Range, regression suites | [`e2e/REPORT-v0.3.md`](e2e/REPORT-v0.3.md) |
 | UI screenshot audit | v0.1 6/6 + v0.2 7/7 + v0.3 8/8 (light/dark, desktop/mobile), no overflow, no uncaught exceptions, no 5xx | [`docs/screenshots/`](docs/screenshots/) · [`docs/screenshots/v0.3/`](docs/screenshots/v0.3/) |
@@ -292,13 +294,14 @@ Everything is configurable through `ECHOIC_*` environment variables or `.env` (s
 - [x] Dark theme (light / dark / system) across the whole app
 - [x] Trash & batch operations with retention, restore/purge and share revocation
 - [x] Object storage abstraction (local / S3 / MinIO) + migration CLI
-- [x] Live transcription Beta with mock + DashScope realtime providers and merge policies
+- [x] Live transcription GA with mock + DashScope realtime providers, reconnect/resume and merge policies
 - [x] Vector/hybrid semantic search, index rebuild and hybrid RAG
 - [x] v0.1/v0.2 database auto-migration
 
 ### Next (v0.3.x / v1.0)
 
-- [ ] sqlite-vec backend, pgvector staging verification, realtime GA (reconnect, real-key 60 min soak)
+- [x] sqlite-vec backend, live captions GA with reconnect/resume
+- [ ] pgvector staging verification, real DashScope live 60-min soak, Qdrant backend
 - [ ] Self-service registration page, member profile / password page
 - [ ] Video slide/scene extraction, mobile app / browser extension, OAuth/LDAP, audit logs
 

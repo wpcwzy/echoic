@@ -30,6 +30,7 @@ from ..services.settings_store import ensure_default_settings, load_ai_config
 from ..services.vector_store import (
     MAX_REINDEX_RECORDINGS,
     ReindexResult,
+    get_vector_store,
     reindex_recordings,
 )
 
@@ -121,8 +122,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode_label = "dry-run（未写入）" if args.dry_run else "完成"
     model_name = str(getattr(provider, "model", "") or cfg.embeddings.model or "")
     dim = getattr(provider, "dim", None) or cfg.embeddings.dimensions
+    store = get_vector_store()
+    backend = str(getattr(store, "backend", "numpy"))
+    backend_note = ""
+    fallback_reason = getattr(store, "fallback_reason", None)
+    if fallback_reason:
+        backend_note = f"（{fallback_reason}）"
     lines = [
-        f"[vector-reindex] {mode_label}：embedding 模型 {model_name or '未知'}（维度 {dim}）",
+        f"[vector-reindex] {mode_label}：向量后端 {backend}{backend_note}，"
+        f"embedding 模型 {model_name or '未知'}（维度 {dim}）",
         f"[vector-reindex] 处理录音 {total.processed_recordings} 条，"
         f"{'待写入' if args.dry_run else '写入'}切片 {total.chunks} 个，跳过 {total.skipped} 个",
     ]

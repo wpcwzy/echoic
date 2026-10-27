@@ -40,7 +40,8 @@ function defaultTitle(): string {
 const LIVE_STATUS_META: Record<LiveCaptionStatus, { label: string; className: string }> = {
   idle: { label: '未开始', className: 'idle' },
   connecting: { label: '连接中…', className: 'connecting' },
-  live: { label: '实时转写中', className: 'live' },
+  live: { label: '实时字幕中', className: 'live' },
+  reconnecting: { label: '重连中…', className: 'reconnecting' },
   stopping: { label: '收尾中…', className: 'connecting' },
   ended: { label: '实时稿已结束', className: 'ended' },
   error: { label: '实时字幕异常', className: 'error' },
@@ -49,7 +50,7 @@ const LIVE_STATUS_META: Record<LiveCaptionStatus, { label: string; className: st
 
 /**
  * Browser microphone recorder: timer, pause/resume, live level meter, device
- * selection, optional live captions (R-19 Beta) and "save & upload" flow.
+ * selection, optional live captions (R-19) and "save & upload" flow.
  */
 export function RecorderPanel({ onUploaded }: RecorderPanelProps) {
   const recorder = useRecorder()
@@ -221,10 +222,9 @@ export function RecorderPanel({ onUploaded }: RecorderPanelProps) {
           <div className="recorder-live-toggle__text">
             <div className="recorder-live-toggle__title">
               <ThunderboltOutlined /> 实时字幕
-              <span className="beta-chip">Beta</span>
             </div>
             <div className="recorder-live-toggle__hint">
-              实时转写不区分说话人，完成后以离线转写为准 · 单次上限 {liveFeature?.max_minutes ?? 60} 分钟
+              实时字幕不区分说话人，完成后以离线转写为准 · 单次上限 {liveFeature?.max_minutes ?? 60} 分钟
             </div>
           </div>
           <Switch
@@ -249,13 +249,18 @@ export function RecorderPanel({ onUploaded }: RecorderPanelProps) {
           <header className="live-captions__head">
             <span className={`live-status live-status--${liveStatusMeta.className}`}>
               {live.status === 'live' ? <span className="live-status__dot" /> : null}
-              {live.status === 'connecting' || live.status === 'stopping' ? <LoadingOutlined /> : null}
+              {live.status === 'connecting' || live.status === 'stopping' || live.status === 'reconnecting' ? (
+                <LoadingOutlined />
+              ) : null}
               {live.status === 'error' ? <CloseCircleOutlined /> : null}
               {live.status === 'ended' ? <CheckCircleOutlined /> : null}
               {liveStatusMeta.label}
             </span>
             <span className="live-captions__meta">
               {live.session?.provider ? `${live.session.provider} · ` : ''}
+              {live.status === 'reconnecting'
+                ? `第 ${live.reconnectAttempt}/${live.maxReconnectAttempts} 次重连 · `
+                : ''}
               {live.lines.length} 段已确定
             </span>
           </header>
@@ -264,7 +269,9 @@ export function RecorderPanel({ onUploaded }: RecorderPanelProps) {
               <div className="live-captions__empty">
                 {live.status === 'error' || live.status === 'unavailable'
                   ? '实时字幕未启动，录音仍会正常保存并离线转写'
-                  : '等待语音输入…'}
+                  : live.status === 'reconnecting'
+                    ? '实时字幕正在重新连接，录音不受影响…'
+                    : '等待语音输入…'}
               </div>
             )}
             {live.lines.map((line) => (
@@ -282,7 +289,11 @@ export function RecorderPanel({ onUploaded }: RecorderPanelProps) {
             <div ref={liveEndRef} />
           </div>
           <div className={`live-captions__note ${live.error ? 'is-error' : ''}`}>
-            {live.error || '实时稿（Beta，未区分说话人）；保存后可在录音详情中查看，最终以离线转写为准。'}
+            {live.error
+              ? live.error
+              : live.status === 'reconnecting'
+                ? `实时字幕连接中断，正在重连（第 ${live.reconnectAttempt}/${live.maxReconnectAttempts} 次）… 录音不受影响，断线期间的语音可能不会显示。`
+                : '实时字幕不区分说话人；保存后可在录音详情中查看实时稿，最终以离线转写为准。'}
           </div>
         </section>
       )}
@@ -344,7 +355,7 @@ export function RecorderPanel({ onUploaded }: RecorderPanelProps) {
       <div className="recorder-hint">
         首次使用需要授权麦克风。若浏览器未弹出授权提示，请点击地址栏的锁形图标开启权限；录音功能需要通过
         <code>https</code> 或 <code>localhost</code> 访问。
-        {liveCapability && liveEnabled ? '实时字幕为 Beta 功能，连接失败会自动降级为普通录音。' : ''}
+        {liveCapability && liveEnabled ? '实时字幕连接失败会自动降级为普通录音，不影响录音保存。' : ''}
       </div>
     </section>
   )

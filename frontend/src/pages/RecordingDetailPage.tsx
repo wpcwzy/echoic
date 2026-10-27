@@ -344,7 +344,9 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
       return
     }
     if (key === 'transfer') {
-      setTransferUserId(recording.owner_id ?? null)
+      // Start empty: the owner is filtered out of the options, so binding owner_id
+      // would render a raw numeric id instead of a formatted user label.
+      setTransferUserId(null)
       setTransferOpen(true)
       return
     }
