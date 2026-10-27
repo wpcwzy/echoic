@@ -194,7 +194,7 @@ def build_embedding_provider(cfg: EmbeddingConfig) -> EmbeddingProvider | None
 
 ### 5.3 解析与容错
 
-- 从 LLM 返回中提取 JSON：先直接 `json.loads`，失败则去掉 ```json 围栏、截取首个 `{` 到最后一个 `}`，再失败则单次“修复”请求（附加错误信息与原始输出）。
+- 从 LLM 返回中提取 JSON：先直接 `json.loads`，失败则去掉 ```json 围栏、扫描平衡的 `{...}` / `[...]` 子串，再用 `json-repair` 容错修复（尾逗号、字符串内换行、解释性前缀等）；仍失败则单次“修复”请求（附加错误信息与原始输出）。
 - 校验结构（Pydantic 或手写）；时间戳夹紧到 `[0, duration_ms]`；缺失可选字段补默认；`chapters` 升序重排；`viewpoint_tree` 节点 id 缺失自动补。
 - 单任务失败重试 1 次；仍失败则该 kind 不写，其他任务继续；若 summary 也失败则整体任务 failed（记录错误）。`analyses` 行 upsert（`recording_id+kind` 唯一）。
 - LLM 返回内容不落日志全文（只记长度/摘要）。

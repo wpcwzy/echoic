@@ -92,6 +92,16 @@ class OpenAILLMProvider:
                     json=payload,
                 )
         data = json_or_error(response, "openai-llm")
+        try:
+            finish_reason = ((data.get("choices") or [{}])[0] or {}).get("finish_reason")
+        except Exception:  # noqa: BLE001 - diagnostics only
+            finish_reason = None
+        if finish_reason == "length":
+            logger.warning(
+                "LLM output may be truncated (finish_reason=length, model=%s, max_tokens=%s)",
+                self.model,
+                max_tokens,
+            )
         content = extract_openai_content(data)
         if not content:
             raise ProviderError("LLM 返回内容为空，请检查模型配置", provider="openai-llm")

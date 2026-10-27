@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.3.9] - 2026-10-27
+
+### 修复
+
+- **AI 分析（章节等）偶发“模型输出无法解析为 JSON”**：真实 Qwen 输出可能包含解释性前缀、Markdown 代码围栏、尾逗号、字符串内未转义换行或截断。JSON 提取现在按「原文 → 围栏/括号子串 → 平衡 JSON 对象 → json-repair 容错修复」逐级降级，并优先返回对象而不是嵌套空数组；`chapters`/`viewpoint_tree` 的 `max_tokens` 提升到 8192，降低长会议输出被截断的概率；LLM Provider 在 `finish_reason=length` 时记录警告。新增 6 个容错解析测试；全量后端 415 passed。
+
 ## [0.3.8] - 2026-10-27
 
 ### 修复

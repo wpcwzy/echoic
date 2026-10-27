@@ -11,7 +11,7 @@
 > 上传或网页录制声音，自动获得**转录稿、AI 纪要、观点树 & 思维导图、章节、关键洞察、待办与 AI 问答**——所有数据都留在你自己的服务器上。
 
 - 定位：paperless-ngx 之于纸质文档 = **Echoic 之于录音**
-- 版本：**v0.3.8**（P1 全部交付：暗色主题 / 回收站与批量 / 对象存储 / 实时转写 Beta / 向量混合检索 + 多用户分享 + GitHub CI + GHCR 多架构镜像）
+- 版本：**v0.3.9**（P1 全部交付：暗色主题 / 回收站与批量 / 对象存储 / 实时转写 Beta / 向量混合检索 + 多用户分享 + GitHub CI + GHCR 多架构镜像）
 - 许可：MIT
 
 ## 📸 界面预览
@@ -195,7 +195,7 @@ docker pull ghcr.io/wpcwzy/echoic:latest
 |---|---|---|
 | GitHub Actions CI | **通过**：后端 pytest + 前端 tsc/vite 构建；PR 额外验证 amd64 镜像构建 | [CI 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
 | 多架构镜像发布 | **成功**：linux/amd64 + linux/arm64 已推送 GHCR（`latest` / `sha-*`；tag 发布语义化版本） | [Publish 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR 包](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
-| 后端测试 | **409 passed**（v0.1 129 + v0.2 + v0.3 回收站/实时/向量/存储/迁移）；含 moto S3 上传→管线→Range 端到端用例 | `cd backend && .venv/bin/pytest -q` |
+| 后端测试 | **415 passed**（v0.1 129 + v0.2 + v0.3 回收站/实时/向量/存储/迁移）；含 moto S3 上传→管线→Range 端到端用例 | `cd backend && .venv/bin/pytest -q` |
 | 前端构建 | **通过**（`tsc --noEmit` 零错误；gzip ≈ 613 KB JS + 22 KB CSS） | `cd frontend && npm run build` |
 | 端到端冒烟（Mock，全新数据库） | v0.1 **30/30** + v0.2 **34/34** + v0.3 **34/34 PASS**：回收站/批量不变量、实时 Mock WS→上传→replace/promote、向量重建+语义/混合检索 ACL、Range、回归 | [`e2e/REPORT-v0.3.md`](e2e/REPORT-v0.3.md) |
 | UI 截图巡检 | v0.1 6/6 + v0.2 7/7 + v0.3 8/8（明暗、桌面/移动），无溢出、无未捕获异常、无 5xx | [`docs/screenshots/`](docs/screenshots/) · [`docs/screenshots/v0.3/`](docs/screenshots/v0.3/) |

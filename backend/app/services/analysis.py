@@ -169,27 +169,111 @@ def render_prompt(template: str, transcript: str) -> str:
 
 
 # --------------------------------------------------------------- JSON parsing
+def _balanced_json_candidates(text: str, limit: int = 40) -> list[str]:
+    """Return balanced ``{...}`` / ``[...]`` substrings (string/escape aware)."""
+    candidates: list[str] = []
+    for start, opener in enumerate(text):
+        if opener not in "{[": 
+            continue
+        stack: list[str] = []
+        in_string = False
+        escaped = False
+        for index in range(start, len(text)):
+            char = text[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+            elif char in "{[(":
+                stack.append(char)
+            elif char in "}])":
+                if not stack:
+                    break
+                expected = "}" if stack[-1] == "{" else "]" if stack[-1] == "[" else ")"
+                if char != expected:
+                    break
+                stack.pop()
+                if not stack:
+                    candidates.append(text[start : index + 1])
+                    break
+        if len(candidates) >= limit:
+            break
+    # Longest first: the real JSON document is normally the largest candidate.
+    return sorted(set(candidates), key=len, reverse=True)
+
+
+def _repair_json(text: str) -> Any | None:
+    """Tolerant fallback for common LLM JSON mistakes (trailing commas, raw newlines…)."""
+    try:
+        import json_repair
+
+        value = json_repair.loads(text)
+    except Exception:  # noqa: BLE001 - repair is best effort
+        return None
+    return value if isinstance(value, (dict, list)) and value else None
+
+
 def extract_json(text: str | None) -> Any | None:
-    """Best effort JSON extraction: raw → code fences → first '{' .. last '}'."""
+    """Best effort JSON extraction: raw → balanced objects → json-repair."""
     if not text:
         return None
     candidate = str(text).strip()
     if candidate.startswith("```"):
         candidate = re.sub(r"^```[A-Za-z0-9_-]*\s*", "", candidate)
         candidate = re.sub(r"\s*```\s*$", "", candidate).strip()
+
+    def _valid(value: Any) -> bool:
+        return (isinstance(value, dict) and bool(value)) or (isinstance(value, list) and bool(value))
+
+    # 1) Whole text is already valid JSON (object or top-level array).
     try:
-        return json.loads(candidate)
+        value = json.loads(candidate)
     except (ValueError, TypeError):
-        pass
-    for opener, closer in (("{", "}"), ("[", "]")):
-        start = candidate.find(opener)
-        end = candidate.rfind(closer)
-        if start != -1 and end > start:
-            try:
-                return json.loads(candidate[start : end + 1])
-            except (ValueError, TypeError):
-                continue
-    return None
+        value = None
+    if _valid(value):
+        return value
+
+    balanced = _balanced_json_candidates(candidate)
+    list_fallback: Any | None = None
+
+    # 2) Strict balanced sub-documents: prefer an object over nested arrays.
+    for attempt in balanced:
+        try:
+            value = json.loads(attempt)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(value, dict) and value:
+            return value
+        if isinstance(value, list) and value and list_fallback is None:
+            list_fallback = value
+
+    # 3) Repair balanced sub-documents (trailing commas, raw newlines, fences…).
+    for attempt in balanced:
+        repaired = _repair_json(attempt)
+        if repaired is None:
+            continue
+        if isinstance(repaired, dict) and repaired:
+            logger.info(
+                "extract_json recovered malformed LLM JSON via json-repair (len=%s)", len(attempt)
+            )
+            return repaired
+        if isinstance(repaired, list) and repaired and list_fallback is None:
+            list_fallback = repaired
+
+    # 4) Last resort: repair the whole text (e.g. a truncated final object).
+    repaired = _repair_json(candidate)
+    if isinstance(repaired, dict) and repaired:
+        logger.info("extract_json recovered malformed LLM JSON via json-repair (len=%s)", len(candidate))
+        return repaired
+    if isinstance(repaired, list) and repaired and list_fallback is None:
+        list_fallback = repaired
+    return list_fallback
 
 
 # ----------------------------------------------------------------- validation
@@ -508,7 +592,7 @@ async def _complete_json(llm: LLMProvider, prompt: str, task: str, temperature: 
                 messages,
                 json_mode=True,
                 temperature=temperature,
-                max_tokens=4096,
+                max_tokens=8192 if task in ("chapters", "viewpoint_tree") else 4096,
             )
         except Exception as exc:  # provider errors are retried once here too
             last_error = str(exc)
