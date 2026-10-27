@@ -12,7 +12,8 @@
   - `scripts/verify.sh` 扩展后 **12 组检查全部通过**（含 v0.3.10 冒烟）
   - sqlite-vec 主后端、强制 numpy 降级路径、默认开启实时字幕、默认关闭注册均验证通过
   - UI 截图 **10/10**，0 未捕获异常、0 横向溢出；深色/浅色主题检查通过
-  - 未发现 P1/P2/P3 应用缺陷；仅 1 个时序敏感单元测试偶发（P3，非发布阻塞）
+  - **发布验证通过**：commit `b240223` CI success；tag `v0.3.10` 多架构 GHCR 镜像发布 success，匿名可拉取
+  - 未发现 P1/P2/P3 应用缺陷；仅 1 个时序敏感单元测试偶发（P3，非发布阻塞，已在发布提交中修复）
 
 ---
 
@@ -109,8 +110,8 @@ cd backend && .venv/bin/python -m pytest -q                               # 456 
 | 前端 tsc + vite build | ✅ PASS |
 | `scripts/verify.sh` | ✅ 12 通过 / 0 失败 / 0 跳过 |
 | UI 截图 + 视觉巡检 | ✅ 10/10，0 异常 / 0 溢出 |
-| GitHub Actions CI（v0.3.10 提交） | ⏳ 待 Lead tag 后验证（§7） |
-| GHCR v0.3.10 多架构镜像 | ⏳ 待 Lead tag 后验证（§7） |
+| GitHub Actions CI（commit `b240223`） | ✅ **success**（backend pytest + frontend build，3m25s） |
+| GHCR v0.3.10 多架构镜像（tag `v0.3.10`） | ✅ **success**（amd64+arm64，匿名拉取已验证，见 §7） |
 
 ### 3.2 v0.3.10 新能力冒烟明细（`e2e/smoke_v0310.py`，23 项全部 PASS）
 
@@ -206,14 +207,33 @@ cd backend && .venv/bin/python -m pytest -q                               # 456 
 
 ---
 
-## 7. 发布验证待办（Lead 提交 + tag 后由 QA 执行）
+## 7. 发布验证结果（GitHub Actions + GHCR，已完成）
 
-1. 等待 Lead 创建最终提交并推送，确认 GitHub Actions **CI** 成功（pytest 456 + 前端构建）；
-2. Lead 打 tag `v0.3.10` 后确认 **Docker Publish (GHCR)** 成功；
-3. 匿名校验多架构 manifest：`ghcr.io/wpcwzy/echoic:v0.3.10`、`0.3.10`、`0.3`、`latest`（以及 `0`/`sha-*`）→ `linux/amd64` + `linux/arm64` + attestation；记录 digest 与 run URL；
-4. 将以上结果补入本报告，随后标记 task-24 完成。
+- **发布提交**：`b240223`（`feat(v0.3.10): sqlite-vec, live captions GA, registration/profile, auto descriptions + UI fixes`），
+  annotated tag `v0.3.10`（tag 对象 `5753aae` → commit `b240223`）已推送至 main。
+- 发布提交同时修复了本报告 §5 的 P3 时序 flake（`test_disconnect_grace_expiry_ends_session` 断言容差 900–1000ms）。
 
----
+- **GitHub Actions（全部 success）**：
+
+| 工作流 | 事件 / 分支 | 运行 | 耗时 | 结果 |
+|---|---|---|---|---|
+| CI | push main | [40506177774](https://github.com/wpcwzy/echoic/actions/runs/40506177774) | 3m25s | ✅ Backend tests (pytest) + Frontend build (tsc + vite) |
+| Docker Publish (GHCR) | push main | [40506177720](https://github.com/wpcwzy/echoic/actions/runs/40506177720) | 5m6s | ✅ Build & push multi-arch image |
+| Docker Publish (GHCR) | push tag `v0.3.10` | [40506189282](https://github.com/wpcwzy/echoic/actions/runs/40506189282) | 7m19s | ✅ Build & push multi-arch image |
+
+- **GHCR 匿名验证**（无登录，`Accept: application/vnd.oci.image.index.v1+json`）：
+
+| tag | HTTP | manifest 类型 | digest |
+|---|---|---|---|
+| `v0.3.10` / `0.3.10` / `0.3` / `0` / `latest` / `sha-b240223` | 200 | **OCI image index** | `sha256:072612d23d7b35bdd1d1748173d8037ad8bcffd39a3a7ceb0da77ae73abb1579`（全部 tag 指向同一 index） |
+
+- **多架构清单**：`linux/amd64` + `linux/arm64` + 2 个 attestation manifest（provenance/SBOM，`unknown/unknown`）；
+  amd64 子 manifest digest `sha256:082ae389c5c8187ff73dc54c61cdd09e0ddecd6a81fa32f54dd68b9e2d034385`，
+  config digest `sha256:a509eb7da02486067f0a874db8e57c2b7d197da7c1b55c3067ee69ab465517d1`，构建时间 `2026-10-27T12:46:13Z`。
+- **镜像 OCI labels**（从 config 校验）：`title=Echoic`、`version=v0.3.10`、
+  `revision=b240223e394fc0542661a014ceb6fbc4c29ac66b`、`licenses=MIT`、`source=https://github.com/wpcwzy/echoic`。
+- **结论**：v0.3.10 发布流水线、多架构镜像与公开拉取全部验证通过；`docker pull ghcr.io/wpcwzy/echoic:v0.3.10`
+  在 amd64/arm64 主机可匿名使用。发布验证项全部完成，无异常。
 
 ## 8. 交付物与复现
 
