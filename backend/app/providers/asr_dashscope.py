@@ -524,7 +524,14 @@ class DashScopeFileASRProvider:
         ) from last_error
 
     async def _upload(self, client: httpx.AsyncClient, audio_path: Path, policy: dict) -> str:
-        object_key = f"{policy['upload_dir'].rstrip('/')}/{uuid.uuid4().hex}_{audio_path.name}"
+        # Keep the temporary OSS object key ASCII-only: DashScope validates the
+        # final ``oss://`` URL strictly, and Chinese/spaces in the original
+        # filename (common for meeting recordings) are rejected with
+        # REQUEST_INVALID_FILE_URL_VALUE. The original name stays in Echoic's DB.
+        suffix = (audio_path.suffix or ".wav").lower()
+        if not suffix.startswith("."):
+            suffix = f".{suffix}"
+        object_key = f"{policy['upload_dir'].rstrip('/')}/{uuid.uuid4().hex}{suffix}"
         form = {
             "OSSAccessKeyId": policy["oss_access_key_id"],
             "Signature": policy["signature"],
@@ -653,8 +660,18 @@ class DashScopeFileASRProvider:
                 if isinstance(item, dict) and item.get("subtask_status") not in (None, "SUCCEEDED", "PENDING", "RUNNING"):
                     subtask_error = f"{item.get('code') or ''} {item.get('message') or ''}".strip()
             if not result_url:
+                failure_payload = output.get("task_metrics") or output
+                failure_text = redact(subtask_error) or _safe_error(failure_payload)
+                hint = ""
+                code = str(output.get("code") or "")
+                if code == "REQUEST_INVALID_FILE_URL_VALUE":
+                    hint = (
+                        "。百炼拒绝了上传的临时文件 URL：临时 OSS 对象名已改为纯 ASCII；"
+                        "若仍失败，请改用 paraformer-v2（原生支持临时上传凭证），"
+                        "或将音频放到可公网访问的 HTTPS/OSS 地址"
+                    )
                 raise ProviderError(
-                    f"DashScope 录音文件识别失败：{redact(subtask_error) or _safe_error(output.get('task_metrics') or output)}",
+                    f"DashScope 录音文件识别失败：{failure_text}{hint}",
                     provider=self.name,
                 )
             payload = await self._download_result(client, result_url)

@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.3.7] - 2026-10-27
+
+### 修复
+
+- **百炼文件转写 `REQUEST_INVALID_FILE_URL_VALUE`**：临时 OSS 对象名原先包含原文件名（中文/空格很常见），百炼对 `oss://` 临时 URL 校验严格，会在提交转写任务后返回该错误。现改为纯 ASCII 对象名（随机 UUID + 原扩展名，原文件名仍保留在 Echoic 数据库中）；任务失败信息对 `REQUEST_INVALID_FILE_URL_VALUE` 增加可操作提示。
+- 新增中文文件名临时上传对象的回归测试；全量后端 408 passed。
+
 ## [0.3.6] - 2026-10-27
 
 ### 修复

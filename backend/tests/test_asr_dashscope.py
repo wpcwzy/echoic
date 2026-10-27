@@ -274,3 +274,28 @@ async def test_qwen_filetrans_policy_falls_back_to_paraformer_model():
         "qwen-audio-3.1-asr-flash-filetrans",
         "paraformer-v2",
     ]
+
+
+@respx.mock
+async def test_upload_uses_ascii_object_key_for_chinese_filename(tmp_path):
+    """DashScope rejects non-ASCII temporary oss:// URLs (REQUEST_INVALID_FILE_URL_VALUE)."""
+    policy = {
+        "upload_host": "https://oss.example.com",
+        "upload_dir": "dashscope/asr/tmp",
+        "policy": "p",
+        "signature": "s",
+        "oss_access_key_id": "ak",
+    }
+    route = respx.post("https://oss.example.com").mock(return_value=httpx.Response(200, text="ok"))
+    audio = tmp_path / "会议录音 2026.wav"
+    audio.write_bytes(b"RIFFfake")
+    provider = DashScopeFileASRProvider("https://dashscope.aliyuncs.com", "paraformer-v2", "sk-test-key")
+    async with httpx.AsyncClient(trust_env=False) as client:
+        file_url = await provider._upload(client, audio, policy)
+    assert route.called
+    sent_key = route.calls[0].request.content.decode("latin-1")
+    # The returned URL that DashScope validates must be pure ASCII.
+    assert file_url.isascii()
+    assert file_url.startswith("oss://dashscope/asr/tmp/")
+    assert file_url.endswith(".wav")
+    assert "会议录音" not in file_url
