@@ -573,13 +573,19 @@ class DashScopeFileASRProvider:
             "input": {"file_urls": [file_url]},
             "parameters": parameters,
         }
+        headers = self._headers(async_call=True)
+        if file_url.startswith("oss://"):
+            # DashScope only resolves private temporary OSS URLs when the request
+            # opts in. Paraformer happens to resolve them implicitly; Qwen-Audio
+            # Filetrans rejects them with REQUEST_INVALID_FILE_URL_VALUE without it.
+            headers["X-DashScope-OssResourceResolve"] = "enable"
         response = await request(
             client,
             "POST",
             api_url(self._effective_base, "/api/v1/services/audio/asr/transcription"),
             provider=self.name,
             timeout=60.0,
-            headers=self._headers(async_call=True),
+            headers=headers,
             json=body,
         )
         data = json_or_error(response, self.name)
@@ -666,9 +672,9 @@ class DashScopeFileASRProvider:
                 code = str(output.get("code") or "")
                 if code == "REQUEST_INVALID_FILE_URL_VALUE":
                     hint = (
-                        "。百炼拒绝了上传的临时文件 URL：临时 OSS 对象名已改为纯 ASCII；"
-                        "若仍失败，请改用 paraformer-v2（原生支持临时上传凭证），"
-                        "或将音频放到可公网访问的 HTTPS/OSS 地址"
+                        "。百炼拒绝了上传的临时文件 URL：v0.3.8 已为 oss:// 临时文件自动加上 "
+                        "X-DashScope-OssResourceResolve 头；若仍失败，请确认已升级、"
+                        "或改用 paraformer-v2 / 可公网访问的 HTTPS 地址"
                     )
                 raise ProviderError(
                     f"DashScope 录音文件识别失败：{failure_text}{hint}",

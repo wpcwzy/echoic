@@ -299,3 +299,22 @@ async def test_upload_uses_ascii_object_key_for_chinese_filename(tmp_path):
     assert file_url.startswith("oss://dashscope/asr/tmp/")
     assert file_url.endswith(".wav")
     assert "会议录音" not in file_url
+
+
+@respx.mock
+async def test_file_submit_sets_oss_resolve_header():
+    """Qwen-Audio Filetrans needs X-DashScope-OssResourceResolve for private oss:// URLs."""
+    route = respx.post("https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription").mock(
+        return_value=httpx.Response(200, json={"output": {"task_id": "task-1", "task_status": "PENDING"}})
+    )
+    provider = DashScopeFileASRProvider(
+        "https://dashscope.aliyuncs.com", "qwen-audio-3.1-asr-flash-filetrans", "sk-test-key"
+    )
+    async with httpx.AsyncClient(trust_env=False) as client:
+        await provider._submit(client, "oss://bucket/path/file.wav", "zh")
+    assert route.called
+    headers = route.calls[0].request.headers
+    assert headers.get("X-DashScope-OssResourceResolve") == "enable"
+    body = json.loads(route.calls[0].request.content)
+    assert body["model"] == "qwen-audio-3.1-asr-flash-filetrans"
+    assert body["input"]["file_urls"] == ["oss://bucket/path/file.wav"]

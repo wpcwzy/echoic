@@ -2,6 +2,16 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.3.8] - 2026-10-27
+
+### 修复
+
+- **Qwen-Audio Filetrans `REQUEST_INVALID_FILE_URL_VALUE`（真正原因）**：Qwen 文件转写读取私有 `oss://` 临时文件时，必须在提交任务的请求头中携带 `X-DashScope-OssResourceResolve: enable`；缺少该头时 Paraformer 仍可隐式解析，但 Qwen 会返回该错误。现已在提交 `oss://` 文件时自动添加该请求头。
+- 已用真实百炼 Key 端到端验证：`qwen-audio-3.1-asr-flash-filetrans` + 临时上传 + `diarization_enabled=true` 成功返回转录与 `speaker_id`（说话人1），不再报 `REQUEST_INVALID_FILE_URL_VALUE`。
+- 保留 v0.3.6 的临时凭证 `data` 结构解析、v0.3.7 的 ASCII 临时对象名作为防御性修复；新增请求头回归测试。全量后端 409 passed。
+
+> 安全提示：调试期间使用过的 API Key 已出现在对话/日志中，建议测试通过后在百炼控制台轮换该 Key。
+
 ## [0.3.7] - 2026-10-27
 
 ### 修复
