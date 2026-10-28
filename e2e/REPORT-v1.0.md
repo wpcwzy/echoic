@@ -4,8 +4,8 @@
 > 执行：release-eng（task-30），2026-10-28（Asia/Shanghai）
 > 范围：v1.0 全部新增能力（视频分镜、审计日志、Qdrant 向量后端、pgvector staging、真实 DashScope 长稳）
 > + 既有版本回归（v0.1 / v0.2 / v0.3 / v0.3.10 smokes、注册/资料、分享/公开页、PWA/吸顶视频）
-> 结论：**PASS（代码与本地/容器验收全绿，真实 60 分钟 DashScope soak 通过）**；
-> 唯一发布后置证据待补：Lead 打 tag 后的 CI（含 `pgvector-staging`）与 GHCR 多架构镜像验证。
+> 结论：**PASS（全部完成）** —— 代码/本地/容器验收全绿、真实 60 分钟 DashScope soak 通过、
+> 发布 commit `aeacd38` 的 CI（含 `pgvector-staging`）与 GHCR 多架构镜像均已验证通过（见 §9）。
 > 本报告不做提交/推送；所有改动均为 QA 产物（`e2e/`、`docs/screenshots/v1.0/`、`scripts/verify.sh`），未修改应用代码。
 
 ---
@@ -47,7 +47,7 @@
 | 15 | 公开视频页（桌面/移动） | screenshots §10/§16 | **PASS**：标题/简介/slogan/播放器/只读分享均正确；移动端无溢出 |
 | 16 | 既有版本回归 | verify.sh 内 v0.1/v0.2/v0.3/v0.3.10 smokes | **PASS**（见 §4 的 e2e 期望值维护说明） |
 | 17 | 真实 DashScope 60 分钟 soak | `scripts/soak_live.py --minutes 60 …`（真实 Key + 真实音频，Lead 后台 job） | **PASS**：status=ok / exit 0 / duration 3601.39s / planned_duration_completed=true / audio.synthetic=false / provider_errors=0 / reconnects=0（详见 §5） |
-| 18 | CI（含 pgvector-staging）+ GHCR 多架构镜像 | Lead 打 tag `v1.0.0` 后验证 | **PENDING**（打 tag 后执行；本报告将追加） |
+| 18 | CI（含 pgvector-staging）+ GHCR 多架构镜像 | `aeacd38` / tag `v1.0.0` 发布后验证 | **PASS**：CI run 40669665551 全部成功（pgvector staging 42s，日志 `4 passed in 0.59s`）；Docker Publish main/tag 均 success；GHCR 6 个 tag 均为 amd64+arm64+attestations 的 OCI index（详见 §9） |
 
 ---
 
@@ -73,7 +73,8 @@ ECHOIC_PGVECTOR_TEST_DSN='postgresql+psycopg://echoic:echoic@127.0.0.1:55432/ech
 ```
 
 - PostgreSQL `16.15 (Debian 16.15-1.pgdg12+2)`，`pgvector 0.8.7`（`pg_available_extensions` / `CREATE EXTENSION` 均验证）。
-- GitHub Actions job `pgvector-staging`（`.github/workflows/ci.yml`）使用完全相同的 service 配置与 DSN；上次真实环境验证（release-eng, task-29）为 **4 passed**，发布后以 CI 结果为准。
+- GitHub Actions job `pgvector-staging`（`.github/workflows/ci.yml`）使用完全相同的 service 配置与 DSN；
+  v1.0.0 发布 CI 已实测通过：**job success，日志 `4 passed in 0.59s`**（见 §9.2）。
 
 ### 3.3 前端构建
 
@@ -214,8 +215,9 @@ ECHOIC_E2E_BASE_URL=http://127.0.0.1:8101 backend/.venv/bin/python e2e/smoke_v1.
 
 ## 7. 残余风险
 
-- GHCR 镜像/CI 状态需打 tag 后确认（本报告 §2 #18；真实 60 分钟 soak 已通过，见 §5）；
 - 真实 soak 使用 3.83s 语音样本循环，重点覆盖长稳而非长内容识别质量（生产可换长音频复跑）；
+- `latest` 与 `v1.0.0`/`1.0.0`/`1.0`/`1` 来自同 commit 的两次独立构建（main push 与 tag push），
+  OCI index digest 不同（`latest`/`sha-aeacd38` 一组、语义化版本一组）但 revision 标签均为 `aeacd38`，代码一致；
 - 本次 QA 以本机进程 + Docker 容器为主，未做完整 `docker compose` 多服务编排联网验收（Qdrant compose profile 已单服务实测；S3/MinIO 属于 v0.3 能力，回归覆盖在历史 smokes）；
 - 实时转写会话为单进程内存态（既定架构，多副本不支持会话共享）。
 
@@ -261,3 +263,74 @@ ECHOIC_PGVECTOR_TEST_DSN='postgresql+psycopg://echoic:echoic@127.0.0.1:55432/ech
 - pytest：`.cache/pytest-v1-tail.log`；verify.sh：`.cache/verify-v1c.log`；smoke：`e2e/last-run-v1.log`；
 - 截图报告：`e2e/screenshot-report-v1.json`；截图：`docs/screenshots/v1.0/`；
 - 截图生成日志：`.cache/screenshots-v1d.log`。
+
+---
+
+## 9. Release verification（v1.0.0，2026-10-28）
+
+> 发布：commit **`aeacd38`**（release: v1.0.0 — Qdrant, pgvector staging, video scenes, audit logs, real-time soak）；
+> annotated tag **`v1.0.0`**（tag object `8ffe74b`）与 main 均已推送（`git ls-remote` 校验：main=`aeacd38…`，tag=`8ffe74b…`）。
+> 工作区无未提交应用代码改动；本报告 §9 为发布后追加的验证记录。
+
+### 9.1 CI（`aeacd38`，push main）
+
+- Run：**CI #40669665551** — `https://github.com/wpcwzy/echoic/actions/runs/40669665551`
+- 结果：**success**（10:07:57Z → 10:12:12Z，约 4m15s）
+
+| Job | 结果 | 耗时 | 备注 |
+|---|---|---|---|
+| Backend tests (pytest) | ✅ success | 4m12s（10:07:59Z→10:12:11Z） | 全量 pytest 通过 |
+| Frontend build (tsc + vite) | ✅ success | 0m24s（10:07:59Z→10:08:23Z） | typecheck + vite build |
+| **pgvector staging (real PostgreSQL 16)** | ✅ **success** | 0m42s（10:07:59Z→10:08:41Z） | 真实 `pgvector/pgvector:pg16` service |
+| Docker image build (amd64, no push) | ⏭️ skipped | — | PR-only 条件（push 时按设计跳过） |
+
+**pgvector-staging job 关键日志**（job `122752938662`）：
+
+```
+PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) ready; pgvector available: 0.8.7 (installed=not-created-yet (test creates it))
+....
+4 passed in 0.59s
+```
+
+- 所有步骤 success：Checkout → Check pgvector staging test exists → Set up Python 3.12 → Install deps →
+  **Verify pgvector extension is available in the service image** → **Run pgvector staging test** → Stop containers。
+- 结论：**pgvector staging CI 通过**，真实 PG16+pgvector 链路（扩展/DDL/HNSW/upsert/search/ACL/delete/stats/stale/维度切换）在 GitHub Actions 上验证成功。
+
+### 9.2 Docker Publish（GHCR multi-arch，amd64 + arm64）
+
+| Run | 触发 | 结果 | 耗时 | URL |
+|---|---|---|---|---|
+| Docker Publish (GHCR) #40669665557 | push `main` | ✅ success | 约 6m22s（10:07:57Z→10:14:19Z） | https://github.com/wpcwzy/echoic/actions/runs/40669665557 |
+| Docker Publish (GHCR) #40669675372 | push tag `v1.0.0` | ✅ success | 约 5m00s（10:08:01Z→10:13:01Z） | https://github.com/wpcwzy/echoic/actions/runs/40669675372 |
+
+- 两个 run 的 job「Build & push multi-arch image」均 success；步骤含 Extract metadata、Build and push
+  (linux/amd64 + linux/arm64)、Try to make GHCR package public、**Verify pullable tag list**。
+- 镜像：`ghcr.io/wpcwzy/echoic`，**匿名拉取/检查通过**（无凭据 registry token + `docker manifest inspect`）。
+
+### 9.3 GHCR tags / digest / platforms / labels（匿名校验）
+
+| Tag | OCI index digest | platforms | version 标签 | revision 标签 |
+|---|---|---|---|---|
+| `v1.0.0` | `sha256:780bd6e8f5dbab66a385f9cb0c73701c4afd5a81e8aa1048848d1e6105471535` | linux/amd64 + linux/arm64 + 2× attestation | `v1.0.0` | `aeacd3819f7a28014faf8e48be515f6f5849107a` |
+| `1.0.0` | 同上 | 同上 | `v1.0.0` | 同上 |
+| `1.0` | 同上 | 同上 | `v1.0.0` | 同上 |
+| `1` | 同上 | 同上 | `v1.0.0` | 同上 |
+| `latest` | `sha256:840a2af540ddf3e1d2351d92aa9d9863b1e2797bdedb831eac2f4de235b9a209` | linux/amd64 + linux/arm64 + 2× attestation | `main` | `aeacd3819f7a28014faf8e48be515f6f5849107a` |
+| `sha-aeacd38` | 同上（与 `latest` 同一 main-run 构建） | 同上 | `main` | `aeacd3819f7a28014faf8e48be515f6f5849107a` |
+
+- 语义化版本 4 个 tag（`v1.0.0`/`1.0.0`/`1.0`/`1`）指向**同一个 OCI index**（tag-run 构建），
+  amd64 config digest `sha256:6e60c414e154bf2e1a7dfaa19ae3b886b378dd25061bdc7272a7c2a85cd74355`；
+- `latest`/`sha-aeacd38` 指向 main-run 的另一个 OCI index（同 commit 的独立构建），
+  amd64 config digest `sha256:fd7b38d08446594c9ef5f02b148853f49a5b9454f06845070d92fa1620f400e7`；
+- 两类镜像 labels 均含：`org.opencontainers.image.version`（`v1.0.0` / `main`）、
+  `org.opencontainers.image.revision=aeacd3819f7a80…`、`org.opencontainers.image.source=https://github.com/wpcwzy/echoic`、
+  `org.opencontainers.image.title=Echoic`、`org.opencontainers.image.created`；config `architecture/os = amd64/linux`（arm64 对应各自 config）；
+- attestation：每个 index 含 2 个 `unknown/unknown` attestation-manifest（BuildKit provenance/SBOM），符合多架构+证明预期；
+- **总结论：GHCR `v1.0.0`/`1.0.0`/`1.0`/`1`/`latest`/`sha-aeacd38` 均可匿名拉取，多架构与标签/版本/commit 元数据全部正确。**
+
+### 9.4 发布验收结论
+
+- ✅ CI（backend / frontend / **pgvector-staging**）全绿；
+- ✅ Docker Publish（tag + main）全绿，GHCR 多架构镜像与标签齐全、匿名可拉取；
+- ✅ 真实 60 分钟 DashScope soak（§5）、本地/容器 QA（§2–§8）全部通过；
+- **v1.0.0 发布验收：PASS。**
