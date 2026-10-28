@@ -150,6 +150,44 @@ def make_playback(src: Path, dst: Path, ffmpeg_bin: str = "ffmpeg") -> None:
     )
 
 
+def make_video_playback(src: Path, dst: Path, ffmpeg_bin: str = "ffmpeg") -> None:
+    """Transcode a video into a browser-compatible H.264/AAC MP4 for playback.
+
+    Keeps the original file untouched (downloads stay lossless). Width is capped
+    at 1280px with the aspect ratio preserved; very long videos are bounded by
+    the normal ffmpeg timeout.
+    """
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    run_ffmpeg(
+        [
+            "-i",
+            str(src),
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a:0?",
+            "-vf",
+            "scale='min(1280,iw)':-2",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            str(dst),
+        ],
+        ffmpeg_bin=ffmpeg_bin,
+    )
+
+
 def extract_asr_wav(src: Path, dst: Path, ffmpeg_bin: str = "ffmpeg") -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     run_ffmpeg(

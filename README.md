@@ -11,7 +11,7 @@
 > Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
 - Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
-- Version: **v0.3.15** — P1 complete + sqlite-vec, live captions GA, registration/profile, auto descriptions (dark theme, trash & batch, object storage, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
+- Version: **v0.3.16** — P1 complete + sqlite-vec, live captions GA, registration/profile, auto descriptions (dark theme, trash & batch, object storage, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
 - License: MIT
 
 ## 📸 Screenshots
@@ -63,7 +63,7 @@
 | 📑 Smart chapters | Automatic chapter segmentation (title / time range / summary / bullets); click to jump |
 | 💬 AI Q&A | RAG over transcripts + minutes, streamed over SSE, answers cite `[12:05]` timestamps that seek the player |
 | 📚 Library | Search / status filters / tags / sorting / stats; global search jumps to the matching transcript segment |
-| 🎧 Player | Drag-to-seek, ±15 s, playback speed, chapter ticks, active-line highlighting, HTTP Range streaming; **uploaded videos play as real video** (native controls + transcript/chapter sync) in detail and public share pages |
+| 🎧 Player | Drag-to-seek, ±15 s, playback speed, chapter ticks, active-line highlighting, HTTP Range streaming; **uploaded videos are automatically transcoded to a browser-compatible H.264/AAC copy** and play as real video (native controls + transcript/chapter sync) in detail and public share pages |
 | 👥 Speaker tools | Rename speakers, edit segments, and merge multiple mis-diarized speakers into one (transcript/timestamps preserved) |
 | 🏷 Custom tags | Any user can create tags and add/remove them on recordings (detail editor + batch); tag rename/delete stays admin-only |
 | 💾 Data ownership | SQLite (optional PostgreSQL) + local media directory; backup = archive one data volume |
@@ -203,7 +203,7 @@ docker pull ghcr.io/wpcwzy/echoic:latest
 |---|---|---|
 | GitHub Actions CI | **Passing**: backend pytest + frontend tsc/vite build; PR also validates the amd64 image build | [CI runs](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
 | Multi-arch image publish | **Succeeded**: linux/amd64 + linux/arm64 pushed to GHCR (`latest` / `sha-*`; semver tags on releases) | [Publish runs](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR package](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
-| Backend tests | **462 passed** (v0.1 129 + v0.2 + v0.3 trash/live/vector/storage/migrations); includes a moto S3 end-to-end upload → pipeline → Range test | `cd backend && .venv/bin/pytest -q` |
+| Backend tests | **465 passed** (v0.1 129 + v0.2 + v0.3 trash/live/vector/storage/migrations); includes a moto S3 end-to-end upload → pipeline → Range test | `cd backend && .venv/bin/pytest -q` |
 | Frontend build | **Passing** (`tsc --noEmit` clean; ~613 KB JS + 22 KB CSS gzipped) | `cd frontend && npm run build` |
 | End-to-end smoke (mock, fresh database) | v0.1 **30/30** + v0.2 **34/34** + v0.3 **34/34 PASS**: trash/batch invariants, live mock WebSocket → upload → replace/promote merge, vector reindex + semantic/hybrid search with ACL, storage Range, regression suites | [`e2e/REPORT-v0.3.md`](e2e/REPORT-v0.3.md) |
 | UI screenshot audit | v0.1 6/6 + v0.2 7/7 + v0.3 8/8 (light/dark, desktop/mobile), no overflow, no uncaught exceptions, no 5xx | [`docs/screenshots/`](docs/screenshots/) · [`docs/screenshots/v0.3/`](docs/screenshots/v0.3/) |

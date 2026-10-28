@@ -138,7 +138,7 @@ export const stageLabel: Record<string, string> = {
 }
 
 export const stageHint: Record<string, string> = {
-  preparing: '正在解析媒体文件、读取时长与音量信息…',
+  preparing: '正在解析媒体、提取音频；视频会生成浏览器兼容的 H.264/AAC 播放版本，长视频需要一些时间…',
   transcribing: '正在识别说话人并生成逐字稿，长录音需要一些时间…',
   analyzing: '正在生成 AI 纪要、观点树、章节与关键洞察…',
   embedding: '正在构建语义索引，之后即可进行 AI 问答…',

@@ -268,6 +268,7 @@ def _prepare(recording_id: int, progress: Callable[[int], None], check_cancel: C
             get_storage as _get_storage,
             playback_key as _playback_storage_key,
             recording_original_key as _recording_original_key,
+            video_playback_key as _video_playback_storage_key,
         )
 
         _backend = _get_storage()
@@ -291,11 +292,15 @@ def _prepare(recording_id: int, progress: Callable[[int], None], check_cancel: C
         asr_wav = stage_dir / "asr.wav"
         playback = stage_dir / "playback.m4a"
         playback_storage_key = _playback_storage_key(storage_dir)
+        video_playback = stage_dir / "playback.mp4"
+        video_playback_storage_key = _video_playback_storage_key(storage_dir)
     else:
         source = _find_source(source_filename, source_ext, directory)
         asr_wav = storage.asr_wav_path(storage_dir)
         playback = storage.playback_path(storage_dir)
         playback_storage_key = None
+        video_playback = storage.video_playback_path(storage_dir)
+        video_playback_storage_key = None
     ffmpeg_ready = media.ffmpeg_available(settings.ffmpeg) and media.ffprobe_available(settings.ffprobe)
     duration_ms = known_duration
     media_info: media.MediaInfo | None = None
@@ -309,7 +314,36 @@ def _prepare(recording_id: int, progress: Callable[[int], None], check_cancel: C
         if check_cancel():
             raise AnalysisCancelled()
         media.make_playback(source, playback, settings.ffmpeg)
-        progress(55)
+        progress(50)
+        if check_cancel():
+            raise AnalysisCancelled()
+        # Video recordings get a browser-compatible H.264/AAC playback copy. The
+        # original file remains untouched for downloads; a transcode failure must
+        # not fail processing (the player falls back to the original video).
+        if media_info.media_type == "video":
+            try:
+                already = bool(
+                    _backend.exists(video_playback_storage_key)
+                    if is_remote and _backend is not None and video_playback_storage_key
+                    else video_playback.exists() and video_playback.stat().st_size > 0
+                )
+                if not already:
+                    media.make_video_playback(source, video_playback, settings.ffmpeg)
+                    if is_remote and _backend is not None and video_playback_storage_key:
+                        _backend.save_file(
+                            video_playback, video_playback_storage_key, content_type="video/mp4"
+                        )
+                    logger.info("video playback transcoded for recording %s", recording_id)
+                progress(62)
+            except Exception as exc:  # noqa: BLE001 - playback transcode is best effort
+                logger.warning(
+                    "video playback transcode failed for recording %s (will use original): %s",
+                    recording_id,
+                    exc,
+                )
+            if check_cancel():
+                raise AnalysisCancelled()
+        progress(70)
         if check_cancel():
             raise AnalysisCancelled()
         media.extract_asr_wav(source, asr_wav, settings.ffmpeg)

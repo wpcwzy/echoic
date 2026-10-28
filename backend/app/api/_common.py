@@ -22,6 +22,7 @@ from ..core.storage_backend import (
     get_storage as get_media_storage,
     recording_original_key,
     recording_playback_key,
+    recording_video_playback_key,
     serve_key as serve_storage_key,
 )
 from ..core.utils import utcnow
@@ -440,23 +441,39 @@ def serve_media_file(
     return StreamingResponse(iter_full(), status_code=200, media_type=content_type, headers=headers)
 
 
+def _video_playback_file(recording: Recording) -> Path | None:
+    try:
+        candidate = resolve_storage_dir(recording.storage_dir) / "playback.mp4"
+    except StorageError:
+        return None
+    return candidate if candidate.is_file() else None
+
+
 def pick_media(recording: Recording, *, download: bool) -> tuple[Path, str, str, bool]:
-    """Choose the file to stream: playback for audio, original for video/download.
+    """Choose the file to stream: browser playback copy, original on download.
+
+    - audio: ``playback.m4a`` when present, otherwise the original;
+    - video: transcoded ``playback.mp4`` when present (H.264/AAC), otherwise the
+      original video;
+    - ``download=1`` always serves the untouched original.
 
     Returns ``(path, content_type, filename, attachment)``.
     """
     original = recording_original_file(recording)
     playback = recording_playback_file(recording)
+    video_playback = _video_playback_file(recording)
     if download:
         path = original or playback
     elif recording.media_type == "video":
-        path = original or playback
+        path = video_playback or original or playback
     else:
         path = playback or original
     if path is None:
         raise not_found("媒体文件不存在")
-    is_playback = path.name.startswith("playback")
-    if is_playback:
+    if path.name == "playback.mp4":
+        content_type = "video/mp4"
+        filename = f"{recording.title or 'recording'}.mp4"
+    elif path.name.startswith("playback"):
         content_type = "audio/mp4"
         filename = f"{recording.title or 'recording'}.m4a"
     else:
@@ -487,15 +504,19 @@ def serve_recording_media(recording: Recording, request: Request, *, download: b
 
     original = recording_original_key(backend, recording.storage_dir, recording.original_ext)
     playback = recording_playback_key(backend, recording.storage_dir)
+    video_playback = recording_video_playback_key(backend, recording.storage_dir)
     if download:
         key = original or playback
     elif recording.media_type == "video":
-        key = original or playback
+        key = video_playback or original or playback
     else:
         key = playback or original
     if not key:
         raise not_found("媒体文件不存在")
-    if key.endswith("/playback.m4a"):
+    if key.endswith("/playback.mp4"):
+        media_type = "video/mp4"
+        filename = f"{recording.title or 'recording'}.mp4"
+    elif key.endswith("/playback.m4a"):
         media_type = "audio/mp4"
         filename = f"{recording.title or 'recording'}.m4a"
     else:

@@ -152,6 +152,11 @@ def playback_key(storage_dir: str) -> str:
     return f"{recording_prefix(storage_dir)}/playback.m4a"
 
 
+def video_playback_key(storage_dir: str) -> str:
+    """Key of the browser-compatible video playback file: ``media/<uuid>/playback.mp4``."""
+    return f"{recording_prefix(storage_dir)}/playback.mp4"
+
+
 def asr_wav_key(storage_dir: str) -> str:
     """Key of the 16 kHz mono WAV used by ASR: ``media/<uuid>/asr.wav``."""
     return f"{recording_prefix(storage_dir)}/asr.wav"
@@ -1029,6 +1034,16 @@ def recording_playback_key(backend: StorageBackend, storage_dir: str) -> str | N
     except StorageError:
         return None
     key = f"{prefix}playback.m4a"
+    return key if backend.exists(key) else None
+
+
+def recording_video_playback_key(backend: StorageBackend, storage_dir: str) -> str | None:
+    """Find the stored browser-compatible video playback key (``playback.mp4``)."""
+    try:
+        prefix = f"{recording_prefix(storage_dir)}/"
+    except StorageError:
+        return None
+    key = f"{prefix}playback.mp4"
     return key if backend.exists(key) else None
 
 

@@ -72,6 +72,11 @@ def playback_path(storage_dir: str) -> Path:
     return resolve_storage_dir(storage_dir) / "playback.m4a"
 
 
+def video_playback_path(storage_dir: str) -> Path:
+    """Browser-compatible H.264/AAC playback video (``playback.mp4``)."""
+    return resolve_storage_dir(storage_dir) / "playback.mp4"
+
+
 def asr_wav_path(storage_dir: str) -> Path:
     return resolve_storage_dir(storage_dir) / "asr.wav"
 

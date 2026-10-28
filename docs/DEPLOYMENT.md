@@ -498,6 +498,15 @@ docker compose --profile postgres --profile worker up -d
 
 ---
 
+### 9.3.1 视频回放与自动转码
+
+- 上传视频时，pipeline 在「解析媒体」阶段额外生成 `playback.mp4`（H.264/AAC、宽度 ≤1280、faststart），供浏览器直接播放；
+  原始视频**原样保留**用于下载（`?download=1`），不会损失画质；
+- 转码失败不会导致录音处理失败，播放会自动回退到原始视频（部分编码浏览器可能不支持）；日志会记录 warning；
+- 视频转码是 CPU 密集型操作，长视频会增加处理时长；CPU 核数不足时建议等待或使用更高配置；
+- S3 存储同样会上传转码后的 playback.mp4；切换存储 `storage_migrate` 会按录音前缀整体复制；
+- 转码依赖镜像内 ffmpeg 的 libx264（官方镜像已包含）；自建镜像请确认 ffmpeg 编码器。
+
 ### 9.4 手机安装为 PWA
 
 Echoic 自带 Web App Manifest + Service Worker，可作为 PWA 添加到手机主屏幕：
