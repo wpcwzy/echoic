@@ -60,6 +60,7 @@ from urllib.parse import quote
 
 from ..config import settings
 from .storage import StorageError as _CoreStorageError
+from .storage import safe_scene_filename as _safe_scene_filename
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,16 @@ def video_playback_key(storage_dir: str) -> str:
 def asr_wav_key(storage_dir: str) -> str:
     """Key of the 16 kHz mono WAV used by ASR: ``media/<uuid>/asr.wav``."""
     return f"{recording_prefix(storage_dir)}/asr.wav"
+
+
+def scene_prefix(storage_dir: str) -> str:
+    """Prefix of the extracted video scenes: ``media/<uuid>/scenes``."""
+    return f"{recording_prefix(storage_dir)}/scenes"
+
+
+def scene_key(storage_dir: str, filename: str) -> str:
+    """Key of one scene JPEG: ``media/<uuid>/scenes/<filename>``."""
+    return f"{scene_prefix(storage_dir)}/{_safe_scene_filename(filename)}"
 
 
 # ---------------------------------------------------------------------- protocol
@@ -1206,6 +1217,8 @@ __all__ = [
     "recording_playback_key",
     "recording_prefix",
     "reset_storage_cache",
+    "scene_key",
+    "scene_prefix",
     "serve_key",
     "staging_dir",
     "storage_status",

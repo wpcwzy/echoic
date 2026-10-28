@@ -12,17 +12,19 @@ import shutil
 from collections import deque
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..core.errors import ApiError
-from ..core.utils import to_iso, utcnow
+from ..core.utils import load_json, to_iso, utcnow
 from ..db import get_db
 from ..deps import get_current_user, require_admin
-from ..models import Chunk, Recording, TranscriptSegment, User
-from ..schemas import FeaturesOut, HealthOut
+from ..models import AuditLog, Chunk, Recording, TranscriptSegment, User
+from ..schemas import AuditLogListOut, AuditLogOut, FeaturesOut, HealthOut
+from ..services import audit as audit_service
+from ._common import like_pattern, normalize_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -325,7 +327,11 @@ def _embeddings_configured(db: Session) -> bool:
 
 
 @router.post("/consume/scan")
-async def consume_scan(db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
+async def consume_scan(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
     try:
         from ..services.consume import scan_now
     except Exception:  # concurrent development: service not landed yet
@@ -350,15 +356,85 @@ async def consume_scan(db: Session = Depends(get_db), _admin: User = Depends(req
     }
     at = payload.get("at") or to_iso(utcnow())
     logger.info("consume scan done: %s", result)
+    audit_service.audit_request(
+        db, request, _admin, "system.consume_scan", detail={"result": dict(result)}
+    )
     return {"ok": True, "result": result, "at": at}
 
 
 @router.post("/seed-demo")
-def seed_demo(db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
+def seed_demo(
+    request: Request,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
     from ..services import demo as demo_service
 
     created = demo_service.seed_demo(db)
+    audit_service.audit_request(
+        db, request, _admin, "system.seed_demo", detail={"created": int(created or 0)}
+    )
     return {"ok": True, "created": int(created or 0)}
+
+
+@router.get("/audit-logs", response_model=AuditLogListOut)
+def audit_logs(
+    action: str | None = Query(None, description="精确匹配动作名，如 recording.trash"),
+    user_id: int | None = Query(None, description="操作者用户 ID"),
+    target_type: str | None = Query(None, description="对象类型，如 recording/share/user"),
+    q: str | None = Query(None, description="按用户名/动作/对象类型/详情模糊搜索"),
+    since: datetime | None = Query(None, description="起始时间（ISO-8601，含）"),
+    until: datetime | None = Query(None, description="结束时间（ISO-8601，含）"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Admin audit trail browser. Newest entries first (created_at desc, id desc)."""
+    stmt = select(AuditLog)
+    if action and action.strip():
+        stmt = stmt.where(AuditLog.action == action.strip())
+    if user_id is not None:
+        stmt = stmt.where(AuditLog.user_id == int(user_id))
+    if target_type and target_type.strip():
+        stmt = stmt.where(AuditLog.target_type == target_type.strip())
+    if q and q.strip():
+        pattern = like_pattern(q.strip())
+        stmt = stmt.where(
+            or_(
+                AuditLog.username.ilike(pattern, escape="\\"),
+                AuditLog.action.ilike(pattern, escape="\\"),
+                AuditLog.target_type.ilike(pattern, escape="\\"),
+                AuditLog.detail_json.ilike(pattern, escape="\\"),
+            )
+        )
+    if since is not None:
+        stmt = stmt.where(AuditLog.created_at >= normalize_datetime(since))
+    if until is not None:
+        stmt = stmt.where(AuditLog.created_at <= normalize_datetime(until))
+    total = int(db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    rows = list(
+        db.scalars(
+            stmt.order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+    )
+    items = [
+        AuditLogOut(
+            id=row.id,
+            user_id=row.user_id,
+            username=row.username or "",
+            action=row.action or "",
+            target_type=row.target_type or "",
+            target_id=row.target_id,
+            detail=load_json(row.detail_json, {}) or {},
+            ip=row.ip or "",
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+    return AuditLogListOut(items=items, total=total)
 
 
 @router.get("/logs")

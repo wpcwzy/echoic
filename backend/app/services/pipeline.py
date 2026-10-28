@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+import tempfile
 import time
 import wave
 from pathlib import Path
@@ -33,6 +34,7 @@ from ..models import (
     Speaker,
     Stage,
     TranscriptSegment,
+    VideoScene,
 )
 from ..providers.base import ASRResult
 from ..providers.registry import build_asr_provider, build_embedding_provider
@@ -219,6 +221,139 @@ def _delete_derived(recording_id: int, *, include_transcript: bool) -> None:
         db.commit()
 
 
+
+# --------------------------------------------------------- video slides (v1.0)
+def _clear_video_scene_assets(
+    recording_id: int,
+    storage_dir: str,
+    *,
+    is_remote: bool,
+    backend: Any,
+) -> None:
+    """Remove previously extracted scene rows + image files (best effort)."""
+    try:
+        if is_remote and backend is not None:
+            from ..core.storage_backend import scene_prefix as _scene_prefix
+
+            backend.delete_prefix(_scene_prefix(storage_dir) + "/")
+        else:
+            directory = storage.scene_dir_path(storage_dir)
+            if directory.is_dir():
+                for entry in directory.iterdir():
+                    if entry.is_file():
+                        try:
+                            entry.unlink()
+                        except OSError:  # pragma: no cover - defensive
+                            pass
+    except Exception:  # noqa: BLE001 - stale files are harmless, rows are rebuilt below
+        logger.warning("failed to clear old video scene files for recording %s", recording_id, exc_info=True)
+    try:
+        with SessionLocal() as db:
+            for row in db.scalars(
+                select(VideoScene).where(VideoScene.recording_id == recording_id)
+            ).all():
+                db.delete(row)
+            db.commit()
+    except Exception:  # noqa: BLE001 - best effort
+        logger.warning("failed to clear old video scene rows for recording %s", recording_id, exc_info=True)
+
+
+def _generate_video_scenes(
+    recording_id: int,
+    storage_dir: str,
+    source: Path | None,
+    *,
+    is_remote: bool,
+    backend: Any,
+    check_cancel: Callable[[], bool],
+) -> None:
+    """Extract slide/scene keyframes for a video recording (best effort, v1.0).
+
+    Frames are extracted from the source video at scene cuts (threshold/max from
+    settings), stored next to the recording media (local dir or S3 ``scenes/``
+    prefix) and recorded as ``video_scenes`` rows. Any failure is logged and
+    ignored: scene extraction must never fail the recording pipeline.
+    """
+    if not settings.scene_detection_enabled:
+        return
+    if source is None or not Path(source).exists():
+        return
+    if not media.ffmpeg_available(settings.ffmpeg):
+        return
+    tmp_root = settings.data_path / "tmp"
+    tmp_root.mkdir(parents=True, exist_ok=True)
+    tmp_dir = Path(tempfile.mkdtemp(prefix="scenes-", dir=tmp_root))
+    try:
+        try:
+            frames = media.extract_video_scenes(
+                Path(source),
+                tmp_dir,
+                settings.ffmpeg,
+                settings.scene_threshold,
+                settings.scene_max,
+            )
+        except media.MediaError as exc:
+            logger.warning("video scene extraction failed for recording %s: %s", recording_id, exc)
+            return
+        except Exception as exc:  # noqa: BLE001 - never fail the pipeline
+            logger.warning(
+                "video scene extraction crashed for recording %s: %s", recording_id, exc, exc_info=True
+            )
+            return
+        if check_cancel():
+            raise AnalysisCancelled()
+        # Successful extraction (including an empty result): replace old scenes.
+        _clear_video_scene_assets(recording_id, storage_dir, is_remote=is_remote, backend=backend)
+        if not frames:
+            logger.info("video scene extraction produced no scenes for recording %s", recording_id)
+            return
+        rows: list[dict[str, Any]] = []
+        try:
+            if is_remote and backend is not None:
+                from ..core.storage_backend import scene_key as _scene_key
+
+                for index, frame in enumerate(frames):
+                    filename = f"scene_{index:04d}.jpg"
+                    backend.save_file(frame.path, _scene_key(storage_dir, filename), content_type="image/jpeg")
+                    rows.append(
+                        {
+                            "idx": index,
+                            "time_ms": int(frame.time_ms),
+                            "image_filename": filename,
+                            "width": int(frame.width),
+                            "height": int(frame.height),
+                        }
+                    )
+            else:
+                destination = storage.ensure_scene_dir(storage_dir)
+                for index, frame in enumerate(frames):
+                    filename = f"scene_{index:04d}.jpg"
+                    shutil.move(str(frame.path), str(destination / filename))
+                    rows.append(
+                        {
+                            "idx": index,
+                            "time_ms": int(frame.time_ms),
+                            "image_filename": filename,
+                            "width": int(frame.width),
+                            "height": int(frame.height),
+                        }
+                    )
+        except Exception as exc:  # noqa: BLE001 - timeline may be empty but processing continues
+            logger.warning(
+                "failed to store video scene images for recording %s: %s", recording_id, exc, exc_info=True
+            )
+            return
+        if check_cancel():
+            raise AnalysisCancelled()
+        with SessionLocal() as db:
+            for row in rows:
+                db.add(VideoScene(recording_id=recording_id, **row))
+            db.commit()
+        logger.info("stored %s video scene image(s) for recording %s", len(rows), recording_id)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 # -------------------------------------------------------------------- prepare
 def _recording_dir(recording: Recording) -> Path:
     try:
@@ -343,6 +478,24 @@ def _prepare(recording_id: int, progress: Callable[[int], None], check_cancel: C
                 )
             if check_cancel():
                 raise AnalysisCancelled()
+            # v1.0: extract slide/scene keyframes for the video timeline. This is
+            # deliberately best-effort: a failure (codec, disk, S3) must not fail
+            # the recording; the timeline simply has no scene thumbnails.
+            try:
+                _generate_video_scenes(
+                    recording_id,
+                    storage_dir,
+                    source,
+                    is_remote=is_remote,
+                    backend=_backend,
+                    check_cancel=check_cancel,
+                )
+            except AnalysisCancelled:
+                raise
+            except Exception:  # noqa: BLE001 - never fail recording on scene extraction
+                logger.warning(
+                    "video scene generation failed for recording %s", recording_id, exc_info=True
+                )
         progress(70)
         if check_cancel():
             raise AnalysisCancelled()

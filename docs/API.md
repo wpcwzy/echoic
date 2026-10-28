@@ -364,7 +364,7 @@ data: {"type":"done","message_id":42}
 {"action":"trash|restore|purge|reprocess|tag_add|tag_remove",
  "recording_ids":[1,2,3],"tag_ids":[1,2],"from":"all|asr|insights|embeddings"}
 ```
-→ `{action,succeeded,failed,results:[{id,ok,error?}]}`；单次 ≤ `ECHOIC_BATCH_MAX_ITEMS`（默认 100）、部分成功；`tag_add/tag_remove` 仅 admin；权限逐项校验。
+→ `{action,succeeded,failed,results:[{id,ok,error?}]}`；单次 ≤ `ECHOIC_BATCH_MAX_ITEMS`（默认 100）、部分成功；`tag_add/tag_remove` 对成员仅作用于自己的录音（越权项逐项失败），权限逐项校验。
 - 保留期 `ECHOIC_TRASH_RETENTION_DAYS`（默认 30），worker 每小时清理过期项。
 
 ### 10.2 实时字幕（R-19，v0.3.10 GA，默认开启）
@@ -389,7 +389,7 @@ data: {"type":"done","message_id":42}
 | GET | `/api/vector/search?q=&mode=hybrid|semantic&limit=` | 登录用户；ACL（admin 全部/member 自己）→ `{query,mode,results:[{recording_id,title,segment_id,speaker,start_ms,end_ms,text,score}],fallback_reason}` |
 
 - Embedding provider 支持 `mock`（演示/测试，确定性 256 维）；生产可用 OpenAI 兼容或 DashScope embeddings。
-- `ECHOIC_VECTOR_BACKEND=auto|numpy|sqlite_vec|pgvector`；auto 在 SQLite 优先 sqlite-vec、PG 优先 pgvector，不可用时自动降级 numpy 并返回 `fallback_reason`。
+- `ECHOIC_VECTOR_BACKEND=auto|numpy|sqlite_vec|pgvector|qdrant`；auto 优先级 **PG+pgvector → Qdrant（配置且健康）→ SQLite sqlite-vec → numpy**，不可用时自动降级 numpy 并返回 `fallback_reason`。Qdrant 配置：`ECHOIC_QDRANT_URL/API_KEY/COLLECTION/TIMEOUT`。
 - CLI：`python -m app.tools.vector_reindex --all [--dry-run] [--force] [--recording-id N]`。
 - AI 问答 RAG 自动使用混合检索（无向量时行为与 v0.2 等价）。
 
@@ -407,5 +407,31 @@ data: {"type":"done","message_id":42}
 
 - `GET /api/system/features`（登录）：`{live:{enabled,provider,max_minutes,merge_mode},vector:{backend,search_enabled,embeddings_configured},storage:{backend},trash:{retention_days}}`，供前端能力探测。
 - `GET /api/system/health` 新增 `storage/storage_backend/storage_detail` 字段；对象存储不可用时整体 `degraded`。
-- 视频录音的 `/media` 直接流式返回原始视频（`video/mp4` 等，支持 Range），前端使用原生 `<video>` 播放；音频仍优先返回 `playback.m4a`。
+- 视频录音的 `/media` 优先返回自动转码的 `playback.mp4`（H.264/AAC，支持 Range），`?download=1` 返回原始视频；音频仍优先返回 `playback.m4a`。
 - 对象存储：`ECHOIC_STORAGE_BACKEND=local|s3` + `ECHOIC_S3_*`；S3/MinIO 模式支持上传、管线 staging、Range 媒体代理（可选 307 预签名）、删除与迁移 CLI `python -m app.tools.storage_migrate --from local --to s3 --dry-run|--apply|--verify`。
+
+
+## 11. v1.0 新增：视频场景 / 审计日志
+
+### 11.1 视频场景（slides/scenes）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/recordings/{id}/scenes` | owner/admin；`{items:[VideoSceneOut]}`，按 idx/time 升序；音频或无场景返回空数组 |
+| GET | `/api/recordings/{id}/scenes/{scene_id}/image` | owner/admin；`image/jpeg`（约 360px 宽缩略图，`Cache-Control: private, max-age=3600`） |
+
+- 提取：pipeline 视频 prepare 阶段用 ffmpeg 场景检测（`ECHOIC_SCENE_DETECTION_ENABLED=true`、`ECHOIC_SCENE_THRESHOLD=0.3`、`ECHOIC_SCENE_MAX=60`，最小间隔 1.5s，宽度 ≤360）；失败非致命，录音仍 ready；已有录音可通过重新处理生成。
+- 存储：本地 `media/<uuid>/scenes/*.jpg`，S3 同 key；接口不暴露对象存储地址。
+
+### 11.2 审计日志
+
+`GET /api/system/audit-logs`（admin）查询参数：`action`（精确）、`user_id`、`target_type`（精确）、`q`（模糊 username/action/target/detail）、`since`/`until`（ISO-8601，闭区间）、`page`、`page_size`（1–200，默认 50）。
+
+```json
+{"items":[{"id":1,"user_id":1,"username":"admin","action":"recording.upload",
+ "target_type":"recording","target_id":5,"detail":{"title":"周会"},
+ "ip":"127.0.0.1","created_at":"2026-10-28T08:00:00Z"}],"total":42}
+```
+
+- 记录登录/失败登录/登出/注册/资料/改密、用户 CRUD/重置密码、录音上传/修改/删除/恢复/彻底删除/批量/重处理/取消、分享创建/撤销、设置更新/提示词重置、标签 CRUD、系统 seed/consume 等写操作，不记录 GET；敏感字段（password/API key/token/cookie 等）脱敏，审计写入失败不影响业务。
+- 审计行 append-only、无自动清理；用户名快照在用户删除后仍保留。

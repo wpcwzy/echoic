@@ -14,6 +14,7 @@ import { exportUrl, mediaUrl } from '../../api/queries'
 import type { Chapter, RecordingDetail, Speaker } from '../../types'
 import { AvatarGroup } from '../common/AvatarGroup'
 import { SeekGlyph } from './SeekGlyph'
+import { VideoSceneStrip } from './VideoSceneStrip'
 
 interface AudioPlayerCardProps {
   recording: RecordingDetail
@@ -89,6 +90,7 @@ export function AudioPlayerCard({ recording, speakers, chapters }: AudioPlayerCa
           </div>
         </div>
       )}
+      {isVideo && recording.id > 0 && <VideoSceneStrip recordingId={recording.id} />}
       <section className={`player-card ${disabled ? 'player-card--no-media' : ''}`} aria-label={isVideo ? '视频播放器' : '录音播放器'}>
       <div className="player-card__top">
         <span className="player-card__time">{formatMs(displayMs)}</span>

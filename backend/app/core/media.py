@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -31,6 +32,15 @@ MIME_BY_EXT = {
 }
 
 BROWSER_SAFE_PLAYBACK_EXT = {".mp3", ".m4a", ".aac", ".ogg", ".oga", ".opus", ".wav", ".webm", ".mp4", ".mov"}
+
+#: video slide/scene extraction (v1.0): JPEG width, min gap between kept frames
+SCENE_JPEG_WIDTH = 360
+SCENE_MIN_GAP_MS = 1500
+SCENE_JPEG_QUALITY = 3
+SCENE_TIMEOUT_S = 1800
+
+_SHOWINFO_TIME_RE = re.compile(r"pts_time:\s*(-?[0-9]+(?:\.[0-9]+)?)")
+_SHOWINFO_SIZE_RE = re.compile(r"\bs:(\d+)x(\d+)")
 
 
 class MediaError(Exception):
@@ -229,6 +239,176 @@ def generate_tone_audio(duration_ms: int, dst: Path, ffmpeg_bin: str = "ffmpeg")
         logger.warning("demo audio synthesis failed: %s", exc)
         return False
 
+
+
+
+@dataclass
+class SceneFrame:
+    """A detected slide/scene keyframe extracted as JPEG."""
+
+    time_ms: int
+    width: int
+    height: int
+    path: Path
+
+    @property
+    def filename(self) -> str:
+        return self.path.name
+
+
+def _parse_showinfo_frames(stderr: str) -> list[tuple[float, int, int]]:
+    """Parse ffmpeg ``showinfo`` lines into ``(pts_seconds, width, height)``.
+
+    ``select`` emits only the frames that pass the scene threshold, so the order
+    of these entries matches the emitted JPEG numbering. Two lines are logged per
+    frame; only the one carrying ``pts_time`` and ``s:WxH`` is kept.
+    """
+    frames: list[tuple[float, int, int]] = []
+    for line in (stderr or "").splitlines():
+        if "Parsed_showinfo" not in line or "pts_time:" not in line:
+            continue
+        time_match = _SHOWINFO_TIME_RE.search(line)
+        size_match = _SHOWINFO_SIZE_RE.search(line)
+        if not time_match:
+            continue
+        try:
+            seconds = float(time_match.group(1))
+        except ValueError:
+            continue
+        if seconds < 0:
+            continue
+        width = height = 0
+        if size_match:
+            try:
+                width, height = int(size_match.group(1)), int(size_match.group(2))
+            except ValueError:
+                width = height = 0
+        frames.append((seconds, width, height))
+    return frames
+
+
+def extract_video_scenes(
+    src: Path,
+    dest_dir: Path,
+    ffmpeg_bin: str = "ffmpeg",
+    threshold: float = 0.3,
+    max_scenes: int = 60,
+    *,
+    timeout: int = SCENE_TIMEOUT_S,
+) -> list[SceneFrame]:
+    """Extract slide/scene keyframes from a video via ffmpeg scene detection.
+
+    Uses ``select='gt(scene,THRESHOLD)'`` + ``showinfo`` and scales frames to
+    ``min(360, iw)``-wide JPEGs. Frames closer than :data:`SCENE_MIN_GAP_MS` and
+    frames beyond ``max_scenes`` are discarded (their files removed). Returns
+    ``[]`` for videos without detectable scene changes. Raises :class:`MediaError`
+    on ffmpeg execution failure / missing source.
+
+    This is a best-effort convenience for the slide timeline: the caller decides
+    whether extraction failures should be fatal (the pipeline treats them as
+    non-fatal).
+    """
+    src = Path(src)
+    dest_dir = Path(dest_dir)
+    if not src.exists():
+        raise MediaError(f"找不到待提取画面的视频文件：{src.name}")
+    if not ffmpeg_available(ffmpeg_bin):
+        raise MediaError("服务器未安装 ffmpeg，无法提取视频画面")
+    try:
+        max_frames = max(0, int(max_scenes))
+    except (TypeError, ValueError):
+        max_frames = 60
+    if max_frames <= 0:
+        return []
+    try:
+        scene_threshold = min(0.99, max(0.01, float(threshold)))
+    except (TypeError, ValueError):
+        scene_threshold = 0.3
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    for stale in dest_dir.glob("scene_*.jpg"):
+        try:
+            stale.unlink()
+        except OSError:  # pragma: no cover - defensive
+            pass
+
+    video_filter = (
+        f"select='gt(scene,{scene_threshold:.3f})',"
+        f"scale='min({SCENE_JPEG_WIDTH},iw)':-2,showinfo"
+    )
+    cmd = [
+        ffmpeg_bin,
+        "-hide_banner",
+        "-loglevel",
+        "info",
+        "-y",
+        "-i",
+        str(src),
+        "-an",
+        "-sn",
+        "-vf",
+        video_filter,
+        "-vsync",
+        "vfr",
+        "-q:v",
+        str(SCENE_JPEG_QUALITY),
+        "-frames:v",
+        str(max_frames),
+        str(dest_dir / "scene_%04d.jpg"),
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise MediaError("视频画面提取超时") from exc
+    except OSError as exc:
+        raise MediaError(f"视频画面提取失败：{exc}") from exc
+
+    output_files = sorted(dest_dir.glob("scene_*.jpg"))
+    if proc.returncode != 0:
+        if output_files:
+            logger.warning("ffmpeg scene extraction exited with %s but produced frames", proc.returncode)
+        else:
+            detail = (proc.stderr or "").strip().splitlines()
+            snippet = detail[-1][:300] if detail else "未知错误"
+            raise MediaError(f"视频画面提取失败：{snippet}")
+    if not output_files:
+        return []
+
+    parsed = _parse_showinfo_frames(proc.stderr or "")
+    frames: list[SceneFrame] = []
+    for index, path in enumerate(output_files):
+        if index < len(parsed):
+            seconds, width, height = parsed[index]
+            time_ms = int(round(seconds * 1000))
+        else:  # metadata/FILE numbering mismatch: keep a monotonic fallback
+            time_ms = (frames[-1].time_ms + SCENE_MIN_GAP_MS) if frames else index * 1000
+            width = height = 0
+        if not path.is_file() or path.stat().st_size <= 0:
+            continue
+        if frames and time_ms - frames[-1].time_ms < SCENE_MIN_GAP_MS:
+            try:
+                path.unlink()
+            except OSError:  # pragma: no cover
+                pass
+            continue
+        frames.append(SceneFrame(time_ms=time_ms, width=width, height=height, path=path))
+        if len(frames) >= max_frames:
+            break
+    # Drop any surplus files that were not kept (defensive: -frames:v already caps).
+    kept_paths = {frame.path for frame in frames}
+    for path in output_files:
+        if path not in kept_paths:
+            try:
+                path.unlink()
+            except OSError:  # pragma: no cover
+                pass
+    logger.info(
+        "video scene extraction: %s frames from %s (threshold=%.2f, max=%s)",
+        len(frames),
+        src.name,
+        scene_threshold,
+        max_frames,
+    )
+    return frames
 
 def media_duration_ms(path: Path, ffprobe_bin: str = "ffprobe") -> int:
     try:

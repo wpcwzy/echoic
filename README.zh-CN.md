@@ -11,7 +11,7 @@
 > 上传或网页录制声音，自动获得**转录稿、AI 纪要、观点树 & 思维导图、章节、关键洞察、待办与 AI 问答**——所有数据都留在你自己的服务器上。
 
 - 定位：paperless-ngx 之于纸质文档 = **Echoic 之于录音**
-- 版本：**v0.3.17**（P1 全部交付 + sqlite-vec / 实时字幕 GA / 注册与个人资料 / 自动描述；暗色主题、回收站与批量、对象存储、向量混合检索、多用户分享、CI + GHCR 多架构镜像）
+- 版本：**v1.0.0**（P1 生产可用：多用户协作、暗色主题、回收站批量、对象存储、实时字幕 GA、向量/混合检索（numpy/sqlite-vec/pgvector/Qdrant）、PWA、视频回放与场景抽取、审计日志、自动描述；CI + GHCR 多架构镜像）
 - 许可：MIT
 
 ## 📸 界面预览
@@ -39,6 +39,16 @@
 | 观点树 · 多专题森林 |
 |---|
 | ![观点森林](docs/screenshots/v0.3/09-viewpoint-forest.png) |
+
+**v1.0 视频场景、审计日志与分享**
+
+| 视频 · 场景条 | 管理员审计日志 |
+|---|---|
+| ![视频场景](docs/screenshots/v1.0/04-video-detail-scenes.png) | ![审计日志](docs/screenshots/v1.0/12-audit-dark-expanded.png) |
+
+| 分享预览 · 标题/简介/slogan | 公开视频页 |
+|---|---|
+| ![分享弹窗](docs/screenshots/v1.0/07-share-dialog.png) | ![公开视频](docs/screenshots/v1.0/10-public-video-light.png) |
 
 **v0.2 协作与分享**
 
@@ -194,15 +204,18 @@ docker pull ghcr.io/wpcwzy/echoic:latest
 
 ---
 
-## ✅ 验证状态（v0.2.0）
+## ✅ 验证状态（v1.0.0）
 
 | 项目 | 结果 | 证据 |
 |---|---|---|
 | GitHub Actions CI | **通过**：后端 pytest + 前端 tsc/vite 构建；PR 额外验证 amd64 镜像构建 | [CI 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
 | 多架构镜像发布 | **成功**：linux/amd64 + linux/arm64 已推送 GHCR（`latest` / `sha-*`；tag 发布语义化版本） | [Publish 运行记录](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR 包](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
-| 后端测试 | **465 passed**（v0.1 129 + v0.2 + v0.3 回收站/实时/向量/存储/迁移）；含 moto S3 上传→管线→Range 端到端用例 | `cd backend && .venv/bin/pytest -q` |
-| 前端构建 | **通过**（`tsc --noEmit` 零错误；gzip ≈ 613 KB JS + 22 KB CSS） | `cd frontend && npm run build` |
-| 端到端冒烟（Mock，全新数据库） | v0.1 **30/30** + v0.2 **34/34** + v0.3 **34/34 PASS**：回收站/批量不变量、实时 Mock WS→上传→replace/promote、向量重建+语义/混合检索 ACL、Range、回归 | [`e2e/REPORT-v0.3.md`](e2e/REPORT-v0.3.md) |
+| 后端测试 | **514 passed, 4 skipped**（465 基线 + Qdrant 14 + 视频场景 19 + 审计 16；4 个 skip 为需要 DSN 的 pgvector staging）；含 moto S3 与真实 Qdrant 冒烟 | `cd backend && .venv/bin/pytest -q` |
+| 前端构建 | **通过**（`tsc --noEmit` 零错误；gzip ≈ 627 KB JS + 24 KB CSS） | `cd frontend && npm run build` |
+| 端到端冒烟 | v0.1 **30/30** + v0.2 **34/34** + v0.3 **34/34** + v0.3.10 **23/23** + v1.0 **43/43 PASS**：回收站/批量、实时 Mock/重连、存储、向量、视频场景、审计、注册/资料、分享 | [`e2e/REPORT-v1.0.md`](e2e/REPORT-v1.0.md) |
+| UI 截图巡检 | v0.1 6/6 + v0.2 7/7 + v0.3 8/8 + v1.0 16/16（视频场景、吸顶视频、审计、分享、公开视频、移动端；明暗），无溢出/异常/5xx | [`docs/screenshots/v1.0/`](docs/screenshots/v1.0/) |
+| Qdrant / pgvector staging | 真实 Qdrant v1.20.0：backend=qdrant，重建/搜索/ACL 正常；真实 PostgreSQL 16 + pgvector 0.8.7 staging **4 passed**（CI 同配置） | [`e2e/REPORT-v1.0.md`](e2e/REPORT-v1.0.md) |
+| 真实 DashScope 实时长稳 | **PASS**：60 分钟、provider 错误/重连 0、35998 帧、61 条 final、RSS 峰值 52.2 MiB | [`e2e/soak-live-v1.0.json`](e2e/soak-live-v1.0.json) |
 | UI 截图巡检 | v0.1 6/6 + v0.2 7/7 + v0.3 8/8（明暗、桌面/移动），无溢出、无未捕获异常、无 5xx | [`docs/screenshots/`](docs/screenshots/) · [`docs/screenshots/v0.3/`](docs/screenshots/v0.3/) |
 | 对象存储 | local/S3 后端、媒体代理、迁移 CLI 单测 + moto；S3 上传→管线→Range 端到端 pytest | `pytest tests/test_storage_*.py` |
 
@@ -298,12 +311,21 @@ e2e/                                        端到端冒烟脚本与验收报告
 - [x] 向量/混合语义检索、索引重建、AI 问答混合 RAG
 - [x] v0.1/v0.2 数据目录自动迁移
 
-### 后续（v0.3.x / v1.0）
+### v1.0.0（已交付）
 
-- [x] sqlite-vec 后端、实时字幕 GA（自动重连续传）
-- [ ] pgvector 真机验证、真实 Key 60 分钟长稳、Qdrant 后端
-- [ ] 自助注册页面、成员个人资料/改密页
-- [ ] 视频画面 PPT / 场景抽取、移动 App / 浏览器扩展、OAuth/LDAP、审计日志
+- [x] Qdrant 向量后端（auto 优先级 pgvector → Qdrant → sqlite-vec → numpy，自动降级）
+- [x] pgvector 真机 CI 验证（PostgreSQL 16 + pgvector 服务）
+- [x] 真实 DashScope 实时长稳 soak 工具（60 分钟 staging 证据见 `e2e/`）
+- [x] 视频场景/画面抽取（场景切换缩略图 + 场景条跳转）
+- [x] 管理员审计日志（登录/用户/录音/分享/设置/标签等，筛选分页+敏感字段脱敏）
+- [x] 自助注册页 + 成员个人资料/改密页
+- [x] 手机 PWA 安装、视频自动 H.264/AAC 转码与回放
+
+### 后续（v1.x）
+
+- [ ] 移动 App / 浏览器扩展
+- [ ] OAuth / LDAP / SSO
+- [ ] 可选全文检索后端（BM25/FTS5）与 Qdrant 之外的向量库
 
 ---
 

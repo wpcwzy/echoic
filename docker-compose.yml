@@ -20,14 +20,18 @@
 #   docker compose --profile minio    up -d              # 自托管 MinIO（S3 兼容对象存储，v0.3.0）
 #   docker compose --profile postgres up -d              # 外置 PostgreSQL 16
 #   docker compose --profile worker   up -d              # 独立 worker（主服务不再跑内嵌线程）
+#   docker compose --profile qdrant   up -d              # 外置 Qdrant 向量库（v1.0 可选加速层）
 #   docker compose --profile postgres --profile worker up -d   # 两者同时
 #   docker compose --profile minio --profile worker   up -d    # MinIO + 独立 worker
+#   docker compose --profile postgres --profile qdrant up -d   # PostgreSQL + Qdrant
 # 使用外部 PostgreSQL 时，需在 .env 中设置：
 #   ECHOIC_DATABASE_URL=postgresql+psycopg://echoic:<口令>@postgres:5432/echoic
 # 使用独立 worker 时，需在 .env 中设置 ECHOIC_EMBEDDED_WORKER=false。
 # 使用 MinIO（v0.3.0 对象存储）时，需在 .env 中设置：
 #   ECHOIC_STORAGE_BACKEND=s3、ECHOIC_S3_ENDPOINT=http://minio:9000、ECHOIC_S3_PATH_STYLE=true，
 #   以及与本文件 ECHOIC_MINIO_ROOT_USER/PASSWORD 一致的 ECHOIC_S3_ACCESS_KEY/SECRET_KEY。
+# 使用 Qdrant（v1.0 可选向量后端）时，需在 .env 中设置 ECHOIC_QDRANT_URL=http://qdrant:6333
+#   （本机进程访问改为 http://localhost:6333）；未配置/不可用时自动降级 numpy，不影响服务启动。
 # ============================================================================
 
 name: echoic
@@ -60,6 +64,48 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
+
+  # ---------------------------- 可选：Qdrant 向量库（--profile qdrant，v1.0）----------------------------
+  # 用途：外置 ANN 向量库，作为 v1.0 可选向量后端（默认 numpy/sqlite-vec/pgvector 已覆盖多数场景）。
+  #       仅在「多实例共享索引 / 百万级 chunk / 需要独立扩缩容」时启用；**不是硬依赖**：
+  #       Qdrant 未启动或不可达时，auto 模式自动降级 numpy 并在 /api/vector/status 给 fallback_reason。
+  #
+  # 启动步骤：
+  #   1) docker compose --profile qdrant up -d           # 拉起 qdrant + echoic
+  #   2) .env 设置（compose 内用服务名 qdrant；宿主机/本机进程用 http://localhost:6333）：
+  #        ECHOIC_QDRANT_URL=http://qdrant:6333
+  #        ECHOIC_QDRANT_API_KEY=<生产必填的强随机 Key；留空=不鉴权，仅本地体验>
+  #        ECHOIC_QDRANT_COLLECTION=echoic_chunks
+  #        ECHOIC_QDRANT_TIMEOUT=10
+  #        # ECHOIC_VECTOR_BACKEND=qdrant                 # 可选：强制使用（默认 auto 自动选优）
+  #   3) docker compose up -d                            # 重建 echoic 使配置生效
+  #
+  # 版本：固定 qdrant/qdrant:v1.20.0（已校验 Docker Hub 存在 linux/amd64 + linux/arm64 多架构）；
+  #      升级请改 tag 后观察容器 /readyz 与 /api/vector/status。
+  # 安全：默认仅把 6333/6334 绑定到 127.0.0.1（不直接公网暴露）；生产请设置 ECHOIC_QDRANT_API_KEY
+  #      （同一变量同时注入 QDRANT__SERVICE__API_KEY 与服务端连接配置）。
+  # 备份：向量数据在 echoic-qdrant 卷；原始 chunk/embedding 仍在 echoic-data 数据库内，可随时重建索引。
+  qdrant:
+    profiles: ["qdrant"]
+    image: ${ECHOIC_QDRANT_IMAGE:-qdrant/qdrant:v1.20.0}
+    restart: unless-stopped
+    environment:
+      # 空值 = 不启用 API Key 鉴权（仅本地体验）；生产务必设置强随机 Key（与 ECHOIC_QDRANT_API_KEY 一致）
+      QDRANT__SERVICE__API_KEY: ${ECHOIC_QDRANT_API_KEY:-}
+      # 显式声明 gRPC 端口（默认即 6334；本仓库客户端走 REST 6333，保留端口便于调试）
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    ports:
+      - "127.0.0.1:${ECHOIC_QDRANT_HTTP_PORT:-6333}:6333"   # REST/HTTP API（含 /readyz、Web UI）
+      - "127.0.0.1:${ECHOIC_QDRANT_GRPC_PORT:-6334}:6334"   # gRPC API（可选）
+    volumes:
+      - echoic-qdrant:/qdrant/storage
+    healthcheck:
+      # 官方镜像不含 curl/wget，用 bash 的 /dev/tcp 探测 HTTP 端口（不依赖 API Key）
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # ---------------------------- 可选：独立 worker 进程（--profile worker）----------------------------
   # 复用同一镜像；与 echoic 共享数据卷与数据库。适合 CPU 密集处理时把任务线程与 API 隔离。
@@ -171,3 +217,6 @@ volumes:
   # v0.3.0：启用 --profile minio 时的对象存储数据卷（S3 模式下媒体数据在此卷）
   echoic-minio:
     name: echoic-minio
+  # v1.0：启用 --profile qdrant 时的向量库数据卷（可随时由 DB 中的 chunk/embedding 重建）
+  echoic-qdrant:
+    name: echoic-qdrant

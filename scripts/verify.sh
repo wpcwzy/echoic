@@ -7,7 +7,7 @@
 #   2) 前端类型检查 + 生产构建（tsc + vite build）
 #   3) 生产式启动服务（临时数据目录）并检查 /api/system/health
 #   4) 若存在 e2e/smoke*.py，则以生产式临时服务运行端到端冒烟
-#      （v0.1 30 项 + v0.2 34 项 + v0.3：回收站/批量/实时 mock WS/向量检索），
+#      （v0.1 / v0.2 / v0.3 / v0.3.10 / v1.0：视频分镜/审计日志/Qdrant(可用则)/注册资料回归），
 #      日志写入临时目录，不会覆盖 e2e/last-run*.log
 #
 # 用法：
@@ -233,6 +233,28 @@ else
   else
     skip "E2E v0.3.10 冒烟（e2e/smoke_v0310.py 不存在或服务未就绪）"
   fi
+
+  # ---- 可选：v1.0 e2e（视频分镜 / 审计日志 / Qdrant(可用则) / 注册资料回归 / 分享）----
+  # 说明：默认 verify 服务为 sqlite_vec 后端，Qdrant 专项校验会自动 SKIP（不影响其它项）；
+  #       需要覆盖真实 Qdrant 时，启动服务前设置 ECHOIC_VECTOR_BACKEND=qdrant、ECHOIC_QDRANT_URL，
+  #       并传入 ECHOIC_E2E_VECTOR_BACKEND=qdrant ECHOIC_E2E_QDRANT_URL=... 等环境变量。
+  if [ "$READY" = 1 ] && [ -f "$REPO_ROOT/e2e/smoke_v1.py" ]; then
+    step "E2E v1.0 冒烟（e2e/smoke_v1.py）"
+    if ( cd "$REPO_ROOT" && ECHOIC_E2E_BASE_URL="http://127.0.0.1:${PORT}" \
+           ECHOIC_E2E_LOG_V1="$DATA_DIR/smoke-v1.log" \
+           ECHOIC_E2E_DATA_DIR="$DATA_DIR" \
+           ECHOIC_E2E_VECTOR_BACKEND="${ECHOIC_E2E_VECTOR_BACKEND:-}" \
+           ECHOIC_E2E_QDRANT_URL="${ECHOIC_E2E_QDRANT_URL:-}" \
+           ECHOIC_E2E_QDRANT_API_KEY="${ECHOIC_E2E_QDRANT_API_KEY:-}" \
+           ECHOIC_E2E_CONTEXT_OUT="${ECHOIC_E2E_CONTEXT_OUT:-$DATA_DIR/e2e-v1-context.json}" \
+           "$VENV/bin/python" e2e/smoke_v1.py --data-dir "$DATA_DIR" ); then
+      ok "E2E v1.0 冒烟"
+    else
+      fail "E2E v1.0 冒烟（详情见 $DATA_DIR/smoke-v1.log）"
+    fi
+  else
+    skip "E2E v1.0 冒烟（e2e/smoke_v1.py 不存在或服务未就绪）"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -243,5 +265,5 @@ if [ "$FAIL" -gt 0 ]; then
   exit 1
 fi
 printf '\033[1;32m全部检查通过 ✔\033[0m\n'
-printf 'e2e 冒烟日志（如已运行）：%s/smoke.log（v0.1）、%s/smoke-v02.log（v0.2）、%s/smoke-v03.log（v0.3）、%s/smoke-v0310.log（v0.3.10）\n' "$DATA_DIR" "$DATA_DIR" "$DATA_DIR" "$DATA_DIR"
+printf 'e2e 冒烟日志（如已运行）：%s/smoke.log（v0.1）、%s/smoke-v02.log（v0.2）、%s/smoke-v03.log（v0.3）、%s/smoke-v0310.log（v0.3.10）、%s/smoke-v1.log（v1.0）\n' "$DATA_DIR" "$DATA_DIR" "$DATA_DIR" "$DATA_DIR" "$DATA_DIR"
 exit 0

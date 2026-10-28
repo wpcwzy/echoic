@@ -68,6 +68,7 @@ from ..schemas import (
     ShareListOut,
     ShareOut,
 )
+from ..services import audit as audit_service
 from ..services import trash as trash_service
 from ..services.settings_store import load_ai_config
 from ._common import (
@@ -281,6 +282,7 @@ def list_recordings(
 
 @router.post("/upload", response_model=RecordingSummary, status_code=201)
 def upload_recording(
+    request: Request,
     file: UploadFile = File(...),
     title: str | None = Form(None),
     description: str | None = Form(None),
@@ -429,6 +431,23 @@ def upload_recording(
         recording.duration_ms,
         user.username,
     )
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "recording.upload",
+        target_type="recording",
+        target_id=recording.id,
+        detail={
+            "title": recording.title,
+            "media_type": recording.media_type,
+            "size_bytes": int(size),
+            "duration_ms": int(recording.duration_ms or 0),
+            "source": source,
+            "auto_process": auto_process,
+            "live_session_id": int(live_session_id) if live_session_id is not None else None,
+        },
+    )
     return recording_to_summary(
         recording, has_transcript=False, insight_kinds=[], owner=user
     )
@@ -484,6 +503,7 @@ def get_recording(
 def update_recording(
     recording_id: int,
     payload: RecordingUpdateIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -522,20 +542,41 @@ def update_recording(
                 continue
             speaker.display_name = (display_name or "").strip()[:120]
     db.commit()
-    return _single_summary(db, recording)
+    summary = _single_summary(db, recording)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "recording.update",
+        target_type="recording",
+        target_id=recording.id,
+        detail={"fields": sorted(str(field) for field in fields), "owner_id": recording.owner_id},
+    )
+    return summary
 
 
 # ------------------------------------------------------------------ trash (R-23)
 @router.delete("/{recording_id}")
 def trash_recording(
     recording_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     recording = get_recording_for_user(db, user, recording_id)
+    title = recording.title
     deleted = trash_service.soft_delete(db, recording, user_id=user.id)
     before = trash_service.restore_before(deleted)
     logger.info("recording %s trashed by %s", recording_id, user.username)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "recording.trash",
+        target_type="recording",
+        target_id=recording_id,
+        detail={"title": title},
+    )
     return {
         "ok": True,
         "id": recording_id,
@@ -547,27 +588,50 @@ def trash_recording(
 @router.post("/{recording_id}/restore", response_model=RecordingSummary)
 def restore_recording(
     recording_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     recording = get_recording_any(db, user, recording_id)
     if recording.deleted_at is None:
         raise not_found("录音不在回收站")
+    title = recording.title
     trash_service.restore(db, recording)
-    return _single_summary(db, recording)
+    summary = _single_summary(db, recording)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "recording.restore",
+        target_type="recording",
+        target_id=recording_id,
+        detail={"title": title},
+    )
+    return summary
 
 
 @router.delete("/{recording_id}/purge")
 def purge_recording(
     recording_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     recording = get_recording_any(db, user, recording_id)
     if recording.deleted_at is None:
         raise not_found("录音不在回收站")
+    title = recording.title
     trash_service.purge_recording(db, recording)
     logger.info("recording %s purged by %s", recording_id, user.username)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "recording.purge",
+        target_type="recording",
+        target_id=recording_id,
+        detail={"title": title},
+    )
     return {"ok": True, "purged": True}
 
 
@@ -618,6 +682,7 @@ def _apply_batch_item(
 @router.post("/batch", response_model=BatchOut)
 def batch_recordings(
     payload: BatchActionIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -657,6 +722,21 @@ def batch_recordings(
         else:
             succeeded += 1
             results.append(BatchItemResult(id=recording_id, ok=True))
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "recording.batch",
+        target_type="batch",
+        detail={
+            "action": action,
+            "recording_ids": recording_ids,
+            "succeeded": succeeded,
+            "failed": failed,
+            "tag_ids": [int(tag.id) for tag in tags],
+            "from": payload.from_ if action == "reprocess" else None,
+        },
+    )
     return BatchOut(
         action=action,
         succeeded=succeeded,
@@ -669,6 +749,7 @@ def batch_recordings(
 @router.post("/{recording_id}/reprocess")
 def reprocess_recording(
     recording_id: int,
+    request: Request,
     payload: ReprocessIn | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -677,12 +758,22 @@ def reprocess_recording(
     from_stage = payload.from_ if payload is not None else "all"
     _queue_reprocess(db, recording, from_stage)
     logger.info("recording %s queued for reprocess (%s)", recording_id, from_stage)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "recording.reprocess",
+        target_type="recording",
+        target_id=recording_id,
+        detail={"from": from_stage},
+    )
     return {"ok": True, "status": RecordingStatus.QUEUED}
 
 
 @router.post("/{recording_id}/cancel", response_model=OkOut)
 def cancel_recording(
     recording_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -691,6 +782,7 @@ def cancel_recording(
         return OkOut()
     if recording.status not in ACTIVE_STATUSES:
         raise conflict("录音当前状态无法取消", "CONFLICT")
+    previous_status = recording.status
     cancel_job(db, recording_id)
     recording = get_recording_for_user(db, user, recording_id)
     recording.status = RecordingStatus.CANCELLED
@@ -698,6 +790,15 @@ def cancel_recording(
     recording.error_message = None
     db.commit()
     logger.info("recording %s cancelled by %s", recording_id, user.username)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "recording.cancel",
+        target_type="recording",
+        target_id=recording_id,
+        detail={"previous_status": previous_status},
+    )
     return OkOut()
 
 
@@ -783,6 +884,7 @@ def list_recording_shares(
 def create_recording_share(
     recording_id: int,
     payload: ShareCreateIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -806,4 +908,20 @@ def create_recording_share(
     db.commit()
     db.refresh(share)
     logger.info("share %s created for recording %s by %s", share.id, recording.id, user.username)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "share.create",
+        target_type="share",
+        target_id=share.id,
+        detail={
+            "recording_id": recording.id,
+            "has_password": bool(share.password_hash),
+            "include_transcript": bool(share.include_transcript),
+            "include_insights": bool(share.include_insights),
+            "allow_download": bool(share.allow_download),
+            "expires_at": to_iso(share.expires_at),
+        },
+    )
     return share_to_out(share, user)

@@ -1,0 +1,3030 @@
+{
+  "report_version": 1,
+  "kind": "echoic-live-soak",
+  "status": "ok",
+  "exit_code": 0,
+  "started_at": "2026-10-28T09:02:06+00:00",
+  "finished_at": "2026-10-28T10:02:08+00:00",
+  "duration_s": 3601.39,
+  "duration_human": "1h00m01s",
+  "planned_minutes": 60.0,
+  "planned_seconds": 3600.0,
+  "audio_streamed_seconds": 3599.8,
+  "planned_duration_completed": true,
+  "streaming_coverage_pct": 100.0,
+  "provider": "dashscope_realtime",
+  "model": "paraformer-realtime-v2",
+  "base_url": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+  "language": "zh",
+  "key_source": "env:ECHOIC_REALTIME_ASR_API_KEY",
+  "key_configured": true,
+  "environment": {
+    "python": "3.12.7",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.36",
+    "git_revision": "0a39693",
+    "repo_root": "/home/wpcwzy/echoic"
+  },
+  "audio": {
+    "label": "/home/wpcwzy/echoic/.cache/qwen-test.wav",
+    "synthetic": false,
+    "source_duration_s": 3.83,
+    "streamed_ms": 3599800,
+    "frames_sent": 35998,
+    "frame_ms": 100,
+    "loops": 938
+  },
+  "totals": {
+    "sessions": 1,
+    "ready": 1,
+    "partial": 6178,
+    "final": 61,
+    "provider_errors": 0,
+    "drops": 0,
+    "reconnects": 0
+  },
+  "sessions": [
+    {
+      "index": 1,
+      "outcome": "graceful",
+      "started_offset_s": 0.0,
+      "ended_offset_s": 3601.386,
+      "audio_ms_streamed": 3599700,
+      "ready": 1,
+      "partial": 6178,
+      "final": 61,
+      "reconnects": 0,
+      "error": ""
+    }
+  ],
+  "provider_errors": [],
+  "final_samples": [
+    {
+      "offset_s": 60.9,
+      "text": "Hello word, 这里是阿里巴巴语音实验室hello world，这里是阿里巴巴语音实验室hello world，这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello wor",
+      "start_ms": 280,
+      "end_ms": 57326
+    },
+    {
+      "offset_s": 120.9,
+      "text": "Hello word, 这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室，hello world这里是阿里巴巴语音实验室，hello world这里是阿里巴巴语音实验室，hello world这里是阿里巴巴语音实验室，hello world这里是阿里巴",
+      "start_ms": 57326,
+      "end_ms": 115617
+    },
+    {
+      "offset_s": 181.1,
+      "text": "Hello world, 这里是阿里巴巴语音实验室。Hello world, 这这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hel",
+      "start_ms": 115617,
+      "end_ms": 176554
+    },
+    {
+      "offset_s": 241.1,
+      "text": "Hello world这里是阿里巴巴语音实验室hello word的这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室hello world，这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这",
+      "start_ms": 176554,
+      "end_ms": 237559
+    },
+    {
+      "offset_s": 301.0,
+      "text": "Hello word, 这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室hello world，这里是阿里巴巴语音实验室，hello world, 这里是阿里巴巴语音实验室，hello world, 这里是阿里巴巴语音实验室，hello world, ",
+      "start_ms": 237559,
+      "end_ms": 295584
+    },
+    {
+      "offset_s": 361.2,
+      "text": "Hello world, 这里是阿里巴巴语音实验室。Hello world的这这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hell",
+      "start_ms": 295584,
+      "end_ms": 356774
+    },
+    {
+      "offset_s": 421.4,
+      "text": "Hello world, 这里是阿里巴巴语音实验室hello word，这里是阿里巴巴语音实验室hello world，这里是阿里巴巴语音实验室hello world，这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world",
+      "start_ms": 356774,
+      "end_ms": 417786
+    },
+    {
+      "offset_s": 481.3,
+      "text": "Hello world这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室。Hello world这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿",
+      "start_ms": 417786,
+      "end_ms": 476077
+    },
+    {
+      "offset_s": 541.5,
+      "text": "Hello world, 这里是阿里巴巴语音实验室，hello world, 这这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hel",
+      "start_ms": 476077,
+      "end_ms": 536762
+    },
+    {
+      "offset_s": 601.6,
+      "text": "Hello world的这里是阿里巴巴语音实验室hello word的这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室hello world，这里是阿里巴巴语音实验室hello world，这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里",
+      "start_ms": 536762,
+      "end_ms": 598019
+    },
+    {
+      "offset_s": 661.6,
+      "text": "Hello world这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室hello world这里是阿里巴巴语音实验室。Hello world这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿",
+      "start_ms": 598019,
+      "end_ms": 656297
+    },
+    {
+      "offset_s": 721.7,
+      "text": "Hello world, 这里是阿里巴巴语音实验室，hello world, 这这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hello world, 这里是阿里巴巴语音实验室。Hel",
+      "start_ms": 656297,
+      "end_ms": 716982
+    }
+  ],
+  "rss": {
+    "max_mb": 52.2,
+    "samples": [
+      {
+        "offset_s": 0.0,
+        "rss_mb": 46.8
+      },
+      {
+        "offset_s": 5.0,
+        "rss_mb": 50.7
+      },
+      {
+        "offset_s": 10.0,
+        "rss_mb": 50.8
+      },
+      {
+        "offset_s": 15.1,
+        "rss_mb": 50.9
+      },
+      {
+        "offset_s": 20.1,
+        "rss_mb": 51.1
+      },
+      {
+        "offset_s": 25.2,
+        "rss_mb": 51.2
+      },
+      {
+        "offset_s": 30.3,
+        "rss_mb": 51.4
+      },
+      {
+        "offset_s": 35.4,
+        "rss_mb": 51.6
+      },
+      {
+        "offset_s": 40.5,
+        "rss_mb": 51.8
+      },
+      {
+        "offset_s": 45.5,
+        "rss_mb": 51.9
+      },
+      {
+        "offset_s": 50.6,
+        "rss_mb": 51.9
+      },
+      {
+        "offset_s": 55.6,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 60.6,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 65.6,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 70.7,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 75.8,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 80.8,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 85.9,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 91.0,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 96.0,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 101.0,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 106.1,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 111.2,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 116.2,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 121.3,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 126.3,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 131.4,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 136.4,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 141.5,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 146.6,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 151.6,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 156.7,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 161.7,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 166.8,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 171.9,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 176.9,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 182.0,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 187.0,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 192.0,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 197.1,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 202.1,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 207.2,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 212.2,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 217.3,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 222.3,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 227.4,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 232.5,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 237.5,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 242.6,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 247.7,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 252.8,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 257.8,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 262.9,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 267.9,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 273.0,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 278.0,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 283.1,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 288.2,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 293.3,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 298.3,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 303.3,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 308.3,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 313.4,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 318.4,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 323.5,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 328.5,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 333.6,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 338.7,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 343.7,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 348.7,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 353.8,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 358.8,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 363.9,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 368.9,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 374.0,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 379.1,
+        "rss_mb": 52.0
+      },
+      {
+        "offset_s": 384.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 389.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 394.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 399.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 404.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 409.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 414.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 419.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 424.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 429.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 434.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 439.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 444.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 449.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 454.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 459.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 465.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 470.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 475.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 480.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 485.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 490.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 495.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 500.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 505.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 510.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 515.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 520.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 525.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 530.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 535.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 540.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 545.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 551.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 556.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 561.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 566.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 571.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 576.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 581.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 586.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 591.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 596.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 601.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 606.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 612.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 617.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 622.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 627.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 632.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 637.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 642.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 647.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 652.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 657.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 662.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 667.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 672.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 677.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 682.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 688.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 693.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 698.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 703.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 708.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 713.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 718.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 723.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 728.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 733.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 738.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 743.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 748.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 753.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 758.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 763.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 768.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 773.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 778.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 783.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 788.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 793.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 798.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 803.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 809.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 814.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 819.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 824.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 829.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 834.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 839.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 844.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 849.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 854.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 859.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 864.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 869.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 874.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 879.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 885.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 890.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 895.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 900.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 905.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 910.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 915.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 920.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 925.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 930.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 935.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 940.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 945.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 950.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 955.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 960.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 965.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 970.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 976.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 981.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 986.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 991.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 996.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1001.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1006.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1011.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1016.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1021.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1026.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1031.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1036.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1041.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1046.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1051.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1056.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1061.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1066.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1071.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1077.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1082.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1087.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1092.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1097.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1102.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1107.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1112.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1117.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1122.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1127.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1132.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1137.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1142.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1147.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1152.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1157.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1162.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1167.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1173.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1178.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1183.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1188.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1193.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1198.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1203.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1208.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1213.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1218.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1223.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1228.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1233.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1238.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1243.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1248.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1253.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1259.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1264.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1269.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1274.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1279.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1284.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1289.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1294.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1299.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1304.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1309.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1314.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1319.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1324.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1329.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1334.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1340.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1345.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1350.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1355.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1360.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1365.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1370.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1375.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1380.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1385.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1390.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1395.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1400.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1405.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1410.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1415.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1420.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1425.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1431.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1436.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1441.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1446.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1451.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1456.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1461.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1466.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1471.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1476.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1481.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1486.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1491.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1496.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1501.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1506.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1511.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1516.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1521.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1526.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1531.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1537.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1542.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1547.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1552.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1557.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1562.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1567.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1572.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1577.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1582.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1587.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1592.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1597.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1602.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1607.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1612.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1617.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1622.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1628.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1633.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1638.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1643.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1648.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1653.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1658.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1663.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1668.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1673.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1678.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1683.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1688.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1693.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1698.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1703.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1708.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1714.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1719.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1724.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1729.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1734.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1739.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1744.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1749.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1754.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1759.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1764.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1769.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1774.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1779.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1784.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1789.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1794.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1800.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1805.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1810.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1815.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1820.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1825.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1830.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1835.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1840.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1845.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1850.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1855.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1860.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1865.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1870.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1875.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1880.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1885.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1890.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1895.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1900.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1905.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1910.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1915.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1921.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1926.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1931.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1936.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1941.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1946.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1951.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1956.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1961.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1966.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1972.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1977.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1982.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1987.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1992.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 1997.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2002.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2007.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2012.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2017.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2022.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2027.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2032.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2037.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2042.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2047.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2052.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2057.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2062.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2067.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2073.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2078.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2083.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2088.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2093.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2098.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2103.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2108.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2113.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2118.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2123.4,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2128.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2133.5,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2138.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2143.6,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2148.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2153.7,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2158.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2163.8,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2168.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2173.9,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2179.0,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2184.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2189.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2194.1,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2199.2,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2204.3,
+        "rss_mb": 52.1
+      },
+      {
+        "offset_s": 2209.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2214.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2219.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2224.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2229.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2234.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2239.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2244.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2249.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2254.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2260.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2265.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2270.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2275.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2280.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2285.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2290.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2295.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2300.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2305.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2310.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2315.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2320.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2326.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2331.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2336.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2341.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2346.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2351.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2356.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2361.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2366.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2371.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2376.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2381.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2386.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2391.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2396.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2401.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2406.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2412.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2417.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2422.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2427.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2432.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2437.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2442.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2447.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2452.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2457.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2462.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2467.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2472.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2477.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2482.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2487.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2492.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2498.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2503.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2508.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2513.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2518.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2523.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2528.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2533.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2538.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2543.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2548.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2553.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2558.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2563.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2568.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2573.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2578.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2583.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2588.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2593.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2599.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2604.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2609.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2614.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2619.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2624.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2629.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2634.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2639.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2644.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2649.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2654.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2659.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2664.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2669.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2675.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2680.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2685.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2690.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2695.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2700.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2705.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2710.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2715.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2720.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2725.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2730.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2735.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2741.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2746.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2751.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2756.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2761.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2766.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2771.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2776.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2781.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2786.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2791.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2796.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2801.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2806.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2811.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2816.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2821.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2827.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2832.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2837.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2842.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2847.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2852.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2857.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2862.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2867.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2872.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2877.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2882.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2887.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2892.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2897.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2902.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2908.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2913.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2918.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2923.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2928.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2933.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2938.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2943.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2948.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2953.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2958.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2963.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2968.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2973.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2978.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2983.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2988.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2994.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 2999.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3004.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3009.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3014.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3019.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3024.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3029.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3034.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3039.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3044.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3049.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3054.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3059.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3064.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3069.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3074.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3079.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3084.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3089.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3095.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3100.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3105.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3110.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3115.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3120.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3125.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3130.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3135.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3140.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3145.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3150.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3156.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3161.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3166.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3171.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3176.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3181.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3186.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3191.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3196.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3201.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3206.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3211.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3216.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3221.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3226.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3231.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3236.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3241.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3246.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3251.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3257.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3262.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3267.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3272.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3277.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3282.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3287.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3292.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3297.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3302.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3307.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3312.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3317.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3322.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3327.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3333.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3338.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3343.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3348.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3353.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3358.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3363.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3368.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3373.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3378.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3383.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3388.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3393.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3398.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3403.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3409.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3414.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3419.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3424.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3429.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3434.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3439.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3444.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3449.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3454.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3459.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3464.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3469.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3474.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3479.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3484.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3490.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3495.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3500.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3505.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3510.2,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3515.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3520.3,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3525.4,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3530.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3535.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3540.5,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3545.6,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3550.7,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3555.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3560.8,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3565.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3570.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3575.9,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3581.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3586.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3591.0,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3596.1,
+        "rss_mb": 52.2
+      },
+      {
+        "offset_s": 3601.4,
+        "rss_mb": 52.2
+      }
+    ]
+  },
+  "warnings": [
+    "实时 ASR 按音频时长计费；60 分钟即约 60 分钟音频费用，请确认账号额度。"
+  ],
+  "timeline": [
+    {
+      "offset_s": 0.0,
+      "event": "soak_start"
+    },
+    {
+      "offset_s": 0.212,
+      "event": "ready"
+    },
+    {
+      "offset_s": 0.212,
+      "event": "session_started",
+      "session": 1
+    },
+    {
+      "offset_s": 3600.013,
+      "event": "finish_requested"
+    },
+    {
+      "offset_s": 3600.346,
+      "event": "session_finished"
+    }
+  ],
+  "summary_lines": [
+    "=== Echoic 实时字幕 soak 报告 ===",
+    "状态: ok（退出码 0）",
+    "Provider: dashscope_realtime / model=paraformer-realtime-v2 / base_url=wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+    "Key 来源: env:ECHOIC_REALTIME_ASR_API_KEY（报告中不记录 Key 明文）",
+    "计划时长: 60 分钟；实际墙钟: 1h00m01s",
+    "实际推流音频: 1h00m00s（帧 35998 × 100ms）",
+    "会话: 1 个；ready=1；partial=6178；final=61",
+    "断线: 0；重连: 0；provider 错误: 0",
+    "音频源: /home/wpcwzy/echoic/.cache/qwen-test.wav",
+    "RSS 峰值: 52.2 MiB",
+    "警告: 实时 ASR 按音频时长计费；60 分钟即约 60 分钟音频费用，请确认账号额度。"
+  ]
+}

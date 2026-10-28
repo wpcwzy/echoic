@@ -396,22 +396,41 @@ class V03Smoke(Smoke):
             client.post("/api/recordings/batch", json={"action": "trash", "recording_ids": [own["id"]]})
         )
         expect(result.get("succeeded") == 1, f"成员批量移入自己录音回收站失败：{result}")
-        # 成员标签批量操作 → 403（admin-only）
-        tag = self.ctx.get("batch_tag") or {}
-        resp = client.post(
-            "/api/recordings/batch", json={"action": "tag_add", "recording_ids": [own["id"]], "tag_ids": [tag.get("id")]}
-        )
-        expect(resp.status_code == 403, f"成员批量打标签期望 403，实际 {resp.status_code}")
-        # 成员 + 管理员录音混合 → 部分成功
-        admin_rid = self.ctx["batch_ids"][0] if self.ctx.get("batch_ids") else 1
+        # 打标签要求录音在可见范围（回收站内不可见），先恢复自己的录音
         self._json(client.post(f"/api/recordings/{own['id']}/restore"))
+        # v0.3.12 起成员可对「自己的录音」批量打标签（标签目录共享）；越权录音逐项失败
+        tag = self.ctx.get("batch_tag") or {}
+        tagged = self._json(
+            client.post(
+                "/api/recordings/batch",
+                json={"action": "tag_add", "recording_ids": [own["id"]], "tag_ids": [tag.get("id")]},
+            )
+        )
+        expect(tagged.get("succeeded") == 1,
+               f"成员对自己的录音批量打标签期望成功（v0.3.12 起开放）：{tagged}")
+        detail = self._json(client.get(f"/api/recordings/{own['id']}"))
+        tag_ids = {item.get("id") for item in detail.get("tags") or []}
+        expect(tag.get("id") in tag_ids,
+               f"批量 tag_add 后录音未带标签：tags={detail.get('tags')}")
+        # 成员不能给他人录音打标签（逐项失败且不泄露）
+        admin_rid_for_tag = self.ctx["batch_ids"][0] if self.ctx.get("batch_ids") else 1
+        cross = self._json(
+            client.post(
+                "/api/recordings/batch",
+                json={"action": "tag_add", "recording_ids": [admin_rid_for_tag], "tag_ids": [tag.get("id")]},
+            )
+        )
+        expect(cross.get("succeeded") == 0 and cross.get("failed") == 1,
+               f"成员越权打标签期望 0 成功 1 失败：{cross}")
+        # 成员 + 管理员录音混合 → 部分成功（own 已恢复为 active）
+        admin_rid = self.ctx["batch_ids"][0] if self.ctx.get("batch_ids") else 1
         mixed = self._json(
             client.post("/api/recordings/batch", json={"action": "trash", "recording_ids": [own["id"], admin_rid]})
         )
         expect(mixed.get("succeeded") == 1 and mixed.get("failed") == 1,
                f"成员混合批量期望 1 成功 1 失败：{mixed}")
         self.ctx["batch_member_client"] = client
-        return "成员：批量移入自己录音成功；tag 批量 403；混合越权 1 成功 1 失败"
+        return "成员：批量移入自己录音成功；tag_add 自己录音成功、越权 0 成功 1 失败；混合越权 1 成功 1 失败"
 
     # ================================================================== 3. live
     def section_live(self) -> None:

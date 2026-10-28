@@ -15,6 +15,11 @@ reindex CLI) do not care which backend is active:
   activates for a real PostgreSQL database with the ``vector`` extension
   installed; every failure raises :class:`VectorStoreUnavailable` with a
   friendly Chinese reason so :func:`get_vector_store` can degrade to numpy.
+* :class:`QdrantVectorStore` — optional Qdrant backend (``ECHOIC_QDRANT_URL``)
+  for larger / multi-instance deployments; one collection per embedding dim and
+  server-side ACL filtering by payload.  Same graceful-degradation contract.
+* :class:`SqliteVecVectorStore` — bundled-extension ANN backend for the default
+  single-container SQLite deployment.
 
 ``chunks.embedding`` (float32 BLOB) + ``chunks.dim`` + ``chunks.embedding_model``
 remain the portable source of truth; the pgvector table is a mirrored ANN index.
@@ -29,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -47,6 +53,7 @@ __all__ = [
     "MAX_REINDEX_RECORDINGS",
     "NumpyVectorStore",
     "PgVectorStore",
+    "QdrantVectorStore",
     "SqliteVecVectorStore",
     "ReindexResult",
     "VectorHit",
@@ -63,6 +70,7 @@ __all__ = [
     "reindex_recordings",
     "reset_vector_store_cache",
     "run_coroutine_sync",
+    "qdrant_available",
     "sqlite_vec_available",
 ]
 
@@ -684,6 +692,20 @@ class PgVectorStore:
             self._extension_error = reason
             raise VectorStoreUnavailable(reason) from exc
 
+    @staticmethod
+    def _existing_table_dim(connection) -> int | None:
+        """Return the embedding dimension of an existing ``chunk_vectors`` table."""
+        row = connection.execute(
+            text(
+                "SELECT format_type(atttypid, atttypmod) FROM pg_attribute "
+                "WHERE attrelid = 'chunk_vectors'::regclass AND attname = 'embedding'"
+            )
+        ).first()
+        if not row or not row[0]:
+            return None
+        match = re.search(r"\((\d+)\)", str(row[0]))
+        return int(match.group(1)) if match else None
+
     def _ensure_table(self, connection, dim: int) -> None:
         if dim in self._table_dims:
             return
@@ -709,15 +731,11 @@ class PgVectorStore:
                         )
                 except Exception:  # noqa: BLE001 - ANN index is optional
                     logger.warning("could not create pgvector HNSW index (continuing)", exc_info=True)
-            row = connection.execute(
-                text(
-                    "SELECT format_type(atttypid, atttypmod) FROM pg_attribute "
-                    "WHERE attrelid = 'chunk_vectors'::regclass AND attname = 'embedding'"
-                )
-            ).first()
-            if row and row[0] and f"({int(dim)})" not in row[0] and "(" in str(row[0]):
+            existing_dim = self._existing_table_dim(connection)
+            if existing_dim is not None and int(existing_dim) != int(dim):
                 raise VectorStoreUnavailable(
-                    f"已有 chunk_vectors 维度 {row[0]} 与当前维度 {int(dim)} 不一致，请先删除该表后重建索引"
+                    f"已有 chunk_vectors 维度 vector({existing_dim}) 与当前维度 {int(dim)} "
+                    f"不一致，请先删除该表后重建索引"
                 )
         except VectorStoreUnavailable:
             raise
@@ -878,7 +896,11 @@ class PgVectorStore:
         try:
             self._ensure_extension()
             with self.engine.begin() as connection:
-                self._ensure_table(connection, int(dim))
+                if connection.execute(text("SELECT to_regclass('chunk_vectors')")).scalar() is None:
+                    return []
+                existing_dim = self._existing_table_dim(connection)
+                if existing_dim is not None and int(existing_dim) != int(dim):
+                    return []  # query dim vs current index dim → no hits (graceful)
                 try:
                     connection.execute(text("SET LOCAL hnsw.ef_search = 100"))
                 except Exception:  # noqa: BLE001 - older pgvector / no index yet
@@ -1454,6 +1476,465 @@ class SqliteVecVectorStore:
             )
 
 
+# ------------------------------------------------------------------ qdrant store
+#: Qdrant collection name suffix separator (one collection per embedding dim)
+QDRANT_DIM_SEPARATOR = "_"
+def _import_qdrant():
+    """Import the optional ``qdrant-client`` package or raise a friendly error."""
+    try:
+        from qdrant_client import QdrantClient, models
+    except Exception as exc:  # noqa: BLE001 - optional dependency
+        raise VectorStoreUnavailable(
+            "未安装 qdrant-client Python 包（pip install \"qdrant-client\"），无法使用该向量后端"
+        ) from exc
+    return QdrantClient, models
+
+
+def _safe_collection_name(prefix: str, dim: int) -> str:
+    name = re.sub(r"[^A-Za-z0-9_-]+", "_", (prefix or "echoic_chunks").strip()).strip("_")
+    return f"{name or 'echoic_chunks'}{QDRANT_DIM_SEPARATOR}{int(dim)}"
+
+
+def _build_qdrant_client():
+    """Build a Qdrant client from ``ECHOIC_QDRANT_*`` settings (raises when unusable)."""
+    qdrant_client, _models = _import_qdrant()
+    url = str(getattr(settings, "qdrant_url", "") or "").strip()
+    if not url:
+        raise VectorStoreUnavailable("未配置 ECHOIC_QDRANT_URL，Qdrant 后端不可用")
+    api_key = str(getattr(settings, "qdrant_api_key", "") or "").strip() or None
+    try:
+        timeout = max(1, int(float(getattr(settings, "qdrant_timeout", 10.0) or 10.0)))
+    except (TypeError, ValueError):
+        timeout = 10
+    try:
+        return qdrant_client(url=url, api_key=api_key, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 - bad URL / TLS / client init
+        raise VectorStoreUnavailable(
+            f"连接 Qdrant 失败：{type(exc).__name__}: {str(exc)[:180]}"
+        ) from exc
+
+
+class QdrantVectorStore:
+    """Optional Qdrant ANN backend for larger / multi-instance deployments (v1.0).
+
+    Points use the deterministic ``chunk.id`` as point id and an ``echoic_chunks_<dim>``
+    collection per embedding dimension (payload carries ``recording_id``, ``idx``,
+    ``start_ms``, ``end_ms``, ``model``, ``dim``).  ACL is enforced server-side with
+    a ``recording_id MatchAny`` payload filter; model changes are handled by the
+    ``model`` payload filter while a dimension change switches collections (old
+    collection rows for the recording are deleted on the next sync).
+
+    The client is injectable (tests use ``QdrantClient(":memory:")``); when omitted
+    it is built from ``ECHOIC_QDRANT_URL`` / ``_API_KEY`` / ``_TIMEOUT``.  Every
+    failure raises :class:`VectorStoreUnavailable` with a friendly Chinese reason
+    so :func:`get_vector_store` can degrade to numpy.
+    """
+
+    backend = "qdrant"
+
+    def __init__(self, client: Any | None = None, collection: str | None = None) -> None:
+        self._client = client if client is not None else _build_qdrant_client()
+        self._owns_client = client is None
+        self._collection_prefix = (
+            collection
+            if collection is not None
+            else str(getattr(settings, "qdrant_collection", "echoic_chunks") or "echoic_chunks")
+        )
+        self._known_dims: set[int] = set()
+        self._load_error: str | None = None
+        self.fallback_reason: str | None = None
+
+    # ---------------------------------------------------------------- helpers
+    @property
+    def collection_prefix(self) -> str:
+        return self._collection_prefix
+
+    def collection_name(self, dim: int) -> str:
+        return _safe_collection_name(self._collection_prefix, dim)
+
+    def _models(self):
+        _, models = _import_qdrant()
+        return models
+
+    def _with_client(self, action: str, fn):
+        try:
+            return fn()
+        except VectorStoreUnavailable:
+            raise
+        except Exception as exc:  # noqa: BLE001 - network / bad response / local mode
+            raise VectorStoreUnavailable(
+                f"Qdrant {action}失败：{type(exc).__name__}: {str(exc)[:180]}"
+            ) from exc
+
+    def _collection_exists(self, name: str) -> bool:
+        checker = getattr(self._client, "collection_exists", None)
+        if callable(checker):
+            return bool(checker(name))
+        try:
+            self._client.get_collection(name)
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _collection_base(self) -> str:
+        # "echoic_chunks_0" -> "echoic_chunks_" (dimension suffix stripped)
+        return _safe_collection_name(self._collection_prefix, 0)[: -len(str(0))]
+
+    def _fetch_known_dims(self) -> set[int]:
+        def _read() -> set[int]:
+            response = self._client.get_collections()
+            names = [str(getattr(item, "name", "") or "") for item in response.collections]
+            base = self._collection_base()
+            dims: set[int] = set()
+            for name in names:
+                if not name.startswith(base):
+                    continue
+                suffix = name[len(base) :]
+                if suffix.isdigit():
+                    dims.add(int(suffix))
+            return dims
+
+        return self._with_client("读取集合列表", _read)
+
+    def _ensure_collection(self, dim: int) -> None:
+        if int(dim) in self._known_dims:
+            return
+        if int(dim) <= 0:
+            raise VectorStoreUnavailable("向量维度非法，无法写入 Qdrant")
+        name = self.collection_name(dim)
+        if self._collection_exists(name):
+            self._known_dims.add(int(dim))
+            return
+        models = self._models()
+
+        def _create() -> None:
+            self._client.create_collection(
+                collection_name=name,
+                vectors_config=models.VectorParams(
+                    size=int(dim), distance=models.Distance.COSINE
+                ),
+            )
+
+        try:
+            self._with_client("创建集合", _create)
+        except VectorStoreUnavailable:
+            # Concurrent creation: another worker may have created it first.
+            if not self._collection_exists(name):
+                raise
+        self._known_dims.add(int(dim))
+        # Payload indexes are an optimization; older servers / local mode may not
+        # support them, so failures are non-fatal.
+        import warnings
+
+        for field_name, schema in (("recording_id", "integer"), ("model", "keyword")):
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    self._client.create_payload_index(
+                        collection_name=name,
+                        field_name=field_name,
+                        field_schema=schema,
+                    )
+            except Exception:  # noqa: BLE001
+                logger.debug("qdrant payload index for %s.%s not created", name, field_name)
+
+    # ---------------------------------------------------------------- protocol
+    def health(self) -> tuple[bool, str]:
+        if self._load_error:
+            return False, self._load_error
+        try:
+            self._fetch_known_dims()
+        except VectorStoreUnavailable as exc:
+            self._load_error = exc.reason
+            return False, exc.reason
+        return True, f"Qdrant 后端可用（集合前缀 {self._collection_prefix}）"
+
+    def invalidate(self) -> None:
+        # Qdrant is the source of truth for this mirror; nothing is cached locally.
+        return None
+
+    def _delete_recording_points(self, recording_id: int) -> int:
+        models = self._models()
+        deleted = 0
+        for dim in sorted(self._known_dims):
+            name = self.collection_name(dim)
+            if not self._collection_exists(name):
+                continue
+            point_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="recording_id", match=models.MatchValue(value=int(recording_id))
+                    )
+                ]
+            )
+
+            def _count_and_delete(collection_name=name, flt=point_filter) -> int:
+                before = int(self._client.count(collection_name=collection_name, exact=True).count or 0)
+                self._client.delete(
+                    collection_name=collection_name,
+                    points_selector=models.FilterSelector(filter=flt),
+                )
+                after = int(self._client.count(collection_name=collection_name, exact=True).count or 0)
+                return max(0, before - after)
+
+            deleted += int(self._with_client("删除集合中的录音向量", _count_and_delete))
+        return deleted
+
+    def _write_records(self, recording_id: int, records: Sequence[VectorRecord]) -> None:
+        models = self._models()
+        self._known_dims = self._fetch_known_dims()
+        by_dim: dict[int, list[VectorRecord]] = {}
+        for record in records:
+            dim = int(record.dim or len(record.vector))
+            if dim <= 0:
+                continue
+            by_dim.setdefault(dim, []).append(record)
+        for dim in sorted(set(self._known_dims) | set(by_dim)):
+            self._ensure_collection(dim)
+        self._delete_recording_points(int(recording_id))
+        for dim, batch in by_dim.items():
+            name = self.collection_name(dim)
+            points = [
+                models.PointStruct(
+                    id=int(record.chunk_id),
+                    vector=[float(value) for value in record.vector],
+                    payload={
+                        "recording_id": int(record.recording_id),
+                        "idx": int(record.idx),
+                        "start_ms": int(record.start_ms),
+                        "end_ms": int(record.end_ms),
+                        "model": (record.model or "")[:120],
+                        "dim": int(record.dim or dim),
+                    },
+                )
+                for record in batch
+            ]
+            for offset in range(0, len(points), 100):
+                part = points[offset : offset + 100]
+                self._with_client(
+                    "写入向量",
+                    lambda collection_name=name, batch=part: self._client.upsert(
+                        collection_name=collection_name, points=batch
+                    ),
+                )
+
+    def sync_recording(self, db, recording_id: int) -> None:
+        """Mirror one recording's chunk embeddings into the Qdrant collection(s)."""
+        rows = db.execute(
+            select(
+                Chunk.id,
+                Chunk.recording_id,
+                Chunk.idx,
+                Chunk.start_ms,
+                Chunk.end_ms,
+                Chunk.embedding,
+                Chunk.dim,
+                Chunk.embedding_model,
+            ).where(Chunk.recording_id == int(recording_id), Chunk.embedding.is_not(None))
+        ).all()
+        records: list[VectorRecord] = []
+        for row in rows:
+            try:
+                array = np.frombuffer(row.embedding, dtype=np.float32)
+            except (TypeError, ValueError):
+                continue
+            if array.size == 0:
+                continue
+            records.append(
+                VectorRecord(
+                    chunk_id=int(row.id),
+                    recording_id=int(row.recording_id),
+                    idx=int(row.idx or 0),
+                    start_ms=int(row.start_ms or 0),
+                    end_ms=int(row.end_ms or 0),
+                    vector=array.tolist(),
+                    model=(row.embedding_model or "")[:120],
+                    dim=int(row.dim or array.size),
+                )
+            )
+        self._write_records(int(recording_id), records)
+
+    def upsert(self, records: Sequence[VectorRecord]) -> None:
+        rows = list(records)
+        if not rows:
+            return
+        models = self._models()
+        self._known_dims = self._fetch_known_dims()
+        by_dim: dict[int, list[VectorRecord]] = {}
+        for record in rows:
+            dim = int(record.dim or len(record.vector))
+            if dim <= 0:
+                continue
+            by_dim.setdefault(dim, []).append(record)
+        for dim, batch in by_dim.items():
+            self._ensure_collection(dim)
+            name = self.collection_name(dim)
+            points = [
+                models.PointStruct(
+                    id=int(record.chunk_id),
+                    vector=[float(value) for value in record.vector],
+                    payload={
+                        "recording_id": int(record.recording_id),
+                        "idx": int(record.idx),
+                        "start_ms": int(record.start_ms),
+                        "end_ms": int(record.end_ms),
+                        "model": (record.model or "")[:120],
+                        "dim": int(record.dim or dim),
+                    },
+                )
+                for record in batch
+            ]
+            self._with_client(
+                "写入向量",
+                lambda collection_name=name, batch=points: self._client.upsert(
+                    collection_name=collection_name, points=batch
+                ),
+            )
+
+    def delete_recording(self, recording_id: int) -> int:
+        self._known_dims = self._fetch_known_dims()
+        return self._delete_recording_points(int(recording_id))
+
+    def _query_points(
+        self, collection_name: str, query_vector: Sequence[float], *, limit: int, query_filter
+    ):
+        query_points = getattr(self._client, "query_points", None)
+        if callable(query_points):
+            response = query_points(
+                collection_name=collection_name,
+                query=[float(value) for value in query_vector],
+                query_filter=query_filter,
+                limit=int(limit),
+                with_payload=True,
+                with_vectors=False,
+            )
+            return list(getattr(response, "points", []) or [])
+        # qdrant-client < 1.10 compatibility (``search`` API)
+        return list(
+            self._client.search(
+                collection_name=collection_name,
+                query_vector=[float(value) for value in query_vector],
+                query_filter=query_filter,
+                limit=int(limit),
+                with_payload=True,
+            )
+            or []
+        )
+
+    def search(
+        self,
+        query: Sequence[float],
+        *,
+        top_k: int = 40,
+        recording_ids: Sequence[int] | None = None,
+        min_score: float = 0.0,
+        model: str | None = None,
+        dim: int | None = None,
+    ) -> list[VectorHit]:
+        top_k = max(0, int(top_k))
+        if top_k == 0:
+            return []
+        query_array = _normalize(query)
+        if query_array is None:
+            return []
+        if dim is None:
+            dim = int(query_array.size)
+        elif int(dim) != int(query_array.size):
+            return []
+        self._known_dims = self._fetch_known_dims()
+        if int(dim) not in self._known_dims:
+            return []
+        models = self._models()
+        must: list = []
+        if recording_ids is not None:
+            allowed = sorted({int(value) for value in recording_ids})
+            if not allowed:
+                return []
+            must.append(
+                models.FieldCondition(key="recording_id", match=models.MatchAny(any=allowed))
+            )
+        if model:
+            # legacy vectors written before ``embedding_model`` existed carry ""
+            must.append(
+                models.FieldCondition(key="model", match=models.MatchAny(any=[model, ""]))
+            )
+        query_filter = models.Filter(must=must) if must else None
+        name = self.collection_name(dim)
+        if not self._collection_exists(name):
+            return []
+        points = self._with_client(
+            "检索",
+            lambda: self._query_points(
+                name, query_array, limit=max(top_k, 1), query_filter=query_filter
+            ),
+        )
+        hits: list[VectorHit] = []
+        for point in points:
+            payload = getattr(point, "payload", None) or {}
+            try:
+                score = float(getattr(point, "score", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if score < min_score:
+                continue
+            try:
+                recording_id = int(payload.get("recording_id"))
+                chunk_id = int(point.id)
+            except (TypeError, ValueError):
+                continue
+            hits.append(
+                VectorHit(
+                    chunk_id=chunk_id,
+                    recording_id=recording_id,
+                    score=score,
+                    idx=int(payload.get("idx") or 0),
+                    start_ms=int(payload.get("start_ms") or 0),
+                    end_ms=int(payload.get("end_ms") or 0),
+                )
+            )
+            if len(hits) >= top_k:
+                break
+        return hits
+
+    def stats(self, *, model: str | None = None, dim: int | None = None) -> VectorStoreStats:
+        try:
+            self._known_dims = self._fetch_known_dims()
+            dims = [int(dim)] if dim else sorted(self._known_dims)
+            total = 0
+            for current_dim in dims:
+                name = self.collection_name(current_dim)
+                if not self._collection_exists(name):
+                    continue
+                count = self._with_client(
+                    "统计",
+                    lambda collection_name=name: int(
+                        self._client.count(collection_name=collection_name, exact=True).count or 0
+                    ),
+                )
+                total += count
+            return VectorStoreStats(
+                backend=self.backend,
+                available=True,
+                chunks_total=total,
+                chunks_indexed=total,
+                stale_chunks=0,
+                dim=dim,
+                model=model,
+                fallback_reason=self.fallback_reason,
+            )
+        except VectorStoreUnavailable as exc:
+            return VectorStoreStats(
+                backend=self.backend, available=False, fallback_reason=exc.reason
+            )
+        except Exception as exc:  # noqa: BLE001
+            return VectorStoreStats(
+                backend=self.backend,
+                available=False,
+                fallback_reason=f"Qdrant 统计失败：{type(exc).__name__}: {str(exc)[:160]}",
+            )
+
+
+
 # ------------------------------------------------------------------ selection
 _STORES: dict[tuple[str, str], Any] = {}
 _STORE_LOCK = threading.Lock()
@@ -1465,51 +1946,128 @@ def sqlite_vec_available() -> tuple[bool, str]:
     return store.health()
 
 
+def qdrant_available() -> tuple[bool, str]:
+    """Probe whether the optional Qdrant backend is reachable with current settings."""
+    try:
+        store = QdrantVectorStore()
+    except VectorStoreUnavailable as exc:
+        return False, exc.reason
+    return store.health()
+
+
+def _try_qdrant_store(reasons: list[str], *, required: bool = False) -> Any | None:
+    """Try the Qdrant backend; append a reason and return None when unavailable.
+
+    ``required`` is True for the explicit ``ECHOIC_VECTOR_BACKEND=qdrant`` case,
+    where a missing ``ECHOIC_QDRANT_URL`` is a configuration error worth reporting;
+    in ``auto`` mode an unconfigured optional backend is simply skipped.
+    """
+    url = str(getattr(settings, "qdrant_url", "") or "").strip()
+    if not url:
+        if required:
+            reasons.append("Qdrant 后端未配置（ECHOIC_QDRANT_URL 为空）")
+        return None
+    try:
+        candidate = QdrantVectorStore()
+        available, reason = candidate.health()
+    except VectorStoreUnavailable as exc:
+        reasons.append(f"Qdrant 后端不可用：{exc.reason}")
+        return None
+    if available:
+        return candidate
+    reasons.append(f"Qdrant 后端不可用：{reason}")
+    return None
+
+
 def get_vector_store():
     """Return the configured vector store, degrading to numpy when needed.
 
     ``ECHOIC_VECTOR_BACKEND`` semantics:
 
-    * ``auto`` (default) — pgvector on PostgreSQL when the extension is healthy,
-      sqlite-vec on SQLite when the bundled extension loads, numpy otherwise;
+    * ``auto`` (default) — priority: pgvector (PostgreSQL only, when the
+      extension is healthy) → Qdrant (when ``ECHOIC_QDRANT_URL`` is configured
+      and reachable) → sqlite-vec (SQLite when the bundled extension loads) →
+      numpy;
     * ``numpy`` — force the in-memory BLOB index;
+    * ``qdrant`` — use Qdrant (``ECHOIC_QDRANT_URL/_API_KEY/_COLLECTION/_TIMEOUT``),
+      falling back to numpy with a friendly reason;
     * ``sqlite_vec`` — sqlite-vec on a file-backed SQLite database (falls back to
       numpy with a friendly reason when the wheel/extension cannot load);
     * ``pgvector`` — experimental PostgreSQL backend (same fallback rules).
+
+    A selected non-numpy backend in ``auto`` mode keeps any earlier degradation
+    reasons in ``fallback_reason`` (e.g. pgvector failed → Qdrant used).
     """
     requested = str(getattr(settings, "vector_backend", "auto") or "auto").strip().lower()
     from ..db import engine as db_engine
 
     dialect = db_engine.dialect.name
-    cache_key = (requested, dialect)
+    qdrant_marker = ""
+    if requested in ("auto", "", "qdrant"):
+        qdrant_marker = "|".join(
+            [
+                str(getattr(settings, "qdrant_url", "") or ""),
+                str(getattr(settings, "qdrant_collection", "") or ""),
+            ]
+        )
+    cache_key = (requested, dialect, qdrant_marker)
     with _STORE_LOCK:
         existing = _STORES.get(cache_key)
         if existing is not None:
             return existing
-        if requested == "pgvector" or (requested in ("auto", "") and dialect == "postgresql"):
+        reasons: list[str] = []
+        store: Any = None
+        if requested == "pgvector":
             pg_store = PgVectorStore(db_engine)
             available, reason = pg_store.health()
             if available:
-                store: Any = pg_store
+                store = pg_store
             else:
-                fallback = NumpyVectorStore()
-                fallback.fallback_reason = f"pgvector 后端不可用，已降级为 numpy：{reason}"
-                store = fallback
-        elif requested == "sqlite_vec" or (requested in ("auto", "") and dialect == "sqlite"):
+                reasons.append(f"pgvector 后端不可用：{reason}")
+        elif requested == "qdrant":
+            store = _try_qdrant_store(reasons, required=True)
+        elif requested == "sqlite_vec":
             vec_store = SqliteVecVectorStore()
             available, reason = vec_store.health()
             if available:
                 store = vec_store
             else:
-                fallback = NumpyVectorStore()
-                fallback.fallback_reason = f"sqlite-vec 后端不可用，已降级为 numpy：{reason}"
-                store = fallback
+                reasons.append(f"sqlite-vec 后端不可用：{reason}")
         elif requested == "numpy":
             store = NumpyVectorStore()
+        elif requested in ("auto", ""):
+            # 1) pgvector on PostgreSQL
+            if dialect == "postgresql":
+                pg_store = PgVectorStore(db_engine)
+                available, reason = pg_store.health()
+                if available:
+                    store = pg_store
+                else:
+                    reasons.append(f"pgvector 后端不可用：{reason}")
+            # 2) optional Qdrant (works on any database dialect)
+            if store is None:
+                store = _try_qdrant_store(reasons)
+            # 3) sqlite-vec for SQLite deployments
+            if store is None and dialect == "sqlite":
+                vec_store = SqliteVecVectorStore()
+                available, reason = vec_store.health()
+                if available:
+                    store = vec_store
+                else:
+                    reasons.append(f"sqlite-vec 后端不可用：{reason}")
+            # 4) numpy is always available
+            if store is None:
+                store = NumpyVectorStore()
         else:
-            fallback = NumpyVectorStore()
-            fallback.fallback_reason = f"未知的向量后端 {requested}，已降级为 numpy"
-            store = fallback
+            reasons.append(f"未知的向量后端 {requested}")
+            store = NumpyVectorStore()
+        if store is None:  # every explicit backend failed (or unknown value)
+            store = NumpyVectorStore()
+        if reasons:
+            reason_text = "；".join(reasons)
+            if isinstance(store, NumpyVectorStore) and requested != "numpy":
+                reason_text += "，已降级为 numpy"
+            store.fallback_reason = reason_text
         _STORES[cache_key] = store
         return store
 
@@ -1550,7 +2108,7 @@ def index_recording_vectors(db, recording_id: int, *, model: str | None = None) 
             db.commit()
     store = get_vector_store()
     store.invalidate()
-    if getattr(store, "backend", "numpy") in ("pgvector", "sqlite_vec"):
+    if getattr(store, "backend", "numpy") in ("pgvector", "sqlite_vec", "qdrant"):
         try:
             store.sync_recording(db, int(recording_id))
         except VectorStoreUnavailable as exc:
@@ -1572,10 +2130,11 @@ def vector_index_chunks(db, recording_id: int, *, model: str | None = None) -> i
 def _sync_store_after_write(store, db, recording_id: int) -> None:
     """Mirror a reindexed recording into ANN backends; numpy only needs invalidation.
 
-    ``pgvector`` / ``sqlite_vec`` copy the already committed ``chunks.embedding``
-    BLOBs into their ANN mirror, so switching backends never re-calls embeddings.
+    ``pgvector`` / ``sqlite_vec`` / ``qdrant`` copy the already committed
+    ``chunks.embedding`` BLOBs into their ANN mirror, so switching backends never
+    re-calls embeddings.
     """
-    if getattr(store, "backend", "numpy") in ("pgvector", "sqlite_vec"):
+    if getattr(store, "backend", "numpy") in ("pgvector", "sqlite_vec", "qdrant"):
         sync = getattr(store, "sync_recording", None)
         if callable(sync):
             sync(db, recording_id)

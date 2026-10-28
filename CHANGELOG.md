@@ -2,6 +2,22 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.0.0] - 2026-10-28
+
+### 新功能
+
+- **Qdrant 向量后端**：新增 `qdrant` 后端（`ECHOIC_VECTOR_BACKEND=qdrant`，或 auto 在 PostgreSQL+pgvector 之后、sqlite-vec 之前自动选用）；每维度 collection、服务端 ACL 过滤、同步/删除/状态/降级齐全；切换后重建索引复用已有 embedding BLOB；compose 可选 `qdrant` profile、API Key 与文档。
+- **pgvector staging 验证**：新增真实 PostgreSQL 16 + pgvector 的 staging 测试与 GitHub Actions job，验证扩展、HNSW 索引、写入/搜索/ACL/删除/维度切换；本地无 DSN 自动 skip。
+- **视频场景/幻灯片抽取**：视频处理时用 ffmpeg 场景检测生成 360px 缩略图（`media/<uuid>/scenes/`，S3 同 key），API 提供列表与图片；前端视频播放器新增场景条（缩略图+时间、点击跳转、自动高亮），处理失败不影响录音。
+- **审计日志**：新增 append-only `audit_logs` 表、管理员 API `GET /api/system/audit-logs`（筛选/分页/模糊搜索）与前端 `/audit` 页面；记录登录/失败登录/登出/注册/资料/改密、用户 CRUD、录音上传/修改/回收站/恢复/彻底删除/批量/重处理/取消、分享创建/撤销、设置更新、标签 CRUD、系统操作；密码/API Key/token 等敏感字段脱敏；审计写入失败不影响业务。
+- **真实 DashScope 实时长稳 soak**：新增 `scripts/soak_live.py`（真实 Key、1x 实时推流、断线重连、RSS/事件统计、JSON 报告），并完成 60 分钟真实 staging soak：`status=ok`、3601s、35998 帧、0 provider error/重连、61 条 final、RSS 峰值 52.2 MiB（证据 `e2e/soak-live-v1.0.json`，报告 `e2e/REPORT-v1.0.md` §5）。
+- 自助注册页、成员个人资料/改密页在 v0.3.10 已交付，v1.0 纳入正式验收。
+
+### 变更
+
+- 版本号正式升级到 **1.0.0**；API/部署/README/CHANGELOG 全面更新。
+- 测试：完整后端 **514 passed, 4 skipped**（4 个 pgvector staging 测试需要显式 DSN）；Qdrant 14 个测试、视频场景 19 个、审计 16 个。
+
 ## [0.3.17] - 2026-10-28
 
 ### 改进

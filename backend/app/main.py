@@ -20,6 +20,7 @@ from .api import (
     live,
     public,
     recordings,
+    scenes,
     search,
     settings as settings_api,
     shares,
@@ -151,6 +152,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
     app.include_router(recordings.router, prefix="/api/recordings", tags=["recordings"])
+    app.include_router(scenes.router, prefix="/api/recordings", tags=["scenes"])
     app.include_router(transcript.router, prefix="/api/recordings", tags=["transcript"])
     app.include_router(insights.router, prefix="/api/recordings", tags=["insights"])
     app.include_router(chat.router, prefix="/api/recordings", tags=["chat"])

@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Echoic"
-    version: str = "0.3.17"
+    version: str = "1.0.0"
     debug: bool = False
     log_level: str = "INFO"
 
@@ -76,6 +76,17 @@ class Settings(BaseSettings):
     vector_backend: str = "auto"
     vector_top_k: int = 8
     vector_min_score: float = 0.2
+
+    # v1.0: optional Qdrant vector backend
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
+    qdrant_collection: str = "echoic_chunks"
+    qdrant_timeout: float = 10.0
+
+    # v1.0: video slide/scene extraction
+    scene_detection_enabled: bool = True
+    scene_threshold: float = 0.3
+    scene_max: int = 60
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"

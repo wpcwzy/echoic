@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from ..db import get_db
 from ..deps import get_current_user, require_admin
 from ..models import Tag, User
 from ..schemas import OkOut, TagCreateIn, TagOut, TagUpdateIn, TagWithCountOut
+from ..services import audit as audit_service
 from ._common import tags_with_counts
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ def list_tags(
 @router.post("", response_model=TagOut, status_code=201)
 def create_tag(
     payload: TagCreateIn,
+    request: Request,
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
@@ -59,6 +61,15 @@ def create_tag(
     db.add(tag)
     db.commit()
     db.refresh(tag)
+    audit_service.audit_request(
+        db,
+        request,
+        _user,
+        "tag.create",
+        target_type="tag",
+        target_id=tag.id,
+        detail={"name": tag.name, "color": tag.color},
+    )
     return TagOut.model_validate(tag)
 
 
@@ -66,6 +77,7 @@ def create_tag(
 def update_tag(
     tag_id: int,
     payload: TagUpdateIn,
+    request: Request,
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ):
@@ -85,20 +97,40 @@ def update_tag(
         tag.color = payload.color.strip()[:16] or tag.color
     db.commit()
     db.refresh(tag)
+    audit_service.audit_request(
+        db,
+        request,
+        _admin,
+        "tag.update",
+        target_type="tag",
+        target_id=tag.id,
+        detail={"fields": sorted(str(field) for field in fields), "name": tag.name, "color": tag.color},
+    )
     return TagOut.model_validate(tag)
 
 
 @router.delete("/{tag_id}", response_model=OkOut)
 def delete_tag(
     tag_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ):
     tag = db.get(Tag, tag_id)
     if tag is None:
         raise not_found("标签不存在")
+    tag_name = tag.name
     tag.recordings = []
     db.delete(tag)
     db.commit()
     logger.info("tag %s deleted", tag_id)
+    audit_service.audit_request(
+        db,
+        request,
+        _admin,
+        "tag.delete",
+        target_type="tag",
+        target_id=tag_id,
+        detail={"name": tag_name},
+    )
     return OkOut()

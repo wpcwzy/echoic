@@ -1,0 +1,162 @@
+Echoic v1.0 E2E Smoke — 2026-10-28 17:43:40
+目标服务: http://127.0.0.1:8101 | data dir: .cache/e2e-v1-data
+Python: 3.12.7 | httpx: 0.28.1 | ffmpeg: /usr/bin/ffmpeg
+期望向量后端: qdrant
+==============================================================================
+
+[1;36m━━━ 0. health / features / 静态资源（v1.0） ━━━[0m
+[1;32m[PASS][0m v1.health (0.01s)
+        version=1.0.0 db=ok media=ok ffmpeg=ok worker=ok allow_registration=True
+[1;32m[PASS][0m v1.auth.login-admin (0.20s)
+        user=管理员 cookie 标志齐全
+[1;32m[PASS][0m v1.features (0.01s)
+        vector.backend=qdrant live=mock storage=local trash=30d
+[1;32m[PASS][0m v1.static (0.01s)
+        index/manifest(Echoic)/sw 均可访问
+
+[1;36m━━━ 1. 向量后端（auto 优先级 / Qdrant / reindex / 语义搜索） ━━━[0m
+[1;32m[PASS][0m v1.vector.configure-embeddings (0.02s)
+        embeddings=mock backend=qdrant chunks_total=141 expected=qdrant
+[1;32m[PASS][0m v1.vector.reindex (0.18s)
+        recordings=7 chunks=141 skipped=0
+[1;32m[PASS][0m v1.vector.status (0.01s)
+        backend=qdrant indexed=141 model=mock-embedding dim=256
+[1;32m[PASS][0m v1.vector.qdrant-server-collection (0.01s)
+        Qdrant http://127.0.0.1:16333 集合 echoic_chunks_256 points_count=141 status=green
+[1;32m[PASS][0m v1.vector.semantic-search (0.01s)
+        semantic 命中 3 条（top=0.336296 fallback=None）
+[1;32m[PASS][0m v1.vector.hybrid-search (0.02s)
+        hybrid 命中 8 条（fallback=None）
+
+[1;36m━━━ 2. 视频分镜（ffmpeg scene detection / API / 权限） ━━━[0m
+[1;32m[PASS][0m v1.scenes.upload-video (0.25s)
+        recording_id=8 media_type=video status=queued
+[1;32m[PASS][0m v1.scenes.pipeline-ready (1.51s)
+        status=ready stages=['preparing', 'done'] duration_ms=6000
+[1;32m[PASS][0m v1.scenes.list (0.00s)
+        分镜数=2 times_ms=[2000, 4000] size=320x180
+[1;32m[PASS][0m v1.scenes.image (0.00s)
+        JPEG 3437 bytes type=image/jpeg cache=private, max-age=3600
+[1;32m[PASS][0m v1.scenes.auth (0.43s)
+        未登录 401 / 成员越权 404 / 不存在 404
+[1;32m[PASS][0m v1.scenes.description (0.00s)
+        自动描述（49 字）：本次会议共 2 位发言人参与，围绕方案、准备、同步、测试等主题展开讨论，转录稿共 8 个发言片段。
+
+[1;36m━━━ 3. 描述自动生成 + 回收站回归 ━━━[0m
+[1;32m[PASS][0m v1.desc.upload-empty (0.12s)
+        recording_id=9 status=queued
+[1;32m[PASS][0m v1.desc.auto-generated (1.03s)
+        自动描述：本次会议共 2 位发言人参与，围绕建议、方案、测试、会议纪要等主题展开讨论，转录稿共 8 个发言片段。
+[1;32m[PASS][0m v1.trash.soft-delete (0.01s)
+        trash ok restore_before=2026-11-27T09:43:43.962934Z，回收站可见且详情不可访问
+[1;32m[PASS][0m v1.trash.restore (0.01s)
+        restore ok，status=ready 且 deleted_at=null
+
+[1;36m━━━ 4. 标签 / 设置（为审计埋点） ━━━[0m
+[1;32m[PASS][0m v1.tag.create (0.00s)
+        tag_id=10 name=E2E v1.0 标签 174340
+[1;32m[PASS][0m v1.settings.update (0.02s)
+        temperature 0.3 -> 0.25 -> 0.3（已恢复）
+
+[1;36m━━━ 5. 分享 / 公开页回归（视频 + Range + 权限） ━━━[0m
+[1;32m[PASS][0m v1.share.create (0.00s)
+        share_id=2 token=eKnAPAj2CJ… url=/s/eKnAPAj2CJyL421v059vemjd130EWGC5
+[1;32m[PASS][0m v1.share.public-metadata (0.01s)
+        title=E2E v1.0 视频分镜 174340 media=video desc=本次会议共 2 位发言人参与，围绕方案、准备、同步、测试等主题展开讨论，转录稿共…
+[1;32m[PASS][0m v1.share.public-media-range (0.01s)
+        206 bytes 0-1023/96021 type=video/mp4
+[1;32m[PASS][0m v1.share.public-transcript (0.01s)
+        public transcript segments=8
+[1;32m[PASS][0m v1.share.public-insights (0.01s)
+        public insights keys=['action_items', 'chapters', 'generated_at', 'insights', 'keywords', 'missing', 'model', 'recording_id']
+[1;32m[PASS][0m v1.share.public-download (0.01s)
+        download 200 115331 bytes
+[1;32m[PASS][0m v1.share.view-count (0.01s)
+        view_count=4
+
+[1;36m━━━ 6. 注册 / 个人资料 / 改密回归（v0.3.10 能力） ━━━[0m
+[1;32m[PASS][0m v1.auth.allow-registration (0.01s)
+        health.allow_registration=true
+[1;32m[PASS][0m v1.auth.register (0.21s)
+        registered e2e_v1_reg_174340 role=member
+[1;32m[PASS][0m v1.auth.register-duplicate (0.00s)
+        重复用户名 409
+[1;32m[PASS][0m v1.auth.profile-update (0.22s)
+        profile updated: v1 资料更新 <v1-updated@example.com>
+[1;32m[PASS][0m v1.auth.change-password (0.61s)
+        旧密码错误 400/401；新密码过短 422；改密成功
+[1;32m[PASS][0m v1.auth.new-password-login (0.41s)
+        旧密码 401，新密码登录成功
+
+[1;36m━━━ 7. 审计日志（admin 浏览器 / 过滤 / 权限 / 脱敏） ━━━[0m
+[1;32m[PASS][0m v1.audit.list (0.00s)
+        total=61 page_items=50 latest=auth.login
+[1;32m[PASS][0m v1.audit.expected-actions (0.00s)
+        关键动作齐全（10 类），upload entries=4
+[1;32m[PASS][0m v1.audit.filters (0.01s)
+        action/target_type/q/share.detail 过滤均正常（upload total=5）
+[1;32m[PASS][0m v1.audit.pagination (0.01s)
+        page_size=2 稳定，total=61
+[1;32m[PASS][0m v1.audit.member-forbidden (0.00s)
+        member 403
+[1;32m[PASS][0m v1.audit.unauthorized (0.01s)
+        unauth 401
+[1;32m[PASS][0m v1.audit.no-secrets (0.00s)
+        50 条记录无密码/Key 明文（46 条含 detail）
+
+[1;36m━━━ 8. 登出（保留数据供 UI 截图） ━━━[0m
+[1;32m[PASS][0m v1.auth.logout (0.00s)
+        admin logout ok（录音/分享/审计数据保留，供截图脚本使用）
+
+==============================================================================
+[1mPASS/FAIL 矩阵[0m
+------------------------------------------------------------------------------
+[1;32mPASS[0m v1.health                                        0.01s  version=1.0.0 db=ok media=ok ffmpeg=ok worker=ok allow_registration=True
+[1;32mPASS[0m v1.auth.login-admin                              0.20s  user=管理员 cookie 标志齐全
+[1;32mPASS[0m v1.features                                      0.01s  vector.backend=qdrant live=mock storage=local trash=30d
+[1;32mPASS[0m v1.static                                        0.01s  index/manifest(Echoic)/sw 均可访问
+[1;32mPASS[0m v1.vector.configure-embeddings                   0.02s  embeddings=mock backend=qdrant chunks_total=141 expected=qdrant
+[1;32mPASS[0m v1.vector.reindex                                0.18s  recordings=7 chunks=141 skipped=0
+[1;32mPASS[0m v1.vector.status                                 0.01s  backend=qdrant indexed=141 model=mock-embedding dim=256
+[1;32mPASS[0m v1.vector.qdrant-server-collection               0.01s  Qdrant http://127.0.0.1:16333 集合 echoic_chunks_256 points_count=141 status=green
+[1;32mPASS[0m v1.vector.semantic-search                        0.01s  semantic 命中 3 条（top=0.336296 fallback=None）
+[1;32mPASS[0m v1.vector.hybrid-search                          0.02s  hybrid 命中 8 条（fallback=None）
+[1;32mPASS[0m v1.scenes.upload-video                           0.25s  recording_id=8 media_type=video status=queued
+[1;32mPASS[0m v1.scenes.pipeline-ready                         1.51s  status=ready stages=['preparing', 'done'] duration_ms=6000
+[1;32mPASS[0m v1.scenes.list                                   0.00s  分镜数=2 times_ms=[2000, 4000] size=320x180
+[1;32mPASS[0m v1.scenes.image                                  0.00s  JPEG 3437 bytes type=image/jpeg cache=private, max-age=3600
+[1;32mPASS[0m v1.scenes.auth                                   0.43s  未登录 401 / 成员越权 404 / 不存在 404
+[1;32mPASS[0m v1.scenes.description                            0.00s  自动描述（49 字）：本次会议共 2 位发言人参与，围绕方案、准备、同步、测试等主题展开讨论，转录稿共 8 个发言片段。
+[1;32mPASS[0m v1.desc.upload-empty                             0.12s  recording_id=9 status=queued
+[1;32mPASS[0m v1.desc.auto-generated                           1.03s  自动描述：本次会议共 2 位发言人参与，围绕建议、方案、测试、会议纪要等主题展开讨论，转录稿共 8 个发言片段。
+[1;32mPASS[0m v1.trash.soft-delete                             0.01s  trash ok restore_before=2026-11-27T09:43:43.962934Z，回收站可见且详情不可访问
+[1;32mPASS[0m v1.trash.restore                                 0.01s  restore ok，status=ready 且 deleted_at=null
+[1;32mPASS[0m v1.tag.create                                    0.00s  tag_id=10 name=E2E v1.0 标签 174340
+[1;32mPASS[0m v1.settings.update                               0.02s  temperature 0.3 -> 0.25 -> 0.3（已恢复）
+[1;32mPASS[0m v1.share.create                                  0.00s  share_id=2 token=eKnAPAj2CJ… url=/s/eKnAPAj2CJyL421v059vemjd130EWGC5
+[1;32mPASS[0m v1.share.public-metadata                         0.01s  title=E2E v1.0 视频分镜 174340 media=video desc=本次会议共 2 位发言人参与，围绕方案、准备、同步、测试等主题展开讨论，转录稿共…
+[1;32mPASS[0m v1.share.public-media-range                      0.01s  206 bytes 0-1023/96021 type=video/mp4
+[1;32mPASS[0m v1.share.public-transcript                       0.01s  public transcript segments=8
+[1;32mPASS[0m v1.share.public-insights                         0.01s  public insights keys=['action_items', 'chapters', 'generated_at', 'insights', 'keywords', 'missing', 'model', 'recording_id']
+[1;32mPASS[0m v1.share.public-download                         0.01s  download 200 115331 bytes
+[1;32mPASS[0m v1.share.view-count                              0.01s  view_count=4
+[1;32mPASS[0m v1.auth.allow-registration                       0.01s  health.allow_registration=true
+[1;32mPASS[0m v1.auth.register                                 0.21s  registered e2e_v1_reg_174340 role=member
+[1;32mPASS[0m v1.auth.register-duplicate                       0.00s  重复用户名 409
+[1;32mPASS[0m v1.auth.profile-update                           0.22s  profile updated: v1 资料更新 <v1-updated@example.com>
+[1;32mPASS[0m v1.auth.change-password                          0.61s  旧密码错误 400/401；新密码过短 422；改密成功
+[1;32mPASS[0m v1.auth.new-password-login                       0.41s  旧密码 401，新密码登录成功
+[1;32mPASS[0m v1.audit.list                                    0.00s  total=61 page_items=50 latest=auth.login
+[1;32mPASS[0m v1.audit.expected-actions                        0.00s  关键动作齐全（10 类），upload entries=4
+[1;32mPASS[0m v1.audit.filters                                 0.01s  action/target_type/q/share.detail 过滤均正常（upload total=5）
+[1;32mPASS[0m v1.audit.pagination                              0.01s  page_size=2 稳定，total=61
+[1;32mPASS[0m v1.audit.member-forbidden                        0.00s  member 403
+[1;32mPASS[0m v1.audit.unauthorized                            0.01s  unauth 401
+[1;32mPASS[0m v1.audit.no-secrets                              0.00s  50 条记录无密码/Key 明文（46 条含 detail）
+[1;32mPASS[0m v1.auth.logout                                   0.00s  admin logout ok（录音/分享/审计数据保留，供截图脚本使用）
+------------------------------------------------------------------------------
+总计 43 项：[1;32m43 通过[0m，[1;31m0 失败[0m，0 跳过
+
+[1;32mE2E v1.0 SMOKE: PASS ✔[0m
+
+日志已保存：e2e/last-run-v1.log

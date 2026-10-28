@@ -634,3 +634,47 @@ export interface VectorSearchResult {
 }
 
 export type SearchMode = 'keyword' | 'hybrid' | 'semantic'
+
+// ---------------------------------------------------------------------------
+// v1.0 — video scenes (filmstrip) & admin audit log
+// ---------------------------------------------------------------------------
+
+export interface VideoScene {
+  id: number
+  recording_id: number
+  idx: number
+  time_ms: number
+  image_filename: string
+  width: number
+  height: number
+}
+
+export interface VideoSceneListResponse {
+  items: VideoScene[]
+}
+
+export interface AuditLog {
+  id: number
+  user_id: number | null
+  username: string
+  action: string
+  target_type: string
+  target_id: number | null
+  detail: Record<string, unknown>
+  ip: string
+  created_at: string | null
+}
+
+export interface AuditLogListResponse {
+  items: AuditLog[]
+  total: number
+}
+
+export interface AuditLogParams {
+  action?: string
+  user_id?: number
+  target_type?: string
+  q?: string
+  page?: number
+  page_size?: number
+}

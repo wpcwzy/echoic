@@ -25,6 +25,7 @@ from ..db import get_db
 from ..deps import get_current_user
 from ..models import User
 from ..schemas import LoginIn, LoginOut, OkOut, ProfileUpdateIn, RegisterIn, UserOut
+from ..services import audit as audit_service
 from ..services.settings_store import load_ai_config
 
 logger = logging.getLogger(__name__)
@@ -77,8 +78,24 @@ def login(payload: LoginIn, request: Request, response: Response, db: Session = 
     user = db.scalar(select(User).where(User.username == payload.username.strip()))
     if user is None or not verify_password(payload.password, user.password_hash):
         register_login_attempt(ip)
+        audit_service.audit_request(
+            db,
+            request,
+            None,
+            "auth.login_failed",
+            detail={"reason": "invalid_credentials", "username": payload.username.strip()[:64]},
+        )
         raise unauthorized("用户名或密码错误")
     if user.disabled:
+        audit_service.audit_request(
+            db,
+            request,
+            user,
+            "auth.login_failed",
+            target_type="user",
+            target_id=user.id,
+            detail={"reason": "disabled"},
+        )
         raise forbidden("账号已被停用，请联系管理员")
 
     reset_login_attempts(ip)
@@ -88,11 +105,20 @@ def login(payload: LoginIn, request: Request, response: Response, db: Session = 
     token = create_access_token(user.id)
     _set_session_cookie(response, token)
     logger.info("user %s logged in", user.username)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "auth.login",
+        target_type="user",
+        target_id=user.id,
+        detail={"role": user.role},
+    )
     return LoginOut(user=UserOut.model_validate(user), token=token)
 
 
 @router.post("/register", response_model=UserOut, status_code=201)
-def register(payload: RegisterIn, db: Session = Depends(get_db)):
+def register(payload: RegisterIn, request: Request, db: Session = Depends(get_db)):
     config = load_ai_config(db)
     if not bool(config.system.get("allow_registration", False)):
         raise forbidden("注册暂未开放")
@@ -114,13 +140,35 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     logger.info("registered member %s", user.username)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "auth.register",
+        target_type="user",
+        target_id=user.id,
+        detail={"role": "member"},
+    )
     return UserOut.model_validate(user)
 
 
 @router.post("/logout", response_model=OkOut)
-def logout(response: Response, user: User = Depends(get_current_user)):
+def logout(
+    request: Request,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     response.delete_cookie(COOKIE_NAME, path="/")
     logger.info("user %s logged out", user.username)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "auth.logout",
+        target_type="user",
+        target_id=user.id,
+    )
     return OkOut()
 
 
@@ -132,6 +180,7 @@ def me(user: User = Depends(get_current_user)):
 @router.patch("/me", response_model=MeOut)
 def update_me(
     payload: ProfileUpdateIn,
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -153,12 +202,22 @@ def update_me(
     db.commit()
     db.refresh(user)
     logger.info("user %s updated own profile", user.username)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "auth.profile_update",
+        target_type="user",
+        target_id=user.id,
+        detail={"fields": sorted(field for field in fields if field in ("display_name", "email"))},
+    )
     return MeOut(user=UserOut.model_validate(user))
 
 
 @router.post("/change-password", response_model=OkOut)
 def change_password(
     payload: ChangePasswordIn,
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -172,4 +231,12 @@ def change_password(
     db.add(user)
     db.commit()
     logger.info("user %s changed password", user.username)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "auth.change_password",
+        target_type="user",
+        target_id=user.id,
+    )
     return OkOut()

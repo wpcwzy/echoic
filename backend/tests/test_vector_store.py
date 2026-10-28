@@ -225,9 +225,10 @@ def test_get_vector_store_backend_selection_and_fallback(monkeypatch):
 
     reset_vector_store_cache()
     monkeypatch.setattr(settings, "vector_backend", "qdrant")
-    unknown = get_vector_store()
-    assert unknown.backend == "numpy"
-    assert "qdrant" in (unknown.fallback_reason or "")
+    qdrant_fallback = get_vector_store()
+    assert qdrant_fallback.backend == "numpy"
+    assert "Qdrant" in (qdrant_fallback.fallback_reason or "")
+    assert "已降级为 numpy" in (qdrant_fallback.fallback_reason or "")
 
 
 def test_pgvector_degrades_gracefully_without_postgres():

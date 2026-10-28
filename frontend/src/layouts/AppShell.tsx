@@ -3,6 +3,7 @@ import { Avatar, Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   AppstoreOutlined,
+  AuditOutlined,
   AudioOutlined,
   BgColorsOutlined,
   CheckOutlined,
@@ -47,6 +48,13 @@ const USERS_NAV: NavItem = {
   match: (pathname) => pathname.startsWith('/users'),
 }
 
+const AUDIT_NAV: NavItem = {
+  to: '/audit',
+  label: '审计日志',
+  icon: <AuditOutlined />,
+  match: (pathname) => pathname.startsWith('/audit'),
+}
+
 const SETTINGS_NAV: NavItem = {
   to: '/settings',
   label: '设置',
@@ -58,6 +66,7 @@ const SECTION_TITLES: { match: (path: string) => boolean; title: string }[] = [
   { match: (path) => path.startsWith('/record'), title: '录音与上传' },
   { match: (path) => path.startsWith('/search'), title: '全局搜索' },
   { match: (path) => path.startsWith('/users'), title: '用户管理' },
+  { match: (path) => path.startsWith('/audit'), title: '审计日志' },
   { match: (path) => path.startsWith('/profile'), title: '个人资料' },
   { match: (path) => path.startsWith('/settings'), title: '设置' },
   { match: () => true, title: '资料库' },
@@ -85,9 +94,12 @@ export default function AppShell() {
     [location.pathname],
   )
 
-  const railNav = useMemo<NavItem[]>(() => (isAdmin ? [...PRIMARY_NAV, USERS_NAV] : PRIMARY_NAV), [isAdmin])
+  const railNav = useMemo<NavItem[]>(
+    () => (isAdmin ? [...PRIMARY_NAV, USERS_NAV, AUDIT_NAV] : PRIMARY_NAV),
+    [isAdmin],
+  )
   const mobileNav = useMemo<NavItem[]>(
-    () => (isAdmin ? [...PRIMARY_NAV, USERS_NAV, SETTINGS_NAV] : PRIMARY_NAV),
+    () => (isAdmin ? [...PRIMARY_NAV, USERS_NAV, AUDIT_NAV, SETTINGS_NAV] : PRIMARY_NAV),
     [isAdmin],
   )
 

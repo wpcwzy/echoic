@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from ..core.errors import ProviderError
@@ -20,6 +20,7 @@ from ..schemas import (
     SettingsOut,
     SettingsUpdateIn,
 )
+from ..services import audit as audit_service
 from ..services.settings_store import masked_settings, reset_prompts, update_settings
 
 logger = logging.getLogger(__name__)
@@ -39,11 +40,24 @@ def get_settings(db: Session = Depends(get_db)):
 @router.put("", response_model=SettingsOut)
 def put_settings(
     payload: SettingsUpdateIn,
+    request: Request,
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ):
-    update_settings(db, payload.model_dump(exclude_none=True))
-    return _settings_payload(db)
+    patch = payload.model_dump(exclude_none=True)
+    # Never audit settings values (they can carry API keys): section names only.
+    sections = sorted(str(key) for key in patch.keys())
+    update_settings(db, patch)
+    result = _settings_payload(db)
+    audit_service.audit_request(
+        db,
+        request,
+        _admin,
+        "settings.update",
+        target_type="settings",
+        detail={"sections": sections},
+    )
+    return result
 
 
 @router.post("/test", response_model=ProviderTestOut)
@@ -68,8 +82,17 @@ async def test_provider(
 
 @router.post("/prompts/reset", response_model=SettingsOut)
 def reset_prompt_settings(
+    request: Request,
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ):
     reset_prompts(db)
-    return _settings_payload(db)
+    result = _settings_payload(db)
+    audit_service.audit_request(
+        db,
+        request,
+        _admin,
+        "settings.prompts_reset",
+        target_type="settings",
+    )
+    return result

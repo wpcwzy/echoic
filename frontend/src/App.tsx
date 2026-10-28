@@ -15,6 +15,7 @@ import RecordingDetailPage from './pages/RecordingDetailPage'
 import SearchPage from './pages/SearchPage'
 import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
+import AuditPage from './pages/AuditPage'
 import PublicSharePage from './pages/PublicSharePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { BrandMark } from './components/common/BrandMark'
@@ -114,6 +115,7 @@ export default function App() {
             <Route path="/profile" element={<ProfilePage />} />
             <Route element={<RequireAdmin />}>
               <Route path="users" element={<UsersPage />} />
+              <Route path="audit" element={<AuditPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<NotFoundPage />} />

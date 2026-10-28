@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from ..db import get_db
 from ..deps import can_access_recording, get_current_user, is_admin
 from ..models import Recording, Share, User
 from ..schemas import OkOut, ShareListOut, ShareOut
+from ..services import audit as audit_service
 from ._common import share_to_out
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ def list_shares(
 @router.delete("/{share_id}", response_model=OkOut)
 def revoke_share(
     share_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -71,8 +73,18 @@ def revoke_share(
         or not can_access_recording(user, recording)
     ):
         raise not_found("分享不存在")
-    if share.revoked_at is None:
+    already_revoked = share.revoked_at is not None
+    if not already_revoked:
         share.revoked_at = utcnow()
         db.commit()
         logger.info("share %s revoked by %s", share.id, user.username)
+    audit_service.audit_request(
+        db,
+        request,
+        user,
+        "share.revoke",
+        target_type="share",
+        target_id=share.id,
+        detail={"recording_id": share.recording_id, "already_revoked": already_revoked},
+    )
     return OkOut()

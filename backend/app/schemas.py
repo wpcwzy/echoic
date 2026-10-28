@@ -672,3 +672,35 @@ class FeaturesOut(BaseModel):
     vector: VectorFeaturesOut = Field(default_factory=VectorFeaturesOut)
     storage: StorageFeaturesOut = Field(default_factory=StorageFeaturesOut)
     trash: TrashFeaturesOut = Field(default_factory=TrashFeaturesOut)
+
+
+# ---------------------------------------------------------------- v1.0 video scenes / audit logs
+class VideoSceneOut(ORMModel):
+    id: int
+    recording_id: int
+    idx: int
+    time_ms: int
+    image_filename: str = ""
+    width: int = 0
+    height: int = 0
+
+
+class VideoSceneListOut(BaseModel):
+    items: list[VideoSceneOut] = Field(default_factory=list)
+
+
+class AuditLogOut(ORMModel):
+    id: int
+    user_id: int | None = None
+    username: str = ""
+    action: str = ""
+    target_type: str = ""
+    target_id: int | None = None
+    detail: dict = Field(default_factory=dict)
+    ip: str = ""
+    created_at: UTCDateTime | None = None
+
+
+class AuditLogListOut(BaseModel):
+    items: list[AuditLogOut] = Field(default_factory=list)
+    total: int = 0

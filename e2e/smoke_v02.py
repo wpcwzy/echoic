@@ -221,7 +221,8 @@ class V02Smoke(Smoke):
             ("GET", "/api/system/info", None, 403),
             ("POST", "/api/system/seed-demo", None, 403),
             ("POST", "/api/system/consume/scan", None, 403),
-            ("POST", "/api/tags", {"name": f"e2e_tag_{self.stamp}", "color": "#1677ff"}, 403),
+            # v1.0：审计日志为 admin-only 接口（v0.3.12 起 POST /api/tags 已对登录用户开放）
+            ("GET", "/api/system/audit-logs", None, 403),
         ]
         for method, path, body, expected in cases:
             resp = c1.request(method, path, json=body) if body is not None else c1.request(method, path)
@@ -229,7 +230,11 @@ class V02Smoke(Smoke):
                    f"{method} {path} 期望 {expected}，实际 {resp.status_code}：{resp.text[:200]}")
         tags = self._json(c1.get("/api/tags"))
         expect("items" in tags, f"member 读取标签失败：{tags}")
-        return f"member 访问 {len(cases)} 个 admin 接口均 403；GET /api/tags 200"
+        # v0.3.12 起所有登录用户可创建标签（标签目录共享），改/删仍仅管理员
+        created = c1.post("/api/tags", json={"name": f"e2e_tag_{self.stamp}", "color": "#1677ff"})
+        expect(created.status_code == 201,
+               f"member 创建标签期望 201（v0.3.12 起开放），实际 {created.status_code}：{created.text[:200]}")
+        return f"member 访问 {len(cases)} 个 admin 接口均 403；GET /api/tags 200；POST /api/tags 201（v0.3.12 起）"
 
     # ---------------------------------------------------------------- permissions
     def section_permissions(self) -> None:

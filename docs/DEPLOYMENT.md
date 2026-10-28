@@ -507,6 +507,27 @@ docker compose --profile postgres --profile worker up -d
 - S3 存储同样会上传转码后的 playback.mp4；切换存储 `storage_migrate` 会按录音前缀整体复制；
 - 转码依赖镜像内 ffmpeg 的 libx264（官方镜像已包含）；自建镜像请确认 ffmpeg 编码器。
 
+### 9.3.2 视频分镜 / 幻灯片缩略图（v1.0）
+
+- 处理视频时，pipeline 在「解析媒体」阶段（`playback.mp4` 转码之后，best-effort）用 ffmpeg 场景检测抽取分镜缩略图，
+  详情页视频下方出现可横向滚动的「分镜条」，点击缩略图可跳转到对应时间点；
+- **抽取失败不会导致录音处理失败**（仅记录 warning，下次重新处理视频会重试）；非视频录音没有分镜；
+- 后端接口（登录 + 归属/管理员权限）：`GET /api/recordings/{id}/scenes` → `{items:[{id,recording_id,idx,time_ms,image_filename,width,height}]}`；
+  `GET /api/recordings/{id}/scenes/{scene_id}/image` → JPEG 图片；无分镜时返回空列表（前端隐藏分镜条）；
+- 图片按录音前缀存放在媒体目录（S3 模式同样上传对象存储），随录音一起删除/迁移；
+
+配置与限制：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `ECHOIC_SCENE_DETECTION_ENABLED` | `true` | 总开关；`false` = 不抽帧（已有分镜保留，重新处理视频时才会清理重抽） |
+| `ECHOIC_SCENE_THRESHOLD` | `0.3` | 场景切换阈值（0~1，越小越敏感、抽帧越多；会议录屏/幻灯片一般 0.25~0.4） |
+| `ECHOIC_SCENE_MAX` | `60` | 单个视频最多保留分镜数（成本/存储护栏，超过按时间顺序截断） |
+
+- 抽帧宽度约 360px（JPEG，体积很小），按 `idx/time_ms` 排序；相邻分镜做最小时间间隔（约 1.5s）去重；
+- 开启后长视频处理时间略增（场景检测本身很快，主要成本仍是 `playback.mp4` 转码）；
+- 分镜属于「展示增强」，丢失/为空不影响播放、转写、AI 分析与搜索；如需关闭可设 `ECHOIC_SCENE_DETECTION_ENABLED=false` 并重启。
+
 ### 9.4 手机安装为 PWA
 
 Echoic 自带 Web App Manifest + Service Worker，可作为 PWA 添加到手机主屏幕：
@@ -647,9 +668,49 @@ docker compose up -d              # 重启生效
 - **背压**：服务端队列有上限（约 10s 音频），超出会返回 error 并关闭连接；
 - 关闭开关后旧会话不可继续；已有录音的离线处理不受影响。
 
+### 11.4 真实 DashScope 实时转写长稳（60 分钟 soak，v1.0 staging）
+
+> **定位**：这是 **staging / 发布前人工验证**，不是 CI 用例——需要真实 API Key、真实音频与 60 分钟墙钟时间，
+> 无法在 GitHub Actions 里伪造。工具直接使用后端现有 provider 协议连接 DashScope（**不需要启动 Echoic 服务**）。
+
+```bash
+# 1) 准备真实 Key（推荐环境变量，避免出现在命令历史/进程参数）与一段真实中文会议音频
+export ECHOIC_REALTIME_ASR_API_KEY=sk-xxxxxxxxxxxxxxxx    # 或复用 ECHOIC_ASR_API_KEY / DASHSCOPE_API_KEY
+# 2) 真实 60 分钟长稳：1x 实时推流 + 断线自动重连 + JSON 报告
+backend/.venv/bin/python scripts/soak_live.py \
+  --minutes 60 \
+  --audio /path/to/real-meeting-10min.wav \
+  --out e2e/soak-live-$(date -u +%Y%m%dT%H%M%SZ).json
+
+# 可选参数：--model paraformer-realtime-v2 / --base-url wss://... / --key ...
+# 音频短于目标时长会循环播放（报告中记 loops）；要求真实语音，否则可能没有转写文本。
+```
+
+- 行为：按真实时间节奏（100ms/帧，PCM16LE 16kHz mono）持续推流 N 分钟；记录连接生命周期、`ready/partial/final` 计数、
+  意外断线自动重连（指数退避，有上限）、进程 RSS；结束前发送 `finish-task` 并等待尾部 final 落盘；
+- 报告（JSON）关键字段：`status`、`exit_code`、`duration_s`、`planned_duration_completed`、`provider/model/key_source`（**不写 Key 明文**）、
+  `audio.{label,streamed_ms,loops}`、`totals.{sessions,ready,partial,final,provider_errors,drops,reconnects}`、
+  `sessions[]`、`provider_errors[]`、`final_samples[]`、`rss`、`timeline`、`summary_lines`；
+- 退出码（staging 判定）：
+  - `0` = 跑满计划时长且无 provider 错误/断线（**唯一可作为 60 分钟通过证据**）；
+  - `1` = 跑满计划时长但出现 provider 错误/重连（degraded，需人工判断网络/配额问题）；
+  - `2` = 无法完成（Key 缺失、首次连接失败、音频/ffmpeg 错误、不可恢复错误）；
+  - `130` = Ctrl-C 中断（仍会写出已运行部分报告）；
+- 证据留存：报告写到 `e2e/` 或 `.cache/`（不要提交含真实 Key 的信息——报告本身不含 Key，但请确认无其它敏感字段）；
+  60 分钟证据需包含 `status=ok`、`planned_duration_completed=true`、`duration_s≈3600`；
+- **本地机制自检**（无 Key、无网络，仅验证脚本节奏/统计/报告，不能作为真实长稳证据）：
+
+  ```bash
+  backend/.venv/bin/python scripts/soak_live.py --provider mock --minutes 0.2 \
+      --out .cache/soak-live-mock-selftest.json
+  ```
+
+- 注意：实时 ASR 按音频时长计费（60 分钟≈60 分钟音频费用），请确认百炼实时转写并发/时长额度；
+  网络抖动导致的断线会在报告中如实记录（`drops/reconnects`），不会被吞掉。
+
 ---
 
-## 12. 向量 / 混合检索（R-20，v0.3.0）
+## 12. 向量 / 混合检索（R-20，v0.3.0；v1.0 扩展）
 
 ### 12.1 概念与配置
 
@@ -660,9 +721,13 @@ docker compose up -d              # 重启生效
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `ECHOIC_VECTOR_BACKEND` | `auto` | `auto`（PG 优先 pgvector；SQLite 优先 sqlite-vec；不可用降级 numpy）/ `numpy` / `sqlite_vec` / `pgvector` |
+| `ECHOIC_VECTOR_BACKEND` | `auto` | `auto`（优先级见 §12.3：pgvector → Qdrant → sqlite-vec → numpy）/ `numpy` / `sqlite_vec` / `pgvector` / `qdrant` |
 | `ECHOIC_VECTOR_TOP_K` | 8 | 语义/混合检索返回条数上限 |
 | `ECHOIC_VECTOR_MIN_SCORE` | 0.2 | 语义命中最低相似度 |
+| `ECHOIC_QDRANT_URL` | 空 | Qdrant 地址：compose 内 `http://qdrant:6333`；本机进程 `http://localhost:6333`；留空 = 不启用 |
+| `ECHOIC_QDRANT_API_KEY` | 空 | Qdrant API Key（生产必填；需与 compose 中 `QDRANT__SERVICE__API_KEY` 一致） |
+| `ECHOIC_QDRANT_COLLECTION` | `echoic_chunks` | 集合名前缀（实际按 embedding 维度加后缀，如 `echoic_chunks_1024`） |
+| `ECHOIC_QDRANT_TIMEOUT` | `10` | 连接/查询超时（秒） |
 
 ### 12.2 索引构建 / 重建
 
@@ -677,15 +742,81 @@ docker compose up -d              # 重启生效
 
 ### 12.3 后端选择与降级
 
+`ECHOIC_VECTOR_BACKEND=auto`（默认）按以下优先级选择**第一个可用**后端：
+
+1. **pgvector**：仅 PostgreSQL 且 `vector` 扩展健康时；
+2. **Qdrant**：配置了 `ECHOIC_QDRANT_URL` 且连接/健康检查通过时（任何数据库方言均可）；
+3. **sqlite-vec**：SQLite 且随包扩展可加载时；
+4. **numpy**：始终可用的最终回退。
+
+> 降级不会中断服务：每次降级都会在 `GET /api/vector/status` 的 `fallback_reason` 中给出中文原因，
+> 例如「pgvector 后端不可用：…；Qdrant 连接失败：…」，便于定位是配置问题还是环境问题。
+
 | 后端 | 说明 |
 |---|---|
 | `numpy`（auto 最终回退） | 进程内加载可见录音的 chunks 矩阵做余弦相似度；单进程内存，适合个人/小团队 |
 | `sqlite_vec`（SQLite 推荐） | 随镜像安装的 sqlite-vec 扩展；`vec0` 虚拟表做 KNN；auto 在 SQLite 上优先尝试，扩展不可加载时自动降级 numpy 并记录原因 |
 | `pgvector`（experimental） | 仅 PostgreSQL + pgvector 扩展可用；启动时尝试 `CREATE EXTENSION` 与建表；不可用自动降级 numpy 并记录原因 |
+| `qdrant`（v1.0 可选） | 外置 ANN 向量库（§12.4）；跨数据库方言可用；未配置/不可达时自动降级 numpy 并记录原因 |
 
 - 未配置 Embedding 时：语义/混合搜索禁用（前端置灰并展示原因），问答行为与 v0.2 等价（字面/关键词检索）；
 - 索引 stale（模型变更/未建索引）时：搜索结果可能只覆盖部分录音，建议先 reindex；
-- 存储占用：向量以 float32 BLOB 存在 DB；每 1 万 chunk × 1024 维约 40MB（另加索引开销）。
+- 存储占用：向量以 float32 BLOB 存在 DB；每 1 万 chunk × 1024 维约 40MB（另加索引开销）；
+  使用 Qdrant 时 DB 内 BLOB 仍是**事实来源**（Qdrant 只是镜像索引，可随时重建）。
+
+### 12.4 可选：Qdrant 向量库（v1.0，compose profile）
+
+适用场景：多实例共享同一向量索引、chunk 达到百万级、或希望向量检索独立扩缩容。
+**默认不启用**；Qdrant 是可选加速层，不是硬依赖。
+
+```bash
+# 1) .env 配置（compose 内用服务名 qdrant；若在本机进程调试改为 http://localhost:6333）
+ECHOIC_QDRANT_URL=http://qdrant:6333
+ECHOIC_QDRANT_API_KEY=<强随机 Key；留空=不鉴权，仅限本地体验>
+ECHOIC_QDRANT_COLLECTION=echoic_chunks
+ECHOIC_QDRANT_TIMEOUT=10
+
+# 2) 启动 qdrant + echoic（镜像固定 qdrant/qdrant:v1.20.0，多架构 amd64/arm64）
+docker compose --profile qdrant up -d
+
+# 3) 验证
+docker compose ps qdrant                       # 期望 healthy
+docker compose exec echoic python -c "import httpx; print(httpx.get('http://qdrant:6333/readyz').text)"
+# 或部署后登录调 GET /api/vector/status（admin）查看 backend=qdrant / available / fallback_reason
+```
+
+- 端口：默认仅发布到宿主机 `127.0.0.1:6333`（REST）与 `127.0.0.1:6334`（gRPC），避免无鉴权实例直接暴露公网；
+  如需远程访问请自行配置反向代理/HTTPS 并设置 API Key；
+- 集合按 embedding 维度分（`echoic_chunks_<dim>`），payload 含 `recording_id/idx/start_ms/end_ms/model`，ACL 由服务端过滤；
+- 切换 Embedding 模型/维度后同样需要 reindex；Qdrant 内旧维度集合可手动清理（不影响 DB 事实来源）；
+- 备份：`echoic-qdrant` 卷可单独备份，但**不是必须**——需要时从 DB 全量 reindex 重建即可；
+- 升级：修改 `ECHOIC_QDRANT_IMAGE` tag → `docker compose --profile qdrant pull qdrant && docker compose --profile qdrant up -d`，
+  升级后确认 `/readyz` 与 `/api/vector/status`；
+- 故障：Qdrant 挂掉时搜索自动降级 numpy（`fallback_reason` 说明原因），不影响上传/转写/问答等主流程。
+
+### 12.5 pgvector staging CI 验证（v1.0）
+
+- GitHub Actions 新增 job `pgvector-staging`（`.github/workflows/ci.yml`）：使用 service 容器
+  `pgvector/pgvector:pg16`（`POSTGRES_USER/PASSWORD/DB=echoic`，`pg_isready` 健康检查），安装
+  `backend/requirements-dev.txt` 后执行 `backend/tests/test_vector_pgvector_staging.py`；
+- job 通过步骤 `Check pgvector staging test exists` 判断测试文件是否存在（并行开发期自动跳过并给 notice，
+  **发布前文件必须存在且该 job 为绿**）；服务就绪后先校验镜像内 `pgvector` 扩展可用，再以
+  `ECHOIC_PGVECTOR_TEST_DSN=postgresql+psycopg://echoic:echoic@127.0.0.1:5432/echoic` 运行测试；
+- 覆盖真实 PG + pgvector 链路：`CREATE EXTENSION vector`、`chunk_vectors` DDL（可选 HNSW 索引）、
+  写入/检索/ACL/删除/统计、`embedding_model` stale 过滤、维度变更需重建等（本地无 DSN 时 4 个用例自动 skip，不误报失败）；
+- 本地复现（需 Docker/pgvector 环境；无 Docker 时跳过，以 CI 结果为准）：
+
+  ```bash
+  docker run --rm -d --name echoic-pgvector -p 5432:5432 \
+    -e POSTGRES_USER=echoic -e POSTGRES_PASSWORD=echoic -e POSTGRES_DB=echoic \
+    pgvector/pgvector:pg16
+  ECHOIC_PGVECTOR_TEST_DSN='postgresql+psycopg://echoic:echoic@127.0.0.1:5432/echoic' \
+    backend/.venv/bin/python -m pytest -q backend/tests/test_vector_pgvector_staging.py
+  # 期望：4 passed；清理：docker rm -f echoic-pgvector
+  ```
+
+- 说明：该测试自建 SQLAlchemy 引擎/表，不使用应用 SQLite 引擎，也不受 `ECHOIC_VECTOR_BACKEND` 影响；
+  `POSTGRES_USER` 必须是超级用户（测试执行 `CREATE EXTENSION`），pgvector 官方镜像默认满足。
 
 ---
 
@@ -714,6 +845,23 @@ docker compose up -d              # 重启生效
 - 支持动作：`trash`（默认，移入回收站）/ `restore` / `purge` / `reprocess` / `tag_add` / `tag_remove`；
 - 权限逐条校验、**部分成功**（返回 `succeeded/failed/results`，失败项带原因）；tag 操作为 admin-only；
 - 前端仅对当前筛选页选中项生效（文案会提示）；批量删除一律走回收站，不提供批量直接彻底删除。
+
+### 13.4 审计日志（v1.0）
+
+- 目的：为管理/安全相关写操作提供**只追加**审计轨迹（登录、上传、删除/恢复/彻底删除、批量操作、分享创建/撤销、
+  设置更新、标签、用户管理等），便于追责与排查；审计写入是 **best-effort**，失败不会中断业务操作；
+- 存储位置：与业务数据同一数据库的 `audit_logs` 表（`id/user_id/username/action/target_type/target_id/detail_json/ip/created_at`），
+  `user_id` 在被删用户上会置空但保留 `username` 快照；
+- 查看方式：
+  - 前端：管理员登录后侧边栏「审计日志」页面（支持动作/用户/对象类型/关键字/时间范围筛选与分页）；
+  - API（仅管理员）：`GET /api/system/audit-logs?action=&user_id=&target_type=&q=&since=&until=&page=1&page_size=50`
+    → `{items:[{id,user_id,username,action,target_type,target_id,detail,ip,created_at}], total}`（`page_size` 上限 200）；
+  - 动作名示例：`auth.login`、`recording.upload`、`recording.trash`、`share.create`、`settings.update`、`tag.create`；
+- 保留策略：**默认不自动清理**（随数据库一起备份/长期保留，由运营方按合规要求自行归档或删除）；
+  若需限制保留期，可在维护窗口手动清理旧行（例如 `DELETE FROM audit_logs WHERE created_at < ...`），清理前先备份；
+- 安全：`detail` 会过滤/截断敏感字段，不记录密码、API Key、Token 明文；审计日志同样属于敏感数据，
+  访问接口为 admin-only，数据库备份文件请按最小权限保管；
+- 多用户/单用户行为一致；SQLite 与 PostgreSQL 均支持，无需额外配置或环境变量。
 
 ---
 
@@ -746,6 +894,7 @@ ECHOIC_DATA_DIR=/tmp/echoic-e2e ECHOIC_DEMO_SEED=true ECHOIC_SECRET_KEY=e2e-secr
 | `scripts/dev.sh` | 创建 venv、装依赖、同时启动 uvicorn --reload(:8000) 与 vite(:5173)，trap 清理 |
 | `scripts/run-local.sh` | 构建前端并由后端托管，uvicorn :8100；`--no-build` / `--copy` 可选 |
 | `scripts/verify.sh` | pytest + 前端 tsc/build + 临时数据目录启动健康检查 + 可选 e2e 冒烟 |
+| `scripts/soak_live.py` | DashScope 实时转写真实长稳（1x 推流 / 断线重连 / JSON 报告，默认真实 60 分钟；`--provider mock` 为无网络机制自检，见 §11.4） |
 
 ---
 
@@ -776,6 +925,11 @@ ECHOIC_DATA_DIR=/tmp/echoic-e2e ECHOIC_DEMO_SEED=true ECHOIC_SECRET_KEY=e2e-secr
 | v0.3 向量：语义搜索被禁用 / 结果不全 | 设置页配置 Embedding 后执行全量重建（§12）；`GET /api/vector/status` 查看 `embeddings_configured/stale_chunks/fallback_reason`；`ECHOIC_VECTOR_BACKEND=auto` 在 PG 无 pgvector 扩展时会自动降级 numpy |
 | v0.3 回收站：删除的录音想找回 / 空间未释放 | 在资料库「回收站」中恢复（`restore_before` 之前）；彻底删除或超过 `ECHOIC_TRASH_RETENTION_DAYS` 后不可恢复；回收站录音仍占用磁盘/对象存储，可执行「彻底删除」立即释放 |
 | v0.3 批量操作返回 400 | 单次条目数超过 `ECHOIC_BATCH_MAX_ITEMS`（默认 100）或条目非法；批量结果为部分成功（见返回 `results`） |
+| v1.0 Qdrant：`/api/vector/status` 显示 `backend=numpy` / fallback_reason 提到 Qdrant | 确认 `docker compose --profile qdrant up -d` 已启动且 `docker compose ps qdrant` 为 healthy；`ECHOIC_QDRANT_URL` 在容器内应为 `http://qdrant:6333`（本机进程用 `http://localhost:6333`）；若设置了 API Key，需与 compose 中 `QDRANT__SERVICE__API_KEY`（即 `ECHOIC_QDRANT_API_KEY`）一致；Qdrant 故障会自动降级 numpy，不影响主流程 |
+| v1.0 pgvector：CI `pgvector-staging` job 失败 | 先看是「服务未就绪/镜像缺 vector 扩展」还是测试断言失败；service 必须为 `pgvector/pgvector:pg16`、`POSTGRES_USER=echoic`（超级用户，供 `CREATE EXTENSION`）；本地按 §12.5 复现（无 Docker 时以 CI 为准） |
+| v1.0 视频：没有分镜条 / 分镜为空 | 确认是视频录音且 `ECHOIC_SCENE_DETECTION_ENABLED=true`；抽取是 best-effort（失败仅 warning，不影响处理）；重新处理该录音会重抽；可调低 `ECHOIC_SCENE_THRESHOLD`（更敏感）或调大 `ECHOIC_SCENE_MAX` |
+| v1.0 审计：页面/API 没有记录 | 确认用管理员账号（接口 admin-only）；审计是 best-effort 且只记录写操作（GET 不记录）；登录/上传/删除/设置等操作后刷新查看；`GET /api/system/audit-logs` 支持按 action/target_type 过滤 |
+| v1.0 实时长稳：soak 退出码 1/2 | 退出码 1=跑满但出现 provider 错误/重连（看报告 `provider_errors/drops`，多为网络/配额）；2=未开始或不可恢复（Key 缺失、首次连接失败、音频/ffmpeg 问题）；0 才是 60 分钟通过证据。报告在 `e2e/` 或 `.cache/`，见 §11.4 |
 | 登录 429 | 登录限速 5 次/分钟/IP；等待 1 分钟，或确认反向代理传递了真实 `X-Forwarded-For` |
 | 麦克风无法录音 | 非 HTTPS 且非 localhost 时浏览器禁止 `getUserMedia`；配置 HTTPS 或改用文件上传 |
 | 忘记管理员密码 | 停止服务 → 用 sqlite 删除/重置用户后重启会重建管理员：`docker compose exec echoic python -c "..."`（或恢复备份）；更简单：删除空库重来仅适用于演示数据场景 |
@@ -810,6 +964,8 @@ docker stats echoic                           # 资源占用
 - [ ] v0.3 实时转写：按需开启 `ECHOIC_LIVE_ENABLED`，用 `ECHOIC_LIVE_MAX_MINUTES` 限制单次时长以控制第三方计费；
 - [ ] v0.3 回收站：`ECHOIC_TRASH_RETENTION_DAYS` 到期会不可恢复地清理数据，回收站内容一并纳入备份策略；
 - [ ] v0.3 向量检索：Embedding API Key 同样加密存储与掩码显示；更换 Embedding 模型/维度后需全量 reindex（旧向量会被判定 stale）。
+- [ ] v1.0 Qdrant（如启用）：设置强随机 `ECHOIC_QDRANT_API_KEY`，不要无鉴权暴露 6333/6334 到公网（compose 默认仅绑定 127.0.0.1）；
+- [ ] v1.0 审计日志：属于敏感数据（操作者/IP/动作），仅管理员可读，随数据库备份加密保管，按合规要求制定保留/清理策略。
 
 ---
 
@@ -881,7 +1037,17 @@ curl -fsS -b /tmp/echoic.cookie 'http://localhost:8000/api/recordings?trashed=tr
 curl -fsS -o /dev/null -w '%{http_code}\n' -b /tmp/echoic.cookie -X POST \
   -H 'Content-Type: application/json' -d '{}' http://localhost:8000/api/live/sessions
 
-# 5) 完整自动化验收（本地环境）
+# 5) v1.0 新能力自检
+#    视频分镜（需先处理一个视频录音；空列表 = 无分镜/未处理完）
+curl -fsS -b /tmp/echoic.cookie http://localhost:8000/api/recordings/1/scenes | python3 -m json.tool
+#    审计日志（admin；最近 5 条）
+curl -fsS -b /tmp/echoic.cookie 'http://localhost:8000/api/system/audit-logs?page=1&page_size=5' | python3 -m json.tool
+#    Qdrant（启用 --profile qdrant 时）：期望 backend=qdrant 或 fallback_reason 说明原因
+curl -fsS -b /tmp/echoic.cookie http://localhost:8000/api/vector/status | python3 -m json.tool
+#    实时 60 分钟长稳（需真实 Key 与音频，非 CI；见 §11.4）
+# backend/.venv/bin/python scripts/soak_live.py --minutes 60 --audio /path/to/real.wav --out e2e/soak-live.json
+
+# 6) 完整自动化验收（本地环境）
 ./scripts/verify.sh            # 依赖齐全时包含 e2e/smoke.py / smoke_v02.py
 ```
 

@@ -9,7 +9,7 @@
         --data-dir $PWD/.cache/e2e-v0310-data
 
 覆盖：
-  0) health/features：version 0.3.10、storage ok、allow_registration；live 默认/显式启用；vector 有效后端
+  0) health/features：version 存在、storage ok、allow_registration；live 默认/显式启用；vector 有效后端
   1) 注册：allow_registration 开关（health 同步）、注册 201 member、重复 409、弱密码 422、登录
   2) 个人资料：PATCH /api/auth/me（昵称/邮箱）、特权字段被忽略、改密校验（旧密码错/新密码过短/成功）
   3) sqlite-vec：状态/后端/降级信息、mock embeddings + reindex、semantic/hybrid 搜索
@@ -117,7 +117,8 @@ class V0310Smoke(Smoke):
     def t_health(self):
         data = self._wait_health(timeout=60)
         expect(data.get("status") == "ok", f"health 应为 ok：{data}")
-        expect(data.get("version") == "0.3.10", f"version 应为 0.3.10：{data.get('version')}")
+        # v1.0 起版本号随发布升级（本次 QA 为 1.0.0）；不再硬编码 0.3.10，只要求 version 存在
+        expect(str(data.get("version") or "").strip(), f"health 缺少 version：{data}")
         expect(data.get("storage") == "ok", f"storage 状态异常：{data.get('storage')}")
         expect(data.get("storage_backend") == "local", f"storage_backend 应为 local：{data.get('storage_backend')}")
         self.ctx["health"] = data

@@ -8158,3 +8158,317 @@ mark {
     flex-wrap: wrap;
   }
 }
+
+/* ==========================================================================
+   v1.0 — video scene filmstrip (R-? video scenes) & admin audit log
+   ========================================================================== */
+
+/* Video scene strip (inside the player card, below the sticky video dock) */
+.scene-strip {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--shadow-xs);
+}
+
+.scene-strip__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.scene-strip__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.scene-strip__title .anticon {
+  color: var(--brand);
+  font-size: 13px;
+}
+
+.scene-strip__meta {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.scene-strip__track {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1px 1px 5px;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scene-thumb {
+  position: relative;
+  flex: 0 0 120px;
+  width: 120px;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--fill-1);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.scene-thumb:hover {
+  border-color: var(--brand-border);
+  transform: translateY(-1px);
+}
+
+.scene-thumb:focus-visible {
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.scene-thumb.is-active {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.scene-thumb__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scene-thumb__img.is-broken {
+  opacity: 0;
+}
+
+.scene-thumb__time {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(15, 17, 21, 0.72);
+  color: #fff;
+  font-size: 10px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(2px);
+}
+
+.scene-thumb.is-active .scene-thumb__time {
+  background: var(--brand);
+}
+
+.scene-thumb--skeleton {
+  cursor: default;
+  border-color: transparent;
+  background: linear-gradient(90deg, var(--fill-1) 25%, var(--surface-subtle) 50%, var(--fill-1) 75%);
+  background-size: 200% 100%;
+  animation: scene-shimmer 1.2s ease-in-out infinite;
+}
+
+.scene-thumb--skeleton:hover {
+  transform: none;
+  border-color: transparent;
+}
+
+@keyframes scene-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Admin audit log page */
+.audit-page {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 26px 32px 64px;
+}
+
+.audit-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.audit-search {
+  width: 280px;
+}
+
+.audit-filter {
+  width: 175px;
+}
+
+.audit-filter--user {
+  width: 118px;
+}
+
+.audit-toolbar__spacer {
+  flex: 1;
+}
+
+.audit-toolbar__total {
+  font-size: 12.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.audit-time {
+  font-size: 12.5px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.audit-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.audit-user .anticon {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.audit-muted {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.audit-action {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.audit-action__label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.audit-action__code,
+.audit-ip {
+  width: fit-content;
+  border-radius: 4px;
+  background: var(--fill-1);
+  color: var(--text-3);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 16px;
+  padding: 0 5px;
+}
+
+.audit-ip {
+  font-size: 11px;
+}
+
+.audit-target {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.audit-detail-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand-fg-strong);
+  font-size: 11px;
+}
+
+.audit-detail {
+  padding: 4px 6px;
+}
+
+.audit-json {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--text-2);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.audit-table .ant-table-expanded-row > td {
+  background: var(--surface-subtle) !important;
+}
+
+[data-theme='dark'] .scene-thumb__time {
+  background: rgba(0, 0, 0, 0.78);
+}
+
+@media (max-width: 1023px) {
+  .audit-page {
+    padding: 20px 20px 48px;
+  }
+}
+
+@media (max-width: 767px) {
+  .scene-strip {
+    padding: 8px 10px;
+  }
+
+  .scene-thumb {
+    flex-basis: 104px;
+    width: 104px;
+  }
+
+  .audit-page {
+    padding: 18px 14px 40px;
+  }
+
+  .audit-toolbar {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .audit-search {
+    width: 100%;
+    order: -1;
+  }
+
+  .audit-filter {
+    flex: 1;
+    width: auto;
+    min-width: 120px;
+  }
+
+  .audit-filter--user {
+    flex: 0 0 110px;
+    width: 110px;
+  }
+
+  .audit-toolbar__spacer {
+    display: none;
+  }
+
+  .audit-toolbar__total {
+    margin-left: auto;
+  }
+}

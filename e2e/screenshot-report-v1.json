@@ -1,0 +1,273 @@
+{
+  "baseUrl": "http://127.0.0.1:8101",
+  "viewport": {
+    "width": 1680,
+    "height": 1050
+  },
+  "mobileViewport": {
+    "width": 390,
+    "height": 844
+  },
+  "video": {
+    "id": 6,
+    "title": "E2E v1.0 视频分镜 172040",
+    "sceneCount": 2
+  },
+  "sharePath": "/s/0CXJchgXLC3tezEn7vlQwlhD_9tWLbpJ",
+  "savedShots": [
+    {
+      "filename": "01-login-register-entry.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/01-login-register-entry.png",
+      "note": "登录页 · 注册入口（浅色）"
+    },
+    {
+      "filename": "02-register.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/02-register.png",
+      "note": "注册页（用户名/显示名称/邮箱/密码）"
+    },
+    {
+      "filename": "03-library-light.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/03-library-light.png",
+      "note": "资料库（浅色）"
+    },
+    {
+      "filename": "04-video-detail-scenes.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/04-video-detail-scenes.png",
+      "note": "视频详情 · 分镜条（2 个分镜）"
+    },
+    {
+      "filename": "05-scene-seek.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/05-scene-seek.png",
+      "note": "点击分镜后 seek 到 2s（高亮当前分镜）"
+    },
+    {
+      "filename": "06-sticky-video.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/06-sticky-video.png",
+      "note": "向下滚动后视频吸顶（分镜条/正文继续滚动）"
+    },
+    {
+      "filename": "07-share-dialog.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/07-share-dialog.png",
+      "note": "分享弹窗 · 链接/复制文案（含标题/简介/slogan）"
+    },
+    {
+      "filename": "08-video-detail-dark.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/08-video-detail-dark.png",
+      "note": "视频详情 · 分镜条（深色）"
+    },
+    {
+      "filename": "09-library-dark.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/09-library-dark.png",
+      "note": "资料库（深色）"
+    },
+    {
+      "filename": "10-public-video-light.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/10-public-video-light.png",
+      "note": "公开分享页 · 视频 + 标题/简介/slogan（浅色）"
+    },
+    {
+      "filename": "11-audit-light.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/11-audit-light.png",
+      "note": "审计日志（浅色，20 行 + 过滤器）"
+    },
+    {
+      "filename": "12-audit-dark-expanded.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/12-audit-dark-expanded.png",
+      "note": "审计日志 · 操作过滤 + 详情展开（深色）"
+    },
+    {
+      "filename": "13-profile-light.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/13-profile-light.png",
+      "note": "个人资料（浅色）：资料编辑 + 改密"
+    },
+    {
+      "filename": "14-mobile-library.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/14-mobile-library.png",
+      "note": "移动端资料库（390×844）"
+    },
+    {
+      "filename": "15-mobile-video-scenes.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/15-mobile-video-scenes.png",
+      "note": "移动端视频详情 · 分镜条（2 个分镜）"
+    },
+    {
+      "filename": "16-mobile-public-video.png",
+      "path": "/home/wpcwzy/echoic/docs/screenshots/v1.0/16-mobile-public-video.png",
+      "note": "移动端公开分享页 · 视频（390×844）"
+    }
+  ],
+  "behaviorChecks": [
+    {
+      "name": "scene-seek",
+      "detail": "currentTime=2s paused=true active=true"
+    },
+    {
+      "name": "sticky-video",
+      "detail": "position=sticky scrollTop=568 y 176 -> 56"
+    },
+    {
+      "name": "public-video",
+      "detail": "title=E2E v1.0 视频分镜 172040 slogan+desc 可见 video_element=1"
+    },
+    {
+      "name": "public-share-theme",
+      "detail": "PublicSharePage 无深色主题（始终浅色），已在报告标注为已知限制"
+    },
+    {
+      "name": "audit-light",
+      "detail": "rows=20 filters/总数/动作代码可见"
+    },
+    {
+      "name": "audit-filter-detail",
+      "detail": "action=recording 过滤生效，detail JSON 可展开（190 字符）"
+    }
+  ],
+  "themeChecks": [
+    {
+      "page": "login-light",
+      "expected": "light",
+      "dataTheme": "light",
+      "stored": null,
+      "bodyBg": "rgb(245, 246, 247)",
+      "bodyLum": 0.9641552941176472
+    },
+    {
+      "page": "library-light",
+      "expected": "light",
+      "dataTheme": "light",
+      "stored": "light",
+      "bodyBg": "rgb(245, 246, 247)",
+      "bodyLum": 0.9641552941176472
+    },
+    {
+      "page": "video-detail-light",
+      "expected": "light",
+      "dataTheme": "light",
+      "stored": "light",
+      "bodyBg": "rgb(245, 246, 247)",
+      "bodyLum": 0.9641552941176472
+    },
+    {
+      "page": "video-detail-dark",
+      "expected": "dark",
+      "dataTheme": "dark",
+      "stored": "dark",
+      "bodyBg": "rgb(15, 17, 21)",
+      "bodyLum": 0.06613176470588235
+    },
+    {
+      "page": "library-dark",
+      "expected": "dark",
+      "dataTheme": "dark",
+      "stored": "dark",
+      "bodyBg": "rgb(15, 17, 21)",
+      "bodyLum": 0.06613176470588235
+    },
+    {
+      "page": "public-light",
+      "expected": "light",
+      "dataTheme": "light",
+      "stored": "light",
+      "bodyBg": "rgb(245, 246, 247)",
+      "bodyLum": 0.9641552941176472
+    },
+    {
+      "page": "audit-light",
+      "expected": "light",
+      "dataTheme": "light",
+      "stored": "light",
+      "bodyBg": "rgb(245, 246, 247)",
+      "bodyLum": 0.9641552941176472
+    },
+    {
+      "page": "audit-dark",
+      "expected": "dark",
+      "dataTheme": "dark",
+      "stored": "dark",
+      "bodyBg": "rgb(15, 17, 21)",
+      "bodyLum": 0.06613176470588235
+    },
+    {
+      "page": "profile-light",
+      "expected": "light",
+      "dataTheme": "light",
+      "stored": "light",
+      "bodyBg": "rgb(245, 246, 247)",
+      "bodyLum": 0.9641552941176472
+    }
+  ],
+  "consoleErrors": [
+    {
+      "page": "anon",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "anon",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "admin",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "admin",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "page": "admin",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "page": "admin",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "page": "mobile",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "page": "mobile",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+  ],
+  "pageErrors": [],
+  "failedRequests": [
+    {
+      "page": "admin",
+      "url": "http://127.0.0.1:8101/api/recordings/6/media",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "page": "admin",
+      "url": "http://127.0.0.1:8101/api/recordings/6/media",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "page": "admin",
+      "url": "http://127.0.0.1:8101/api/recordings/6/media",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "page": "admin",
+      "url": "http://127.0.0.1:8101/api/public/shares/0CXJchgXLC3tezEn7vlQwlhD_9tWLbpJ/media",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "page": "admin",
+      "url": "http://127.0.0.1:8101/api/public/shares/0CXJchgXLC3tezEn7vlQwlhD_9tWLbpJ/media",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "page": "mobile",
+      "url": "http://127.0.0.1:8101/api/recordings/6/media",
+      "failure": "net::ERR_ABORTED"
+    },
+    {
+      "page": "mobile",
+      "url": "http://127.0.0.1:8101/api/public/shares/0CXJchgXLC3tezEn7vlQwlhD_9tWLbpJ/media",
+      "failure": "net::ERR_ABORTED"
+    }
+  ],
+  "overflowIssues": [],
+  "warnings": []
+}

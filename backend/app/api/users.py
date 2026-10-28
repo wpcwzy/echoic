@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
@@ -14,6 +14,7 @@ from ..core.security import hash_password
 from ..db import get_db
 from ..deps import require_admin
 from ..models import Recording, Share, User
+from ..services import audit as audit_service
 from ..schemas import (
     OkOut,
     ResetPasswordIn,
@@ -118,7 +119,12 @@ def list_users(
 
 
 @router.post("", response_model=UserAdminOut, status_code=201)
-def create_user(payload: UserCreateIn, db: Session = Depends(get_db)):
+def create_user(
+    payload: UserCreateIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
     username = payload.username.strip()
     if db.scalar(select(User.id).where(User.username == username)) is not None:
         raise conflict(f"用户名已存在：{username}")
@@ -135,6 +141,15 @@ def create_user(payload: UserCreateIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     logger.info("user %s created (role=%s)", user.username, user.role)
+    audit_service.audit_request(
+        db,
+        request,
+        admin,
+        "user.create",
+        target_type="user",
+        target_id=user.id,
+        detail={"username": user.username, "role": user.role},
+    )
     return _to_admin_out(user)
 
 
@@ -142,6 +157,7 @@ def create_user(payload: UserCreateIn, db: Session = Depends(get_db)):
 def update_user(
     user_id: int,
     payload: UserUpdateIn,
+    request: Request,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
@@ -175,6 +191,19 @@ def update_user(
     db.refresh(user)
     recording_counts, share_counts = _counts(db, [user.id])
     logger.info("user %s updated (role=%s disabled=%s)", user.username, user.role, user.disabled)
+    audit_service.audit_request(
+        db,
+        request,
+        admin,
+        "user.update",
+        target_type="user",
+        target_id=user.id,
+        detail={
+            "fields": sorted(str(field) for field in fields),
+            "role": user.role,
+            "disabled": bool(user.disabled),
+        },
+    )
     return _to_admin_out(user, recording_counts, share_counts)
 
 
@@ -182,7 +211,9 @@ def update_user(
 def reset_password(
     user_id: int,
     payload: ResetPasswordIn,
+    request: Request,
     db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
 ):
     user = db.get(User, user_id)
     if user is None:
@@ -190,12 +221,22 @@ def reset_password(
     user.password_hash = hash_password(payload.new_password)
     db.commit()
     logger.info("password reset for user %s", user.username)
+    audit_service.audit_request(
+        db,
+        request,
+        admin,
+        "user.reset_password",
+        target_type="user",
+        target_id=user.id,
+        detail={"username": user.username},
+    )
     return OkOut()
 
 
 @router.delete("/{user_id}", response_model=OkOut)
 def delete_user(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
@@ -217,7 +258,17 @@ def delete_user(
     # Shares created by this user stay valid but lose their creator reference.
     db.execute(update(Share).where(Share.created_by == user.id).values(created_by=None))
     username = user.username
+    target_role = user.role
     db.delete(user)
     db.commit()
     logger.info("user %s deleted by %s", username, admin.username)
+    audit_service.audit_request(
+        db,
+        request,
+        admin,
+        "user.delete",
+        target_type="user",
+        target_id=user_id,
+        detail={"username": username, "role": target_role},
+    )
     return OkOut()

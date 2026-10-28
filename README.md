@@ -11,7 +11,7 @@
 > Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
 - Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
-- Version: **v0.3.17** — P1 complete + sqlite-vec, live captions GA, registration/profile, auto descriptions (dark theme, trash & batch, object storage, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
+- Version: **v1.0.0** — production-ready P1: multi-user collaboration, dark theme, trash/batch, object storage, live captions GA, vector/hybrid search (numpy / sqlite-vec / pgvector / Qdrant), PWA, video playback & scene extraction, audit logs, auto descriptions (CI/CD + multi-arch GHCR images)
 - License: MIT
 
 ## 📸 Screenshots
@@ -39,6 +39,16 @@
 | Viewpoint forest (multiple topic trees) |
 |---|
 | ![Viewpoint forest](docs/screenshots/v0.3/09-viewpoint-forest.png) |
+
+**v1.0 video scenes, audit logs & sharing**
+
+| Video · scene filmstrip | Admin audit log |
+|---|---|
+| ![Video scenes](docs/screenshots/v1.0/04-video-detail-scenes.png) | ![Audit log](docs/screenshots/v1.0/12-audit-dark-expanded.png) |
+
+| Share preview · title/description/slogan | Public video page |
+|---|---|
+| ![Share dialog](docs/screenshots/v1.0/07-share-dialog.png) | ![Public video](docs/screenshots/v1.0/10-public-video-light.png) |
 
 **v0.2 collaboration & sharing**
 
@@ -197,16 +207,18 @@ docker pull ghcr.io/wpcwzy/echoic:latest
 
 ---
 
-## ✅ Verification (v0.2.0)
+## ✅ Verification (v1.0.0)
 
 | Item | Result | Evidence |
 |---|---|---|
 | GitHub Actions CI | **Passing**: backend pytest + frontend tsc/vite build; PR also validates the amd64 image build | [CI runs](https://github.com/wpcwzy/echoic/actions/workflows/ci.yml) |
 | Multi-arch image publish | **Succeeded**: linux/amd64 + linux/arm64 pushed to GHCR (`latest` / `sha-*`; semver tags on releases) | [Publish runs](https://github.com/wpcwzy/echoic/actions/workflows/docker-publish.yml) · [GHCR package](https://github.com/wpcwzy/echoic/pkgs/container/echoic) |
-| Backend tests | **465 passed** (v0.1 129 + v0.2 + v0.3 trash/live/vector/storage/migrations); includes a moto S3 end-to-end upload → pipeline → Range test | `cd backend && .venv/bin/pytest -q` |
-| Frontend build | **Passing** (`tsc --noEmit` clean; ~613 KB JS + 22 KB CSS gzipped) | `cd frontend && npm run build` |
-| End-to-end smoke (mock, fresh database) | v0.1 **30/30** + v0.2 **34/34** + v0.3 **34/34 PASS**: trash/batch invariants, live mock WebSocket → upload → replace/promote merge, vector reindex + semantic/hybrid search with ACL, storage Range, regression suites | [`e2e/REPORT-v0.3.md`](e2e/REPORT-v0.3.md) |
-| UI screenshot audit | v0.1 6/6 + v0.2 7/7 + v0.3 8/8 (light/dark, desktop/mobile), no overflow, no uncaught exceptions, no 5xx | [`docs/screenshots/`](docs/screenshots/) · [`docs/screenshots/v0.3/`](docs/screenshots/v0.3/) |
+| Backend tests | **514 passed, 4 skipped** (465 baseline + Qdrant 14 + video scenes 19 + audit 16; 4 skips are env-gated pgvector staging tests); includes moto S3 and real-Qdrant smoke coverage | `cd backend && .venv/bin/pytest -q` |
+| Frontend build | **Passing** (`tsc --noEmit` clean; ~627 KB JS + 24 KB CSS gzipped) | `cd frontend && npm run build` |
+| End-to-end smoke | v0.1 **30/30** + v0.2 **34/34** + v0.3 **34/34** + v0.3.10 **23/23** + v1.0 **43/43 PASS**: trash/batch, live mock/reconnect, storage, vector, video scenes, audit logs, registration/profile, sharing | [`e2e/REPORT-v1.0.md`](e2e/REPORT-v1.0.md) |
+| UI screenshot audit | v0.1 6/6 + v0.2 7/7 + v0.3 8/8 + v1.0 16/16 (video scenes, sticky video, audit, share, public video, mobile; light/dark); no overflow/uncaught errors/5xx | [`docs/screenshots/v1.0/`](docs/screenshots/v1.0/) |
+| Qdrant backend / pgvector staging | Real Qdrant v1.20.0: status backend=qdrant, reindex/search/ACL OK; real PostgreSQL 16 + pgvector 0.8.7 staging test **4 passed** (also in CI) | [`e2e/REPORT-v1.0.md`](e2e/REPORT-v1.0.md) |
+| Real DashScope live soak | **PASS**: 60 min, 0 provider errors/reconnects, 35998 frames, 61 finals, RSS peak 52 MiB | [`e2e/soak-live-v1.0.json`](e2e/soak-live-v1.0.json) |
 | Object storage | Unit + moto tests for local/S3 backends, media proxy and migration CLI; end-to-end S3 upload → pipeline → media Range covered by pytest | `pytest tests/test_storage_*.py` |
 
 ---
@@ -301,12 +313,21 @@ Everything is configurable through `ECHOIC_*` environment variables or `.env` (s
 - [x] Vector/hybrid semantic search, index rebuild and hybrid RAG
 - [x] v0.1/v0.2 database auto-migration
 
-### Next (v0.3.x / v1.0)
+### v1.0.0 (shipped)
 
-- [x] sqlite-vec backend, live captions GA with reconnect/resume
-- [ ] pgvector staging verification, real DashScope live 60-min soak, Qdrant backend
-- [ ] Self-service registration page, member profile / password page
-- [ ] Video slide/scene extraction, mobile app / browser extension, OAuth/LDAP, audit logs
+- [x] Qdrant vector backend (auto priority pgvector → Qdrant → sqlite-vec → numpy, graceful fallback)
+- [x] pgvector staging verification in CI (real PostgreSQL 16 + pgvector service)
+- [x] Real DashScope live soak harness (60-minute staging run evidence in `e2e/`)
+- [x] Video slide/scene extraction (scene-cut thumbnails + filmstrip navigation)
+- [x] Admin audit logs (auth/users/recordings/shares/settings/tags, filters/pagination, secret redaction)
+- [x] Self-service registration page + member profile/password page
+- [x] Mobile-installable PWA, video playback with automatic H.264/AAC transcoding
+
+### Later (v1.x)
+
+- [ ] Mobile app / browser extension
+- [ ] OAuth / LDAP / SSO
+- [ ] Optional full-text search backend (BM25/FTS5) and external vector stores beyond Qdrant
 
 ---
 

@@ -159,6 +159,9 @@ class Recording(Base):
     chunks: Mapped[list["Chunk"]] = relationship(
         back_populates="recording", cascade="all, delete-orphan", order_by="Chunk.idx"
     )
+    video_scenes: Mapped[list["VideoScene"]] = relationship(
+        back_populates="recording", cascade="all, delete-orphan", order_by="VideoScene.idx"
+    )
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
         back_populates="recording", cascade="all, delete-orphan", order_by="ChatMessage.id"
     )
@@ -307,6 +310,51 @@ class Share(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     recording: Mapped[Recording] = relationship(back_populates="shares")
+
+
+class VideoScene(Base):
+    """Keyframe/slide extracted from a video recording for timeline navigation."""
+
+    __tablename__ = "video_scenes"
+    __table_args__ = (
+        UniqueConstraint("recording_id", "idx", name="uq_video_scenes_recording_idx"),
+        Index("ix_video_scenes_recording_time", "recording_id", "time_ms"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recording_id: Mapped[int] = mapped_column(
+        ForeignKey("recordings.id", ondelete="CASCADE"), index=True
+    )
+    idx: Mapped[int] = mapped_column(Integer, default=0)
+    time_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    image_filename: Mapped[str] = mapped_column(String(120), default="")
+    width: Mapped[int] = mapped_column(Integer, default=0)
+    height: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    recording: Mapped[Recording] = relationship(back_populates="video_scenes")
+
+
+class AuditLog(Base):
+    """Append-only administrative/security audit trail (v1.0)."""
+
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_action_created", "action", "created_at"),
+        Index("ix_audit_logs_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    username: Mapped[str] = mapped_column(String(64), default="")
+    action: Mapped[str] = mapped_column(String(64), index=True, default="")
+    target_type: Mapped[str] = mapped_column(String(32), default="")
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    detail_json: Mapped[str] = mapped_column(Text, default="{}")
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class ImportedFile(Base):
