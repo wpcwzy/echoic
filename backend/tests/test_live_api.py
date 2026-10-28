@@ -515,6 +515,16 @@ def test_disconnect_grace_expiry_ends_session(auth_client, live_on, monkeypatch)
         assert ws.receive_json()["type"] == "ready"
         for _ in range(10):  # 1000 ms
             ws.send_bytes(PCM_FRAME)
+        # Sending is fire-and-forget: on slow CI runners the client context can
+        # close before every queued frame is consumed, dropping audio (e.g. only
+        # 700 ms counted). The mock provider emits a partial every 800 ms, so
+        # waiting for that partial proves the server consumed at least 800 ms;
+        # the remaining frames are then either processed or dropped on
+        # disconnect, which is why total_audio_ms is bounded rather than exact.
+        _drain_until(
+            ws,
+            lambda event: event["type"] == "partial" and int(event.get("end_ms") or 0) >= 800,
+        )
 
     deadline = time.time() + 5
     status = None
@@ -525,8 +535,9 @@ def test_disconnect_grace_expiry_ends_session(auth_client, live_on, monkeypatch)
             break
         time.sleep(0.05)
     assert status == "ended"
-    # Disconnect may race with the last queued frame; tolerate one 100ms frame.
-    assert 900 <= detail["session"]["total_audio_ms"] <= 1000
+    # At least the 800 ms partial was consumed; trailing frames may be dropped
+    # by the disconnect race (never more than the 1000 ms actually sent).
+    assert 800 <= detail["session"]["total_audio_ms"] <= 1000
     assert "超时未重连" in (detail["session"]["error"] or "")
 
 
