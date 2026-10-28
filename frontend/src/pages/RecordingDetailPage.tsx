@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Button, Drawer, Dropdown, Input, Modal, Select, Skeleton, Tag, Tooltip } from 'antd'
+import { Alert, Button, Drawer, Dropdown, Input, Modal, Select, Skeleton, Tag, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -48,6 +48,7 @@ import { useAuthStore } from '../store/auth'
 import type { DetailTabKey, RecordingDetail } from '../types'
 import { parseMsParam } from '../utils/format'
 import { isAdminUser } from '../utils/roles'
+import { analysisKindLabel } from '../theme'
 import { viewpointForest, viewpointMindMapRoot } from '../utils/viewpoints'
 import { confirmAction, toast, toastError } from '../utils/toast'
 import { AudioPlayerCard } from '../components/player/AudioPlayerCard'
@@ -199,6 +200,9 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
   const transferUsersQuery = useUsers({ page_size: 100, include_disabled: false }, isAdmin && transferOpen)
 
   const insights = insightsQuery.data
+  const missingAnalysisKinds = (insights?.missing ?? []).filter((kind) =>
+    ['summary', 'chapters', 'viewpoint_tree', 'insights', 'action_items', 'keywords'].includes(kind),
+  )
   const transcript = transcriptQuery.data
   const speakers = useMemo(
     () => (transcript?.speakers?.length ? transcript.speakers : recording.speakers),
@@ -585,6 +589,21 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
               </Button>
             </div>
 
+            {isReady && missingAnalysisKinds.length > 0 && (
+              <Alert
+                className="analysis-warning"
+                type="warning"
+                showIcon
+                message="部分 AI 内容未生成"
+                description={`缺少：${missingAnalysisKinds.map((kind) => analysisKindLabel[kind] ?? kind).join('、')}。录音与转录已正常保存，可重新生成 AI 分析。`}
+                action={
+                  <Button size="small" loading={regenerate.isPending} onClick={() => handleRegenerate()}>
+                    重新生成
+                  </Button>
+                }
+              />
+            )}
+
             {isReady ? (
               <>
                 <AudioPlayerCard recording={recording} speakers={speakers} chapters={chapters} />
@@ -697,6 +716,12 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
                 onRetry={() =>
                   reprocess.mutate('all', {
                     onSuccess: () => toast.success('已提交重新处理任务'),
+                    onError: (error) => toastError(error, '提交失败'),
+                  })
+                }
+                onRetryInsights={() =>
+                  reprocess.mutate('insights', {
+                    onSuccess: () => toast.success('已提交 AI 分析重试任务，无需重新转写'),
                     onError: (error) => toastError(error, '提交失败'),
                   })
                 }

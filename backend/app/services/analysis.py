@@ -62,6 +62,48 @@ TASK_SPECS: list[dict[str, Any]] = [
 ]
 
 
+TASK_LABELS = {
+    "minutes": "AI 纪要",
+    "chapters": "章节",
+    "viewpoint_tree": "观点树",
+    "suggested_questions": "猜你想问",
+}
+
+TASK_JSON_HINTS = {
+    "minutes": (
+        '{"summary_md":"Markdown 会议纪要",'
+        '"insights":[{"title":"...","content":"...","category":"decision|risk|insight|opportunity"}],'
+        '"action_items":[{"title":"...","owner":"...","due":"...","status":"open"}],'
+        '"keywords":[{"name":"...","weight":0.8}]}'
+    ),
+    "chapters": (
+        '{"chapters":[{"title":"...","start_ms":0,"end_ms":60000,'
+        '"summary":"...","bullets":["..."]}]}'
+    ),
+    "viewpoint_tree": (
+        '{"roots":[{"label":"专题","detail":"...","kind":"topic",'
+        '"children":[{"label":"观点","detail":"...","kind":"point","children":[]}]}]}'
+    ),
+    "suggested_questions": '{"questions":["..."]}',
+}
+
+MAX_TASK_ATTEMPTS = 2  # initial attempt + one schema-correction retry
+
+
+def _schema_retry_message(task: str, error: str, payload: Any) -> str:
+    """Corrective prompt sent once when the model output is valid JSON but misses fields."""
+    try:
+        raw = json.dumps(payload, ensure_ascii=False)
+    except (TypeError, ValueError):
+        raw = str(payload)
+    return (
+        f"上一次输出缺失或不符合 {TASK_LABELS.get(task, task)} 的必需结构：{str(error)[:300]}。\n"
+        f"请严格按以下 JSON 顶层结构重新输出（只输出 JSON，不要解释、不要 Markdown 代码围栏）：\n"
+        f"{TASK_JSON_HINTS.get(task, '{}')}\n"
+        f"上一次输出（截断）：{raw[:4000]}"
+    )
+
+
 class AnalysisError(Exception):
     """Raised when an analysis task cannot produce a usable result."""
 
@@ -304,13 +346,35 @@ def _clamp_ms(value: Any, duration_ms: int) -> int:
     return max(0, min(int(duration_ms or 0), number))
 
 
-def sanitize_summary(payload: dict) -> dict | None:
-    data = _as_dict(payload)
-    markdown = _as_text(data.get("summary_md") or data.get("markdown") or data.get("summary"))
-    if not markdown:
-        summary = data.get("summary")
-        if isinstance(summary, dict):
-            markdown = _as_text(summary.get("markdown") or summary.get("content"))
+def _summary_text(value: Any, depth: int = 0) -> str:
+    """Extract markdown/text from common summary wrappers without stringifying dicts."""
+    if depth > 3 or value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ("markdown", "summary_md", "content", "text", "summary", "md", "minutes"):
+            if key in value:
+                found = _summary_text(value.get(key), depth + 1)
+                if found:
+                    return found
+        return ""
+    if isinstance(value, list):
+        parts = [_summary_text(item, depth + 1) for item in value[:8]]
+        return "\n\n".join(part for part in parts if part)
+    return ""
+
+
+def sanitize_summary(payload: Any) -> dict | None:
+    if isinstance(payload, str):
+        markdown = payload.strip()
+    else:
+        data = _as_dict(payload)
+        markdown = ""
+        for key in ("summary_md", "markdown", "summary", "minutes", "content", "text"):
+            markdown = _summary_text(data.get(key))
+            if markdown:
+                break
     if not markdown:
         return None
     return {"markdown": markdown}
@@ -392,26 +456,32 @@ def sanitize_keywords(payload: Any) -> list[dict]:
 def sanitize_chapters(payload: Any, duration_ms: int) -> list[dict]:
     raw_chapters = _as_list(payload)
     if isinstance(payload, dict) and not raw_chapters:
-        raw_chapters = _as_list(payload.get("chapters") or payload.get("items"))
+        for key in ("chapters", "items", "outline", "sections", "data", "list", "results"):
+            raw_chapters = _as_list(payload.get(key))
+            if raw_chapters:
+                break
     duration_ms = max(1, int(duration_ms or 0))
     chapters: list[dict] = []
     for index, raw in enumerate(raw_chapters):
         item = _as_dict(raw)
-        title = _as_text(item.get("title"))
-        start = _clamp_ms(item.get("start_ms", item.get("start", 0)), duration_ms)
-        end = _clamp_ms(item.get("end_ms", item.get("end", start + 60000)), duration_ms)
+        title = _as_text(item.get("title") or item.get("heading") or item.get("name") or item.get("chapter"))
+        start_value = item.get("start_ms", item.get("start", item.get("start_time", 0)))
+        end_value = item.get("end_ms", item.get("end", item.get("end_time")))
+        start = _clamp_ms(start_value, duration_ms)
+        end = _clamp_ms(end_value if end_value is not None else start + 60000, duration_ms)
         if end <= start:
             end = min(duration_ms, start + 60000)
         if not title:
             title = f"第 {index + 1} 部分"
-        bullets = [truncate(_as_text(value), 80) for value in _as_list(item.get("bullets"))[:5] if _as_text(value)]
+        raw_bullets = item.get("bullets") or item.get("points") or item.get("key_points") or item.get("highlights")
+        bullets = [truncate(_as_text(value), 80) for value in _as_list(raw_bullets)[:5] if _as_text(value)]
         chapters.append(
             {
                 "id": _as_text(item.get("id")) or f"ch-{index + 1}",
                 "title": truncate(title, 40),
                 "start_ms": start,
                 "end_ms": end,
-                "summary": truncate(_as_text(item.get("summary")), 300),
+                "summary": truncate(_as_text(item.get("summary") or item.get("description") or item.get("content")), 300),
                 "bullets": bullets,
             }
         )
@@ -744,20 +814,27 @@ def _task_messages(prompt: str, extra: str = "") -> list[dict[str, str]]:
     return messages
 
 
-async def _complete_json(llm: LLMProvider, prompt: str, task: str, temperature: float) -> Any:
+async def _complete_json(
+    llm: LLMProvider,
+    prompt: str,
+    task: str,
+    temperature: float,
+    *,
+    extra: str = "",
+) -> Any:
     """Call the LLM (json_mode) and parse; one repair attempt with error feedback."""
     last_error = ""
     raw = ""
     for attempt in range(2):
-        messages = _task_messages(prompt)
+        messages = _task_messages(prompt, extra)
         if attempt == 1:
-            messages = _task_messages(
-                prompt,
+            repair = (
                 "上一次的输出无法解析为要求的 JSON。错误：{error}\n上一次输出（截断）：{raw}\n"
                 "请重新严格按 JSON 结构输出，不要包含任何其他文字。".format(
                     error=last_error[:300], raw=raw[:4000]
-                ),
+                )
             )
+            messages = _task_messages(prompt, f"{extra}\n{repair}" if extra else repair)
         try:
             raw = await llm.complete(
                 messages,
@@ -798,7 +875,7 @@ def _persist_task_results(
         if not summary:
             # Validate before writing the partial kinds: a missing summary makes
             # the whole recording fail, so avoid leaving orphan analysis rows.
-            raise AnalysisError("AI 纪要缺少 summary_md 字段")
+            raise AnalysisError("AI 纪要结果缺少「会议概述（summary_md）」字段")
         upsert_analysis(db, recording_id, "summary", summary, provider, model)
         written.append("summary")
         insights = sanitize_insights(payload_dict.get("insights"))
@@ -826,6 +903,37 @@ def _persist_task_results(
         upsert_analysis(db, recording_id, "suggested_questions", questions, provider, model)
         written.append("suggested_questions")
     return written
+
+
+def _persist_minutes_fallback(
+    db: Session,
+    recording_id: int,
+    payload: Any,
+    transcript: str,
+    *,
+    provider: str,
+    model: str,
+) -> None:
+    """Persist a usable summary when the model repeatedly omits summary fields."""
+    excerpt = (transcript or "").strip()[:1400]
+    markdown = (
+        "## 会议概述\n\n"
+        "> AI 模型未返回完整的结构化纪要，以下为转录摘录，供先阅读；可点击「重新生成 AI 分析」再次尝试。\n\n"
+        f"{excerpt}"
+    )
+    upsert_analysis(db, recording_id, "summary", {"markdown": markdown}, provider, model)
+    payload_dict = _as_dict(payload)
+    for kind, sanitizer, key in (
+        ("insights", sanitize_insights, "insights"),
+        ("action_items", sanitize_action_items, "action_items"),
+        ("keywords", sanitize_keywords, "keywords"),
+    ):
+        try:
+            value = sanitizer(payload_dict.get(key))
+        except Exception:  # noqa: BLE001 - partial salvage only
+            value = None
+        if value:
+            upsert_analysis(db, recording_id, kind, value, provider, model)
 
 
 async def generate_analyses(
@@ -870,27 +978,69 @@ async def generate_analyses(
             prompt = render_prompt(
                 "TASK={task}\n请基于以下转录稿生成 JSON。\n{transcript}".replace("{task}", task), transcript
             )
+        payload: Any = None
         try:
-            payload = await _complete_json(llm, prompt, task, float(cfg.llm.temperature or 0.3))
-            kinds = _persist_task_results(
-                db,
-                recording.id,
-                task,
-                payload,
-                provider=provider_name,
-                model=model_name,
-                duration_ms=duration_ms,
-                speakers=speakers,
-            )
-            written.extend(kinds)
-            logger.info("analysis task %s ok (kinds=%s)", task, ",".join(kinds))
+            temperature = float(cfg.llm.temperature or 0.3)
+            payload = await _complete_json(llm, prompt, task, temperature)
+            # A valid JSON document can still miss required fields. Give the model
+            # one targeted correction attempt with the exact expected schema before
+            # degrading this task (this is what turns "缺少字段" into a useful result).
+            for schema_attempt in range(MAX_TASK_ATTEMPTS):
+                try:
+                    kinds = _persist_task_results(
+                        db,
+                        recording.id,
+                        task,
+                        payload,
+                        provider=provider_name,
+                        model=model_name,
+                        duration_ms=duration_ms,
+                        speakers=speakers,
+                    )
+                except AnalysisError as schema_error:
+                    if schema_attempt + 1 < MAX_TASK_ATTEMPTS:
+                        logger.warning(
+                            "analysis task %s output missing required fields (attempt %s): %s; retrying with schema",
+                            task,
+                            schema_attempt + 1,
+                            schema_error,
+                        )
+                        payload = await _complete_json(
+                            llm,
+                            prompt,
+                            task,
+                            temperature,
+                            extra=_schema_retry_message(task, str(schema_error), payload),
+                        )
+                        continue
+                    raise
+                written.extend(kinds)
+                logger.info("analysis task %s ok (kinds=%s)", task, ",".join(kinds))
+                break
         except AnalysisCancelled:
             raise
         except AnalysisError as exc:
             if spec["critical"]:
-                raise
-            failed.append(task)
-            logger.warning("analysis task %s failed: %s", task, exc)
+                # Keep the recording usable when the model persistently omits the
+                # summary structure: fall back to a transcript excerpt. Provider/auth
+                # failures still fail loudly so the user can fix configuration.
+                if task == "minutes" and not str(exc).startswith("模型调用失败"):
+                    _persist_minutes_fallback(
+                        db,
+                        recording.id,
+                        payload,
+                        transcript,
+                        provider=provider_name,
+                        model=model_name,
+                    )
+                    written.append("summary")
+                    failed.append(task)
+                    logger.warning("minutes fallback summary written: %s", exc)
+                else:
+                    raise
+            else:
+                failed.append(task)
+                logger.warning("analysis task %s failed: %s", task, exc)
         except Exception as exc:  # noqa: BLE001 - never let one kind kill the pipeline
             if spec["critical"]:
                 raise AnalysisError(f"AI 纪要生成失败：{type(exc).__name__}") from exc

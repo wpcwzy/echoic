@@ -2,6 +2,17 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.3.14] - 2026-10-28
+
+### 修复 / 体验改进
+
+- **AI 分析字段缺失不再直接失败**：解析出合法 JSON 但缺少必需字段时，会带着明确的目标 schema 自动让模型重试一次；仍然缺字段时——
+  - `minutes`（关键任务）自动用转录摘录生成一份可读的「会议概述」兜底摘要，录音仍进入 ready，不再整条处理失败（API Key/网络等 provider 错误仍会明确报错，便于修复配置）；
+  - `chapters` / `viewpoint_tree` / `suggested_questions` 标记为未生成并继续完成其他任务；前端详情页与 AI 纪要页会显示「部分 AI 内容未生成：章节、观点树…」提示，并提供「重新生成」；处理失败页新增「仅重试 AI 分析」，不用重新转写。
+- **更宽容的结构解析**：summary 支持嵌套 `summary/markdown/content/text`；chapters 支持 `chapters/items/outline/sections/data` 顶层键及 `heading/name/description/points/key_points` 等字段别名；减少因模型字段命名不同导致的失败。
+- LLM 输出被截断时继续记录 `finish_reason=length` 警告（v0.3.9 能力保留）。
+- 新增 3 个 schema 恢复/兜底测试；全量后端 462 passed。
+
 ## [0.3.13] - 2026-10-28
 
 ### 新增

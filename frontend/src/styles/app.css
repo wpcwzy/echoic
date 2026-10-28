@@ -8043,3 +8043,9 @@ mark {
 .tag-editor__hint {
   margin: 10px 0 0;
 }
+
+
+/* v0.3.14: friendly partial-analysis warning */
+.analysis-warning {
+  margin-bottom: 16px;
+}

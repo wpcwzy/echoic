@@ -6,6 +6,7 @@ import {
   LoadingOutlined,
   ReloadOutlined,
   StopOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons'
 import { stageHint, stageLabel } from '../../theme'
 import type { RecordingDetail } from '../../types'
@@ -16,6 +17,8 @@ const STEPS = ['preparing', 'transcribing', 'analyzing', 'embedding', 'finalizin
 interface ProcessingCardProps {
   recording: RecordingDetail
   onRetry?: () => void
+  /** Reprocess only the AI analysis stage (keeps the existing transcript). */
+  onRetryInsights?: () => void
   onCancel?: () => void
   retryLoading?: boolean
 }
@@ -24,7 +27,13 @@ interface ProcessingCardProps {
  * Shown while a recording is uploading/queued/processing or after a failure:
  * stage timeline, progress bar and retry/cancel affordances.
  */
-export function ProcessingCard({ recording, onRetry, onCancel, retryLoading }: ProcessingCardProps) {
+export function ProcessingCard({
+  recording,
+  onRetry,
+  onRetryInsights,
+  onCancel,
+  retryLoading,
+}: ProcessingCardProps) {
   const cancelled = recording.status === 'cancelled'
   const failed = recording.status === 'failed'
   const activeStepIndex = Math.max(0, STEPS.indexOf(recording.stage as (typeof STEPS)[number]))
@@ -116,6 +125,11 @@ export function ProcessingCard({ recording, onRetry, onCancel, retryLoading }: P
               {onRetry && (
                 <Button type="primary" icon={<ReloadOutlined />} loading={retryLoading} onClick={onRetry}>
                   重新处理
+                </Button>
+              )}
+              {onRetryInsights && failed && recording.has_transcript && (
+                <Button icon={<ThunderboltOutlined />} loading={retryLoading} onClick={onRetryInsights}>
+                  仅重试 AI 分析
                 </Button>
               )}
               <Button onClick={() => window.location.reload()}>刷新页面</Button>

@@ -1,4 +1,4 @@
-import { Button, Tooltip } from 'antd'
+import { Alert, Button, Tooltip } from 'antd'
 import { ReloadOutlined, RobotOutlined, ThunderboltOutlined, BulbOutlined, CheckSquareOutlined, TagsOutlined } from '@ant-design/icons'
 import type { Insights, RecordingStatus } from '../../types'
 import { analysisKindLabel } from '../../theme'
@@ -89,6 +89,23 @@ export function SummaryTab({
 
   return (
     <div className="summary-tab">
+      {missingContentKinds.length > 0 && (
+        <Alert
+          className="analysis-warning"
+          type="warning"
+          showIcon
+          message="部分 AI 内容未生成"
+          description={`缺少：${missingContentKinds.map((kind) => analysisKindLabel[kind] ?? kind).join('、')}。这是模型输出格式不完整时的自动降级，不影响录音与转录；可以重试 AI 分析。`}
+          action={
+            readOnly ? undefined : (
+              <Button size="small" loading={regenerating} onClick={() => onRegenerate()}>
+                重新生成
+              </Button>
+            )
+          }
+        />
+      )}
+
       <section className="summary-card">
         <header className="summary-card__head">
           <div className="summary-card__title">
