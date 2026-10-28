@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.3.13] - 2026-10-28
+
+### 新增
+
+- **PWA / 手机添加到主屏幕**：新增 Web App Manifest、192/512 图标与 maskable 图标、apple-touch-icon、Service Worker（应用外壳缓存；API/媒体/SSE 永不缓存）与主题色/安全区 meta；手机 Chrome/Safari 可安装为独立窗口应用，移动端底部导航与现有响应式布局直接复用。`/manifest.webmanifest` 与 `/sw.js` 由后端显式提供正确 MIME 与 no-cache 头；离线仅能打开应用外壳，数据操作仍需联网。需 HTTPS（localhost 例外）。
+- 文档新增手机安装说明与排障；README 功能表补充 PWA。
+
 ## [0.3.12] - 2026-10-28
 
 ### 新增

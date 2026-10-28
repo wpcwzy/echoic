@@ -171,6 +171,30 @@ def create_app() -> FastAPI:
         if assets.is_dir():
             app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
+        @app.get("/manifest.webmanifest", include_in_schema=False)
+        async def _pwa_manifest():
+            file = static_dir / "manifest.webmanifest"
+            if not file.is_file():
+                return JSONResponse(status_code=404, content={"detail": "manifest 不存在", "code": "NOT_FOUND"})
+            return FileResponse(
+                file,
+                media_type="application/manifest+json",
+                headers={"Cache-Control": "no-cache"},
+            )
+
+        @app.get("/sw.js", include_in_schema=False)
+        async def _service_worker():
+            file = static_dir / "sw.js"
+            if not file.is_file():
+                return JSONResponse(status_code=404, content={"detail": "service worker 不存在", "code": "NOT_FOUND"})
+            # no-cache lets browsers discover new app-shell versions promptly;
+            # Service-Worker-Allowed keeps the worker scoped to the whole app.
+            return FileResponse(
+                file,
+                media_type="application/javascript",
+                headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+            )
+
         @app.get("/{full_path:path}", include_in_schema=False)
         async def _spa(full_path: str):
             if full_path.startswith("api/"):

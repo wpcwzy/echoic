@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Echoic · 私人会议录音知识库",
+  "short_name": "Echoic",
+  "description": "本地部署的会议录音与视频知识库：自动转写、AI 纪要、说话人分离、语义搜索与问答。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#f5f6f7",
+  "theme_color": "#1677ff",
+  "categories": ["productivity", "business", "utilities"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "开始录音", "short_name": "录音", "url": "/record", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "资料库", "short_name": "资料库", "url": "/", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

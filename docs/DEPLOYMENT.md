@@ -498,6 +498,19 @@ docker compose --profile postgres --profile worker up -d
 
 ---
 
+### 9.4 手机安装为 PWA
+
+Echoic 自带 Web App Manifest + Service Worker，可作为 PWA 添加到手机主屏幕：
+
+- **Android Chrome**：打开 Echoic → 菜单「添加到主屏幕 / 安装应用」；
+- **iOS Safari**：分享菜单 →「添加到主屏幕」；
+- 安装后以独立窗口运行（无浏览器地址栏），复用移动端底部导航与安全区布局；
+- Service Worker 只缓存**应用外壳**（index、JS/CSS、图标、manifest），**不缓存录音、转录、问答等 API 数据**；离线时能打开界面，数据操作仍需联网；
+- **必须 HTTPS**（浏览器安全上下文要求；`localhost` 例外），反向代理请正确传递 `X-Forwarded-Proto`；
+- 升级后若手机仍显示旧界面，关闭并重新打开一次（或清除站点数据），Service Worker 会拉取新的 `sw.js` / 资源。
+
+---
+
 ## 10. 对象存储（S3 / MinIO，v0.3.0）
 
 v0.3.0 新增**存储抽象**：媒体文件可外置到 S3 兼容对象存储，DB/密钥/consume 仍保留在 `/data`。

@@ -15,6 +15,16 @@ import './styles/app.css'
 
 dayjs.locale('zh-cn')
 
+// PWA: cache the app shell so Echoic can be installed to the home screen and reopened offline.
+// API responses are never cached by the service worker; see public/sw.js.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      /* service worker is optional (e.g. insecure origins / unsupported browsers) */
+    })
+  })
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

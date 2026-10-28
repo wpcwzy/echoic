@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Echoic"
-    version: str = "0.3.12"
+    version: str = "0.3.13"
     debug: bool = False
     log_level: str = "INFO"
 

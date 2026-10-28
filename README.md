@@ -11,7 +11,7 @@
 > Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
 - Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
-- Version: **v0.3.12** — P1 complete + sqlite-vec, live captions GA, registration/profile, auto descriptions (dark theme, trash & batch, object storage, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
+- Version: **v0.3.13** — P1 complete + sqlite-vec, live captions GA, registration/profile, auto descriptions (dark theme, trash & batch, object storage, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
 - License: MIT
 
 ## 📸 Screenshots
@@ -82,6 +82,7 @@
 | 🔎 Semantic & hybrid search | Vector index over transcript chunks (numpy / **sqlite-vec** / experimental pgvector with auto-degrade), hybrid RRF retrieval with ACL; semantic search UI, index status/rebuild, hybrid RAG for AI Q&A |
 | 📤 Export | Transcript export as TXT / SRT / Markdown / JSON |
 | 🐳 One-command deploy | Prebuilt multi-arch **GHCR image** (amd64/arm64, published by CI) + image-first docker compose: `pull && up -d`; source builds supported; optional standalone worker / PostgreSQL |
+| 📱 Installable PWA | Add Echoic to the phone home screen from Chrome/Safari; standalone display, app-shell offline cache, mobile bottom navigation and safe-area support (HTTPS required) |
 
 ---
 
