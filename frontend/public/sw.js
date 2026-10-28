@@ -1,5 +1,5 @@
 /* Echoic PWA service worker: app-shell cache only; authenticated API data is never cached. */
-const CACHE_NAME = 'echoic-shell-v1'
+const CACHE_NAME = 'echoic-shell-v2'
 const CORE_ASSETS = [
   '/',
   '/manifest.webmanifest',
@@ -8,6 +8,7 @@ const CORE_ASSETS = [
   '/icons/icon-512.png',
   '/icons/icon-maskable-512.png',
   '/icons/apple-touch-icon.png',
+  '/icons/favicon-32.png',
 ]
 
 self.addEventListener('install', (event) => {

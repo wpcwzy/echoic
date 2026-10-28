@@ -528,6 +528,19 @@ docker compose --profile postgres --profile worker up -d
 - 开启后长视频处理时间略增（场景检测本身很快，主要成本仍是 `playback.mp4` 转码）；
 - 分镜属于「展示增强」，丢失/为空不影响播放、转写、AI 分析与搜索；如需关闭可设 `ECHOIC_SCENE_DETECTION_ENABLED=false` 并重启。
 
+### 9.4.1 PWA 图标（Echoic logo）
+
+- 安装到主屏幕使用的图标与应用内 logo 一致（圆角渐变底 + 白色声波），由 `scripts/render_pwa_icons.mjs` 生成：
+  - `frontend/public/icons/icon-192.png` / `icon-512.png`（purpose any）
+  - `frontend/public/icons/icon-maskable-512.png`（purpose maskable，图形位于 80% 安全区内）
+  - `frontend/public/icons/apple-touch-icon.png`（iOS）、`icons/favicon-32.png`、`favicon.svg`
+- 修改品牌色或图形后重新生成（需要仓库内 Playwright）：
+  ```bash
+  PLAYWRIGHT_BROWSERS_PATH=.cache/ms-playwright node scripts/render_pwa_icons.mjs
+  cd frontend && npm run build
+  ```
+- `frontend/public/sw.js` 的 `CACHE_NAME` 变更会使已安装 PWA 刷新图标缓存（当前 `echoic-shell-v2`）。
+
 ### 9.4 手机安装为 PWA
 
 Echoic 自带 Web App Manifest + Service Worker，可作为 PWA 添加到手机主屏幕：

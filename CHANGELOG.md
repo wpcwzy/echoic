@@ -2,6 +2,13 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.0.4] - 2026-10-29
+
+### 改进
+
+- **PWA 安装图标改为 Echoic logo**：此前使用的是通用麦克风图标。现在 192/512（普通）、512（可遮罩 maskable，图形位于安全区内）、180（Apple touch）、32（favicon）以及 `favicon.svg` 全部由应用内品牌图标（圆角渐变底 + 白色声波）生成；新增 `scripts/render_pwa_icons.mjs`（Playwright 渲染 + PNG 尺寸校验）作为唯一生成来源，避免以后与界面 logo 不一致。
+- Service Worker 缓存版本升级到 `echoic-shell-v2` 并把 favicon 纳入预缓存，已安装的 PWA 刷新后可获取新图标。
+
 ## [1.0.3] - 2026-10-28
 
 ### 改进

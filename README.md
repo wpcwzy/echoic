@@ -11,7 +11,7 @@
 > Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
 - Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
-- Version: **v1.0.3** — production-ready P1: multi-user collaboration, dark theme, trash/batch, object storage, live captions GA, vector/hybrid search (numpy / sqlite-vec / pgvector / Qdrant), PWA, video playback & scene extraction, audit logs, auto descriptions (CI/CD + multi-arch GHCR images)
+- Version: **v1.0.4** — production-ready P1: multi-user collaboration, dark theme, trash/batch, object storage, live captions GA, vector/hybrid search (numpy / sqlite-vec / pgvector / Qdrant), PWA, video playback & scene extraction, audit logs, auto descriptions (CI/CD + multi-arch GHCR images)
 - License: MIT
 
 ## 📸 Screenshots
@@ -102,7 +102,7 @@
 | 🔎 Semantic & hybrid search | Vector index over transcript chunks (numpy / **sqlite-vec** / experimental pgvector with auto-degrade), hybrid RRF retrieval with ACL; semantic search UI, index status/rebuild, hybrid RAG for AI Q&A |
 | 📤 Export | Transcript export as TXT / SRT / Markdown / JSON |
 | 🐳 One-command deploy | Prebuilt multi-arch **GHCR image** (amd64/arm64, published by CI) + image-first docker compose: `pull && up -d`; source builds supported; optional standalone worker / PostgreSQL |
-| 📱 Installable PWA | Add Echoic to the phone home screen from Chrome/Safari; standalone display, app-shell offline cache, mobile bottom navigation and safe-area support (HTTPS required) |
+| 📱 Installable PWA | Add Echoic to the phone home screen from Chrome/Safari; standalone display, app-shell offline cache, mobile bottom navigation and safe-area support; home-screen icon is the Echoic logo (any/maskable/apple variants, regenerate with `node scripts/render_pwa_icons.mjs`) (HTTPS required) |
 
 ---
 

@@ -11,7 +11,7 @@
 > 上传或网页录制声音，自动获得**转录稿、AI 纪要、观点树 & 思维导图、章节、关键洞察、待办与 AI 问答**——所有数据都留在你自己的服务器上。
 
 - 定位：paperless-ngx 之于纸质文档 = **Echoic 之于录音**
-- 版本：**v1.0.3**（P1 生产可用：多用户协作、暗色主题、回收站批量、对象存储、实时字幕 GA、向量/混合检索（numpy/sqlite-vec/pgvector/Qdrant）、PWA、视频回放与场景抽取、审计日志、自动描述；CI + GHCR 多架构镜像）
+- 版本：**v1.0.4**（P1 生产可用：多用户协作、暗色主题、回收站批量、对象存储、实时字幕 GA、向量/混合检索（numpy/sqlite-vec/pgvector/Qdrant）、PWA、视频回放与场景抽取、审计日志、自动描述；CI + GHCR 多架构镜像）
 - 许可：MIT
 
 ## 📸 界面预览
@@ -102,7 +102,7 @@
 | 🔎 语义与混合检索 | 转录切片向量索引（numpy / **sqlite-vec** / 实验性 pgvector，自动降级）+ RRF 混合检索与 ACL；搜索页语义/混合模式、索引状态与重建、AI 问答混合 RAG |
 | 📤 数据导出 | 转录稿导出 TXT / SRT / Markdown / JSON |
 | 🐳 一键部署 | **GHCR 预构建多架构镜像**（amd64/arm64，CI 自动发布）+ docker compose 镜像优先部署，`pull && up -d` 即用；亦可源码构建；可切独立 worker / PostgreSQL |
-| 📱 可安装 PWA | 手机 Chrome/Safari 可「添加到主屏幕」；独立窗口运行、应用外壳离线缓存、移动端底部导航与安全区适配（需 HTTPS） |
+| 📱 可安装 PWA | 手机 Chrome/Safari 可「添加到主屏幕」；独立窗口运行、应用外壳离线缓存、移动端底部导航与安全区适配；**主屏幕图标为 Echoic logo**（普通/可遮罩/Apple 规格，可用 `node scripts/render_pwa_icons.mjs` 重新生成）（需 HTTPS） |
 
 ---
 
