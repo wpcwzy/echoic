@@ -450,7 +450,12 @@ export default function PublicSharePage() {
           </div>
         </section>
 
-        <AudioPlayerProvider recordingId={0} durationMs={recording.duration_ms} src={publicMediaUrl(token)}>
+        <AudioPlayerProvider
+          recordingId={0}
+          durationMs={recording.duration_ms}
+          mediaType={recording.media_type}
+          src={publicMediaUrl(token)}
+        >
           <PublicWorkspace
             token={token}
             share={share!}

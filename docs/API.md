@@ -407,4 +407,5 @@ data: {"type":"done","message_id":42}
 
 - `GET /api/system/features`（登录）：`{live:{enabled,provider,max_minutes,merge_mode},vector:{backend,search_enabled,embeddings_configured},storage:{backend},trash:{retention_days}}`，供前端能力探测。
 - `GET /api/system/health` 新增 `storage/storage_backend/storage_detail` 字段；对象存储不可用时整体 `degraded`。
+- 视频录音的 `/media` 直接流式返回原始视频（`video/mp4` 等，支持 Range），前端使用原生 `<video>` 播放；音频仍优先返回 `playback.m4a`。
 - 对象存储：`ECHOIC_STORAGE_BACKEND=local|s3` + `ECHOIC_S3_*`；S3/MinIO 模式支持上传、管线 staging、Range 媒体代理（可选 307 预签名）、删除与迁移 CLI `python -m app.tools.storage_migrate --from local --to s3 --dry-run|--apply|--verify`。

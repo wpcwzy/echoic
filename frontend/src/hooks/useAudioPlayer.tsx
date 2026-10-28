@@ -13,6 +13,10 @@ import { mediaUrl } from '../api/queries'
 
 interface AudioPlayerContextValue {
   mediaUrl: string
+  /** True for recordings whose editable media is a video file. */
+  isVideo: boolean
+  /** Attach the <video> element rendered by the player card (video recordings only). */
+  attachMediaElement: (element: HTMLMediaElement | null) => void
   /** Media metadata has loaded and playback is possible. */
   ready: boolean
   /** False when the media request failed (e.g. demo metadata without a file). */
@@ -43,19 +47,30 @@ function readStoredRate(): number {
 interface AudioPlayerProviderProps {
   recordingId: number
   durationMs: number
+  mediaType?: 'audio' | 'video'
   /** Override the media URL (used by public share pages). */
   src?: string
   children: ReactNode
 }
 
 /**
- * Wraps the native <audio> element and exposes a shared playback cursor so the
- * player card, transcript, viewpoint tree, chapters and AI citations stay in sync.
+ * Wraps the native <audio>/<video> element and exposes a shared playback cursor
+ * so the player card, transcript, viewpoint tree, chapters and AI citations stay
+ * in sync. Video recordings render a real <video> element inside the player card;
+ * audio recordings keep a hidden <audio> element in the provider.
  */
-export function AudioPlayerProvider({ recordingId, durationMs: apiDuration, src, children }: AudioPlayerProviderProps) {
+export function AudioPlayerProvider({
+  recordingId,
+  durationMs: apiDuration,
+  mediaType = 'audio',
+  src,
+  children,
+}: AudioPlayerProviderProps) {
   const resolvedSrc = src ?? mediaUrl(recordingId)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const isVideo = mediaType === 'video'
+  const mediaRef = useRef<HTMLMediaElement | null>(null)
   const pendingSeekRef = useRef<number | null>(null)
+  const [mediaVersion, setMediaVersion] = useState(0)
   const [ready, setReady] = useState(false)
   const [hasMedia, setHasMedia] = useState(true)
   const [playing, setPlaying] = useState(false)
@@ -67,27 +82,73 @@ export function AudioPlayerProvider({ recordingId, durationMs: apiDuration, src,
     setDurationMs((prev) => (apiDuration > 0 ? apiDuration : prev))
   }, [apiDuration])
 
+  const attachMediaElement = useCallback((element: HTMLMediaElement | null) => {
+    mediaRef.current = element
+    setMediaVersion((value) => value + 1)
+  }, [])
+
   // Apply restored playback rate as soon as the element exists / metadata loads.
   useEffect(() => {
-    if (audioRef.current) audioRef.current.playbackRate = rate
-  }, [rate, ready])
+    if (mediaRef.current) mediaRef.current.playbackRate = rate
+  }, [rate, ready, mediaVersion])
+
+  // Bind playback events to whichever element is attached (audio or video).
+  useEffect(() => {
+    const media = mediaRef.current
+    if (!media) return
+    const onLoadedMetadata = () => {
+      setReady(true)
+      setHasMedia(true)
+      if (Number.isFinite(media.duration) && media.duration > 0) {
+        setDurationMs(Math.round(media.duration * 1000))
+      }
+      if (pendingSeekRef.current !== null) {
+        media.currentTime = pendingSeekRef.current / 1000
+        pendingSeekRef.current = null
+      }
+      media.playbackRate = rate
+    }
+    const onTimeUpdate = () => setCurrentMs(media.currentTime * 1000)
+    const onPlay = () => setPlaying(true)
+    const onPause = () => setPlaying(false)
+    const onEnded = () => setPlaying(false)
+    const onError = () => {
+      setHasMedia(false)
+      setReady(false)
+    }
+    media.addEventListener('loadedmetadata', onLoadedMetadata)
+    media.addEventListener('timeupdate', onTimeUpdate)
+    media.addEventListener('play', onPlay)
+    media.addEventListener('pause', onPause)
+    media.addEventListener('ended', onEnded)
+    media.addEventListener('error', onError)
+    if (media.readyState >= 1) onLoadedMetadata()
+    return () => {
+      media.removeEventListener('loadedmetadata', onLoadedMetadata)
+      media.removeEventListener('timeupdate', onTimeUpdate)
+      media.removeEventListener('play', onPlay)
+      media.removeEventListener('pause', onPause)
+      media.removeEventListener('ended', onEnded)
+      media.removeEventListener('error', onError)
+    }
+  }, [mediaVersion, rate])
 
   const seekTo = useCallback(
     (ms: number, options?: { play?: boolean }) => {
       const target = Math.max(0, Math.min(ms, Number.isFinite(durationMs) ? durationMs : ms))
-      const audio = audioRef.current
+      const media = mediaRef.current
       setCurrentMs(target)
-      if (!hasMedia || !audio) {
+      if (!hasMedia || !media) {
         if (!hasMedia) toast.info('该录音暂无媒体文件，无法定位播放')
         return
       }
       if (!ready) {
         pendingSeekRef.current = target
       } else {
-        audio.currentTime = target / 1000
+        media.currentTime = target / 1000
       }
       if (options?.play) {
-        void audio.play().catch(() => {
+        void media.play().catch(() => {
           toast.warning('浏览器阻止了自动播放，请手动点击播放')
         })
       }
@@ -97,23 +158,23 @@ export function AudioPlayerProvider({ recordingId, durationMs: apiDuration, src,
 
   const seekBy = useCallback(
     (deltaMs: number) => {
-      const audio = audioRef.current
-      const from = ready && audio ? audio.currentTime * 1000 : currentMs
+      const media = mediaRef.current
+      const from = ready && media ? media.currentTime * 1000 : currentMs
       seekTo(from + deltaMs)
     },
     [currentMs, ready, seekTo],
   )
 
   const toggle = useCallback(() => {
-    const audio = audioRef.current
-    if (!audio || !hasMedia) {
+    const media = mediaRef.current
+    if (!media || !hasMedia) {
       toast.info('该录音暂无媒体文件，无法播放')
       return
     }
-    if (audio.paused) {
-      void audio.play().catch(() => toast.warning('播放失败，请稍后重试'))
+    if (media.paused) {
+      void media.play().catch(() => toast.warning('播放失败，请稍后重试'))
     } else {
-      audio.pause()
+      media.pause()
     }
   }, [hasMedia])
 
@@ -124,19 +185,21 @@ export function AudioPlayerProvider({ recordingId, durationMs: apiDuration, src,
     } catch {
       /* ignore */
     }
-    if (audioRef.current) audioRef.current.playbackRate = next
+    if (mediaRef.current) mediaRef.current.playbackRate = next
   }, [])
 
   useEffect(() => {
-    const audio = audioRef.current
+    const media = mediaRef.current
     return () => {
-      if (audio) audio.pause()
+      if (media) media.pause()
     }
   }, [])
 
   const value = useMemo<AudioPlayerContextValue>(
     () => ({
       mediaUrl: resolvedSrc,
+      isVideo,
+      attachMediaElement,
       ready,
       hasMedia,
       playing,
@@ -148,39 +211,34 @@ export function AudioPlayerProvider({ recordingId, durationMs: apiDuration, src,
       toggle,
       setRate,
     }),
-    [currentMs, durationMs, hasMedia, playing, rate, ready, resolvedSrc, seekBy, seekTo, setRate, toggle],
+    [
+      currentMs,
+      durationMs,
+      hasMedia,
+      isVideo,
+      playing,
+      rate,
+      ready,
+      resolvedSrc,
+      seekBy,
+      seekTo,
+      setRate,
+      toggle,
+      attachMediaElement,
+    ],
   )
 
   return (
     <AudioPlayerContext.Provider value={value}>
       {children}
-      <audio
-        ref={audioRef}
-        src={resolvedSrc}
-        preload="metadata"
-        className="echoic-audio-element"
-        onLoadedMetadata={(event) => {
-          const element = event.currentTarget
-          setReady(true)
-          setHasMedia(true)
-          if (Number.isFinite(element.duration) && element.duration > 0) {
-            setDurationMs(Math.round(element.duration * 1000))
-          }
-          if (pendingSeekRef.current !== null) {
-            element.currentTime = pendingSeekRef.current / 1000
-            pendingSeekRef.current = null
-          }
-          element.playbackRate = rate
-        }}
-        onTimeUpdate={(event) => setCurrentMs(event.currentTarget.currentTime * 1000)}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
-        onError={() => {
-          setHasMedia(false)
-          setReady(false)
-        }}
-      />
+      {!isVideo && (
+        <audio
+          ref={(element) => attachMediaElement(element)}
+          src={resolvedSrc}
+          preload="metadata"
+          className="echoic-audio-element"
+        />
+      )}
     </AudioPlayerContext.Provider>
   )
 }

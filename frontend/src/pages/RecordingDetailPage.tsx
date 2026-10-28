@@ -145,7 +145,12 @@ export default function RecordingDetailPage() {
   }
 
   return (
-    <AudioPlayerProvider key={recordingId} recordingId={recordingId} durationMs={recording.duration_ms || 0}>
+    <AudioPlayerProvider
+      key={recordingId}
+      recordingId={recordingId}
+      durationMs={recording.duration_ms || 0}
+      mediaType={recording.media_type}
+    >
       <DetailWorkspace key={recordingId} recording={recording} />
     </AudioPlayerProvider>
   )

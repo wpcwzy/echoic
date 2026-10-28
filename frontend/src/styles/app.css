@@ -8049,3 +8049,20 @@ mark {
 .analysis-warning {
   margin-bottom: 16px;
 }
+
+
+/* v0.3.15: video playback for uploaded video recordings */
+.player-video {
+  margin: 0 0 14px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+
+.player-video__element {
+  display: block;
+  width: 100%;
+  max-height: min(56vh, 520px);
+  background: #000;
+  object-fit: contain;
+}

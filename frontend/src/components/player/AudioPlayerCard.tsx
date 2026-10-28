@@ -26,7 +26,7 @@ interface AudioPlayerCardProps {
  * ticks), speaker avatars, ±15s / play, playback rate and more menu.
  */
 export function AudioPlayerCard({ recording, speakers, chapters }: AudioPlayerCardProps) {
-  const { currentMs, durationMs, playing, rate, hasMedia, toggle, seekBy, seekTo, setRate } = useAudioPlayer()
+  const { currentMs, durationMs, playing, rate, hasMedia, isVideo, attachMediaElement, mediaUrl: mediaSrc, toggle, seekBy, seekTo, setRate } = useAudioPlayer()
   const trackRef = useRef<HTMLDivElement | null>(null)
   const [dragMs, setDragMs] = useState<number | null>(null)
 
@@ -74,7 +74,19 @@ export function AudioPlayerCard({ recording, speakers, chapters }: AudioPlayerCa
   ]
 
   return (
-    <section className={`player-card ${disabled ? 'player-card--no-media' : ''}`} aria-label="录音播放器">
+    <section className={`player-card ${disabled ? 'player-card--no-media' : ''}`} aria-label={isVideo ? '视频播放器' : '录音播放器'}>
+      {isVideo && (
+        <div className="player-video">
+          <video
+            ref={(element) => attachMediaElement(element)}
+            className="player-video__element"
+            src={mediaSrc}
+            controls
+            playsInline
+            preload="metadata"
+          />
+        </div>
+      )}
       <div className="player-card__top">
         <span className="player-card__time">{formatMs(displayMs)}</span>
         <div
