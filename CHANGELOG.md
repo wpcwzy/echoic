@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.0.1] - 2026-10-28
+
+### 修复
+
+- 依赖加入 `httpx[socks]`（`socksio`）：Qdrant 客户端在配置了 SOCKS 代理（如 `all_proxy=socks5://…`）的环境中不再因缺少 SOCKS 支持导入失败；同时 Qdrant 客户端以 `trust_env=False` 创建，不继承全局代理/`NO_PROXY`（避免 `[::1]` 等条目导致 httpx URL 解析失败）；代理异常会自动降级 numpy，不影响服务启动。Docker 镜像重新构建后默认包含该依赖。
+
 ## [1.0.0] - 2026-10-28
 
 ### 新功能

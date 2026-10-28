@@ -931,6 +931,7 @@ ECHOIC_DATA_DIR=/tmp/echoic-e2e ECHOIC_DEMO_SEED=true ECHOIC_SECRET_KEY=e2e-secr
 | v1.0 审计：页面/API 没有记录 | 确认用管理员账号（接口 admin-only）；审计是 best-effort 且只记录写操作（GET 不记录）；登录/上传/删除/设置等操作后刷新查看；`GET /api/system/audit-logs` 支持按 action/target_type 过滤 |
 | v1.0 实时长稳：soak 退出码 1/2 | 退出码 1=跑满但出现 provider 错误/重连（看报告 `provider_errors/drops`，多为网络/配额）；2=未开始或不可恢复（Key 缺失、首次连接失败、音频/ffmpeg 问题）；0 才是 60 分钟通过证据。报告在 `e2e/` 或 `.cache/`，见 §11.4 |
 | 登录 429 | 登录限速 5 次/分钟/IP；等待 1 分钟，或确认反向代理传递了真实 `X-Forwarded-For` |
+| Qdrant 状态退化为 numpy | 确认 `ECHOIC_QDRANT_URL` 可达、API Key 正确；v1.0.1 起 Qdrant 客户端不继承全局代理（`trust_env=False`）并包含 `httpx[socks]`，若仍需经代理访问请直接配置可用的 Qdrant 内网/反代地址 |
 | 麦克风无法录音 | 非 HTTPS 且非 localhost 时浏览器禁止 `getUserMedia`；配置 HTTPS 或改用文件上传 |
 | 忘记管理员密码 | 停止服务 → 用 sqlite 删除/重置用户后重启会重建管理员：`docker compose exec echoic python -c "..."`（或恢复备份）；更简单：删除空库重来仅适用于演示数据场景 |
 | API Key 解密失败 | `secret.key` 与数据库不匹配（更换过卷/密钥）；在设置页重新填写 Key |

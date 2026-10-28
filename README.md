@@ -11,7 +11,7 @@
 > Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
 - Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
-- Version: **v1.0.0** — production-ready P1: multi-user collaboration, dark theme, trash/batch, object storage, live captions GA, vector/hybrid search (numpy / sqlite-vec / pgvector / Qdrant), PWA, video playback & scene extraction, audit logs, auto descriptions (CI/CD + multi-arch GHCR images)
+- Version: **v1.0.1** — production-ready P1: multi-user collaboration, dark theme, trash/batch, object storage, live captions GA, vector/hybrid search (numpy / sqlite-vec / pgvector / Qdrant), PWA, video playback & scene extraction, audit logs, auto descriptions (CI/CD + multi-arch GHCR images)
 - License: MIT
 
 ## 📸 Screenshots

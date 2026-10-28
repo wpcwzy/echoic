@@ -1507,7 +1507,11 @@ def _build_qdrant_client():
     except (TypeError, ValueError):
         timeout = 10
     try:
-        return qdrant_client(url=url, api_key=api_key, timeout=timeout)
+        # Do not inherit global proxy env vars (all_proxy/NO_PROXY can contain
+        # entries such as "[::1]" that httpx rejects). Qdrant is normally reached
+        # on a private network; operators can set explicit Qdrant proxies via
+        # ECHOIC_QDRANT_URL/https if needed.
+        return qdrant_client(url=url, api_key=api_key, timeout=timeout, trust_env=False)
     except Exception as exc:  # noqa: BLE001 - bad URL / TLS / client init
         raise VectorStoreUnavailable(
             f"连接 Qdrant 失败：{type(exc).__name__}: {str(exc)[:180]}"
