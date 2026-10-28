@@ -83,6 +83,9 @@ export function AudioPlayerProvider({
   }, [apiDuration])
 
   const attachMediaElement = useCallback((element: HTMLMediaElement | null) => {
+    // React calls inline callback refs on every render; ignore no-op attach
+    // events to avoid a mediaVersion -> render -> ref -> mediaVersion loop.
+    if (mediaRef.current === element) return
     mediaRef.current = element
     setMediaVersion((value) => value + 1)
   }, [])
@@ -233,7 +236,7 @@ export function AudioPlayerProvider({
       {children}
       {!isVideo && (
         <audio
-          ref={(element) => attachMediaElement(element)}
+          ref={attachMediaElement}
           src={resolvedSrc}
           preload="metadata"
           className="echoic-audio-element"

@@ -53,7 +53,7 @@ export function PublicAudioPlayer({ token, speakers, chapters, allowDownload }: 
         <div className="player-video-dock">
           <div className="player-video">
             <video
-              ref={(element) => attachMediaElement(element)}
+              ref={attachMediaElement}
               className="player-video__element"
               src={mediaUrl}
               controls

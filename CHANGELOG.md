@@ -2,6 +2,12 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.0.2] - 2026-10-28
+
+### 修复
+
+- **纯音频录音详情页黑屏**：`AudioPlayerProvider` 中 `<audio>` 使用了内联 callback ref，每次渲染都会 detach/attach 并触发 `mediaVersion` 状态更新，形成「渲染 → ref → 状态更新 → 渲染」的无限循环（React error #185），导致纯音频详情页整页崩溃；视频页未触发该路径。改为稳定 ref + 相同元素无操作保护，同时修复公开分享页音频播放器；已验证音频详情/公开分享页 0 page error、播放器正常，视频页回归正常。
+
 ## [1.0.1] - 2026-10-28
 
 ### 修复

@@ -1,0 +1,12 @@
+import { chromium } from 'playwright';
+import { readFileSync } from 'node:fs';
+const rid=readFileSync('/home/wpcwzy/echoic/.cache/video-rid.txt','utf8').trim(); const base='http://127.0.0.1:8136';
+const browser=await chromium.launch(); const page=await browser.newPage({viewport:{width:1680,height:1000}});
+const errors=[]; page.on('pageerror',e=>errors.push(String(e).slice(0,300)));
+await page.goto(base+'/login',{waitUntil:'networkidle'}); await page.fill('input#username, input[type="text"]','admin'); await page.fill('input[type="password"]','admin123'); await page.click('button[type="submit"]'); await page.waitForURL(u=>!u.pathname.includes('login'),{timeout:20000}).catch(()=>{});
+await page.goto(base+'/r/'+rid,{waitUntil:'networkidle'}); await page.waitForTimeout(2000);
+const info=await page.evaluate(()=>({video:document.querySelectorAll('video.player-video__element').length, scenes:document.querySelectorAll('.video-scene-strip__item, [class*=scene]').length, text:document.body.innerText.slice(0,80)}));
+console.log('info',JSON.stringify(info),'errors',errors);
+await page.evaluate(()=>{document.querySelector('.detail-scroll').scrollTop=500}); await page.waitForTimeout(400);
+await page.screenshot({path:'/home/wpcwzy/echoic/.cache/video-regress.png'});
+await browser.close();

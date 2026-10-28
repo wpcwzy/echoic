@@ -80,7 +80,7 @@ export function AudioPlayerCard({ recording, speakers, chapters }: AudioPlayerCa
         <div className="player-video-dock">
           <div className="player-video">
             <video
-              ref={(element) => attachMediaElement(element)}
+              ref={attachMediaElement}
               className="player-video__element"
               src={mediaSrc}
               controls
