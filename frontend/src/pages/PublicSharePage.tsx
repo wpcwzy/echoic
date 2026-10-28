@@ -64,7 +64,7 @@ function PublicHeader() {
         <BrandMark size={30} />
         <span className="public-brand__name">Echoic</span>
         <span className="public-header__divider" />
-        <span className="public-header__label">分享的录音</span>
+        <span className="public-header__label">私人会议录音知识库</span>
       </div>
       <div className="public-header__right">
         <Tag color="blue" bordered={false}>
@@ -79,7 +79,7 @@ function PublicFooter() {
   return (
     <footer className="public-footer">
       <BrandMark size={20} plain />
-      <span>由 Echoic 提供 · 自托管会议录音知识库</span>
+      <span>Echoic · 私人会议录音知识库</span>
     </footer>
   )
 }
@@ -317,7 +317,24 @@ export default function PublicSharePage() {
 
   useEffect(() => {
     if (!meta) return
-    document.title = `${meta.recording.title} · Echoic 分享`
+    const title = `${meta.recording.title} · Echoic 分享`
+    const description = meta.recording.description || 'Echoic · 私人会议录音知识库'
+    document.title = title
+    const setMeta = (name: string, content: string, property = false) => {
+      const selector = `${property ? 'meta[property' : 'meta[name'}="${name}"]`
+      let element = document.head.querySelector<HTMLMetaElement>(selector)
+      if (!element) {
+        element = document.createElement('meta')
+        element.setAttribute(property ? 'property' : 'name', name)
+        document.head.appendChild(element)
+      }
+      element.setAttribute('content', content)
+    }
+    setMeta('description', description)
+    setMeta('og:title', title, true)
+    setMeta('og:description', description, true)
+    setMeta('og:site_name', 'Echoic · 私人会议录音知识库', true)
+    setMeta('og:type', 'article', true)
   }, [meta])
 
   useEffect(() => {
@@ -413,6 +430,7 @@ export default function PublicSharePage() {
       <main className="public-main">
         <section className="public-hero">
           <div className="public-hero__main">
+            <div className="public-hero__slogan">Echoic · 私人会议录音知识库</div>
             <h1 className="public-hero__title">{recording.title}</h1>
             {recording.description && <p className="public-hero__desc">{recording.description}</p>}
             <div className="public-meta">

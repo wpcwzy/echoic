@@ -74,19 +74,22 @@ export function AudioPlayerCard({ recording, speakers, chapters }: AudioPlayerCa
   ]
 
   return (
-    <section className={`player-card ${disabled ? 'player-card--no-media' : ''}`} aria-label={isVideo ? '视频播放器' : '录音播放器'}>
+    <>
       {isVideo && (
-        <div className="player-video">
-          <video
-            ref={(element) => attachMediaElement(element)}
-            className="player-video__element"
-            src={mediaSrc}
-            controls
-            playsInline
-            preload="metadata"
-          />
+        <div className="player-video-dock">
+          <div className="player-video">
+            <video
+              ref={(element) => attachMediaElement(element)}
+              className="player-video__element"
+              src={mediaSrc}
+              controls
+              playsInline
+              preload="metadata"
+            />
+          </div>
         </div>
       )}
+      <section className={`player-card ${disabled ? 'player-card--no-media' : ''}`} aria-label={isVideo ? '视频播放器' : '录音播放器'}>
       <div className="player-card__top">
         <span className="player-card__time">{formatMs(displayMs)}</span>
         <div
@@ -206,6 +209,7 @@ export function AudioPlayerCard({ recording, speakers, chapters }: AudioPlayerCa
       {disabled && (
         <div className="player-card__notice">该录音暂无可用媒体文件（演示数据），播放控制已禁用</div>
       )}
-    </section>
+      </section>
+    </>
   )
 }

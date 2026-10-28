@@ -67,24 +67,34 @@ const STATUS_META = {
   revoked: { label: '已撤销', color: 'default' as const },
 }
 
-function copyText(text: string): void {
+function copyText(text: string, successMessage = '链接已复制到剪贴板'): void {
   if (navigator.clipboard?.writeText) {
     void navigator.clipboard
       .writeText(text)
-      .then(() => toast.success('链接已复制到剪贴板'))
+      .then(() => toast.success(successMessage))
       .catch(() => toast.warning('复制失败，请手动复制'))
     return
   }
   toast.warning('当前浏览器不支持自动复制，请手动复制链接')
 }
 
+/** Human-friendly share text: recording title, description and Echoic slogan. */
+function shareMessage(recording: RecordingDetail, url: string): string {
+  const lines = [recording.title || '会议录音']
+  const description = (recording.description || '').trim()
+  if (description) lines.push('', description)
+  lines.push('', '—— Echoic · 私人会议录音知识库', url)
+  return lines.join('\n')
+}
+
 interface ShareRowProps {
   share: ShareInfo
+  recording: RecordingDetail
   revoking: boolean
   onRevoke: (share: ShareInfo) => void
 }
 
-function ShareRow({ share, revoking, onRevoke }: ShareRowProps) {
+function ShareRow({ share, recording, revoking, onRevoke }: ShareRowProps) {
   const status = shareStatus(share)
   const meta = STATUS_META[status]
   const url = shareAbsoluteUrl(share.url_path)
@@ -125,7 +135,16 @@ function ShareRow({ share, revoking, onRevoke }: ShareRowProps) {
       <div className="share-item__actions">
         <Tooltip title={disabled ? '链接已失效，无法访问' : '复制链接'}>
           <Button size="small" icon={<CopyOutlined />} disabled={disabled} onClick={() => copyText(url)}>
-            复制
+            复制链接
+          </Button>
+        </Tooltip>
+        <Tooltip title="复制包含标题、简介和 Echoic slogan 的分享文案">
+          <Button
+            size="small"
+            disabled={disabled}
+            onClick={() => copyText(shareMessage(recording, url), '分享文案已复制')}
+          >
+            复制文案
           </Button>
         </Tooltip>
         {status === 'active' && (
@@ -306,6 +325,17 @@ export function ShareDialog({ open, onClose, recording }: ShareDialogProps) {
             <span className="share-section-head__hint">链接对未登录访客开放，可随时撤销</span>
           </div>
 
+          <div className="share-preview" aria-label="分享预览">
+            <div className="share-preview__brand">Echoic · 私人会议录音知识库</div>
+            <div className="share-preview__title">{recording.title || '会议录音'}</div>
+            {recording.description ? (
+              <p className="share-preview__desc">{recording.description}</p>
+            ) : (
+              <p className="share-preview__desc share-preview__desc--muted">暂无简介</p>
+            )}
+            <div className="share-preview__hint">访客打开链接后会看到标题、简介和 Echoic 品牌标识</div>
+          </div>
+
           <div className="share-permissions">
             <label className="share-permission">
               <span className="share-permission__body">
@@ -423,6 +453,7 @@ export function ShareDialog({ open, onClose, recording }: ShareDialogProps) {
                 <ShareRow
                   key={share.id}
                   share={share}
+                  recording={recording}
                   revoking={revokingId === share.id}
                   onRevoke={handleRevoke}
                 />

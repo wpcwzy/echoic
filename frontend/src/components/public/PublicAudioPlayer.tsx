@@ -48,19 +48,22 @@ export function PublicAudioPlayer({ token, speakers, chapters, allowDownload }: 
   }))
 
   return (
-    <section className={`player-card public-player ${disabled ? 'player-card--no-media' : ''}`} aria-label={isVideo ? '视频播放器' : '录音播放器'}>
+    <>
       {isVideo && (
-        <div className="player-video">
-          <video
-            ref={(element) => attachMediaElement(element)}
-            className="player-video__element"
-            src={mediaUrl}
-            controls
-            playsInline
-            preload="metadata"
-          />
+        <div className="player-video-dock">
+          <div className="player-video">
+            <video
+              ref={(element) => attachMediaElement(element)}
+              className="player-video__element"
+              src={mediaUrl}
+              controls
+              playsInline
+              preload="metadata"
+            />
+          </div>
         </div>
       )}
+      <section className={`player-card public-player ${disabled ? 'player-card--no-media' : ''}`} aria-label={isVideo ? '视频播放器' : '录音播放器'}>
       <div className="player-card__top">
         <span className="player-card__time">{formatMs(displayMs)}</span>
         <div
@@ -160,6 +163,7 @@ export function PublicAudioPlayer({ token, speakers, chapters, allowDownload }: 
       </div>
 
       {disabled && <div className="player-card__notice">媒体文件加载失败，分享链接可能已失效或文件已删除</div>}
-    </section>
+      </section>
+    </>
   )
 }

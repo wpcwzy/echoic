@@ -11,7 +11,7 @@
 > Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
 - Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
-- Version: **v0.3.16** — P1 complete + sqlite-vec, live captions GA, registration/profile, auto descriptions (dark theme, trash & batch, object storage, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
+- Version: **v0.3.17** — P1 complete + sqlite-vec, live captions GA, registration/profile, auto descriptions (dark theme, trash & batch, object storage, vector/hybrid search, multi-user & sharing, CI/CD + multi-arch GHCR images)
 - License: MIT
 
 ## 📸 Screenshots
@@ -63,7 +63,7 @@
 | 📑 Smart chapters | Automatic chapter segmentation (title / time range / summary / bullets); click to jump |
 | 💬 AI Q&A | RAG over transcripts + minutes, streamed over SSE, answers cite `[12:05]` timestamps that seek the player |
 | 📚 Library | Search / status filters / tags / sorting / stats; global search jumps to the matching transcript segment |
-| 🎧 Player | Drag-to-seek, ±15 s, playback speed, chapter ticks, active-line highlighting, HTTP Range streaming; **uploaded videos are automatically transcoded to a browser-compatible H.264/AAC copy** and play as real video (native controls + transcript/chapter sync) in detail and public share pages |
+| 🎧 Player | Drag-to-seek, ±15 s, playback speed, chapter ticks, active-line highlighting, HTTP Range streaming; **uploaded videos are automatically transcoded to a browser-compatible H.264/AAC copy** and play as real video; the video stays pinned at the top while you scroll the transcript/chapters (detail and public share pages) |
 | 👥 Speaker tools | Rename speakers, edit segments, and merge multiple mis-diarized speakers into one (transcript/timestamps preserved) |
 | 🏷 Custom tags | Any user can create tags and add/remove them on recordings (detail editor + batch); tag rename/delete stays admin-only |
 | 💾 Data ownership | SQLite (optional PostgreSQL) + local media directory; backup = archive one data volume |
@@ -72,7 +72,7 @@
 | 📝 Auto descriptions | Recordings get a concise one-line description from the AI summary after processing (falls back to transcript); user edits are never overwritten |
 | 🎭 Demo mode | Full workflow with zero API keys and zero internet access (bundled demo recordings + complete AI results) |
 | 👥 Multi-user & roles | `admin` / `member`; admin user management (create / edit / disable / reset password / delete), registration switch; recordings are owner-scoped and admins can transfer ownership; disabled accounts lose sessions immediately |
-| 🔗 Share links | One-click sharing from the detail page: optional password, expiry (1 h – never), include transcript/minutes, allow download; public read-only page `/s/{token}` with revoke and view counters |
+| 🔗 Share links | One-click sharing from the detail page: optional password, expiry (1 h – never), include transcript/minutes, allow download; public read-only page `/s/{token}` shows recording title, description and the Echoic slogan; revoke and view counters; copy link or a ready-to-paste share text |
 | 📥 Consume directory | Drop audio/video into `data/consume/` and it is imported and processed automatically (paperless-style); sha256 dedupe, failures quarantined, status and manual scan in Settings |
 | 🌙 Dark theme | Light / Dark / System three-state switch, persisted per browser, no flash on reload; covers every page, modal, mind map, player and the public share page |
 | 🗑 Trash & batch operations | Soft delete with 30-day retention, restore or permanently purge, automatic share revocation; multi-select batch trash/restore/purge/reprocess/tag, partial-success reporting and undo toast |
