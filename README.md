@@ -11,7 +11,7 @@
 > Upload a file or record from the browser, and get a **transcript, AI minutes, viewpoint tree & mind map, chapters, key insights, action items and AI Q&A** — with all data staying on your own server.
 
 - Positioning: what paperless-ngx is to paper documents, **Echoic is to recordings**
-- Version: **v1.0.2** — production-ready P1: multi-user collaboration, dark theme, trash/batch, object storage, live captions GA, vector/hybrid search (numpy / sqlite-vec / pgvector / Qdrant), PWA, video playback & scene extraction, audit logs, auto descriptions (CI/CD + multi-arch GHCR images)
+- Version: **v1.0.3** — production-ready P1: multi-user collaboration, dark theme, trash/batch, object storage, live captions GA, vector/hybrid search (numpy / sqlite-vec / pgvector / Qdrant), PWA, video playback & scene extraction, audit logs, auto descriptions (CI/CD + multi-arch GHCR images)
 - License: MIT
 
 ## 📸 Screenshots
@@ -50,6 +50,16 @@
 |---|---|
 | ![Share dialog](docs/screenshots/v1.0/07-share-dialog.png) | ![Public video](docs/screenshots/v1.0/10-public-video-light.png) |
 
+**v1.0.3 floating playback bar**
+
+| Audio · bar while reading | Video · sticky picture + bar |
+|---|---|
+| ![Floating bar](docs/screenshots/v1.0.3/01-audio-floating-bar.png) | ![Video bar](docs/screenshots/v1.0.3/03-video-sticky-bar.png) |
+
+| Public share · fixed bar | Mobile |
+|---|---|
+| ![Public bar](docs/screenshots/v1.0.3/05-public-share-bar.png) | ![Mobile bar](docs/screenshots/v1.0.3/06-mobile-audio-bar.png) |
+
 **v0.2 collaboration & sharing**
 
 | User & role management | Create a share link |
@@ -73,7 +83,7 @@
 | 📑 Smart chapters | Automatic chapter segmentation (title / time range / summary / bullets); click to jump |
 | 💬 AI Q&A | RAG over transcripts + minutes, streamed over SSE, answers cite `[12:05]` timestamps that seek the player |
 | 📚 Library | Search / status filters / tags / sorting / stats; global search jumps to the matching transcript segment |
-| 🎧 Player | Drag-to-seek, ±15 s, playback speed, chapter ticks, active-line highlighting, HTTP Range streaming; **uploaded videos are automatically transcoded to a browser-compatible H.264/AAC copy** and play as real video; the video stays pinned at the top while you scroll the transcript/chapters (detail and public share pages) |
+| 🎧 Player | **Always-visible floating control bar at the page bottom** (progress drag, ±15 s, speed, chapter ticks) so you can read the transcript while adjusting playback; active-line highlighting, HTTP Range streaming; **uploaded videos are automatically transcoded to a browser-compatible H.264/AAC copy** and play as real video with a sticky picture and a scene filmstrip |
 | 👥 Speaker tools | Rename speakers, edit segments, and merge multiple mis-diarized speakers into one (transcript/timestamps preserved) |
 | 🏷 Custom tags | Any user can create tags and add/remove them on recordings (detail editor + batch); tag rename/delete stays admin-only |
 | 💾 Data ownership | SQLite (optional PostgreSQL) + local media directory; backup = archive one data volume |

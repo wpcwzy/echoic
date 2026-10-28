@@ -52,6 +52,7 @@ import { analysisKindLabel } from '../theme'
 import { viewpointForest, viewpointMindMapRoot } from '../utils/viewpoints'
 import { confirmAction, toast, toastError } from '../utils/toast'
 import { AudioPlayerCard } from '../components/player/AudioPlayerCard'
+import { PlayerControlsBar } from '../components/player/PlayerControlsBar'
 import { StatusBadge } from '../components/common/StatusBadge'
 import { DemoModeBanner } from '../components/common/DemoModeBanner'
 import { ErrorState } from '../components/common/ErrorState'
@@ -611,7 +612,7 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
 
             {isReady ? (
               <>
-                <AudioPlayerCard recording={recording} speakers={speakers} chapters={chapters} />
+                <AudioPlayerCard recording={recording} />
 
                 <div className="detail-tabs">
                   <div className="detail-tabs__nav" role="tablist" aria-label="录音内容">
@@ -739,6 +740,14 @@ function DetailWorkspace({ recording }: { recording: RecordingDetail }) {
             </div>
           </div>
         </div>
+
+        {isReady && <PlayerControlsBar
+          variant="detail"
+          recording={recording}
+          title={recording.title}
+          speakers={speakers}
+          chapters={chapters}
+        />}
       </div>
 
       {aiInline ? (

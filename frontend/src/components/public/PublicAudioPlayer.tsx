@@ -1,169 +1,26 @@
-import { useRef, useState } from 'react'
-import { Dropdown, Tooltip } from 'antd'
-import type { MenuProps } from 'antd'
-import { CaretRightOutlined, DownloadOutlined, PauseOutlined } from '@ant-design/icons'
 import { useAudioPlayer } from '../../hooks/useAudioPlayer'
-import { formatMs } from '../../utils/format'
-import { publicDownloadUrl } from '../../api/publicShares'
-import type { Chapter, Speaker } from '../../types'
-import { AvatarGroup } from '../common/AvatarGroup'
-import { SeekGlyph } from '../player/SeekGlyph'
-
-interface PublicAudioPlayerProps {
-  token: string
-  speakers: Speaker[]
-  chapters: Chapter[]
-  allowDownload: boolean
-}
 
 /**
- * Read-only player for the public share page — visually identical to the
- * authenticated player card, without exports / management actions.
+ * Public share page media stage (v1.0.3): video shares keep the sticky picture,
+ * while playback controls are rendered by the fixed :component:`PlayerControlsBar`.
  */
-export function PublicAudioPlayer({ token, speakers, chapters, allowDownload }: PublicAudioPlayerProps) {
-  const { currentMs, durationMs, playing, rate, hasMedia, isVideo, attachMediaElement, mediaUrl, toggle, seekBy, seekTo, setRate } = useAudioPlayer()
-  const trackRef = useRef<HTMLDivElement | null>(null)
-  const [dragMs, setDragMs] = useState<number | null>(null)
+export function PublicAudioPlayer() {
+  const { isVideo, hasMedia, attachMediaElement, mediaUrl: mediaSrc } = useAudioPlayer()
 
-  const totalMs = durationMs || 0
-  const displayMs = dragMs ?? currentMs
-  const percent = totalMs > 0 ? Math.min(100, Math.max(0, (displayMs / totalMs) * 100)) : 0
-  const disabled = !hasMedia
-
-  const msFromClientX = (clientX: number): number => {
-    const track = trackRef.current
-    if (!track || totalMs <= 0) return 0
-    const rect = track.getBoundingClientRect()
-    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
-    return ratio * totalMs
-  }
-
-  const rateItems: MenuProps['items'] = [0.75, 1, 1.25, 1.5, 2].map((value) => ({
-    key: String(value),
-    label: (
-      <span className={`player-menu__rate ${value === rate ? 'is-active' : ''}`}>
-        {value === 1 ? '1.0' : value} x {value === rate && <span className="player-menu__check">✓</span>}
-      </span>
-    ),
-  }))
+  if (!isVideo || !hasMedia) return null
 
   return (
-    <>
-      {isVideo && (
-        <div className="player-video-dock">
-          <div className="player-video">
-            <video
-              ref={attachMediaElement}
-              className="player-video__element"
-              src={mediaUrl}
-              controls
-              playsInline
-              preload="metadata"
-            />
-          </div>
-        </div>
-      )}
-      <section className={`player-card public-player ${disabled ? 'player-card--no-media' : ''}`} aria-label={isVideo ? '视频播放器' : '录音播放器'}>
-      <div className="player-card__top">
-        <span className="player-card__time">{formatMs(displayMs)}</span>
-        <div
-          ref={trackRef}
-          className="player-progress"
-          role="slider"
-          tabIndex={0}
-          aria-label="播放进度"
-          aria-valuemin={0}
-          aria-valuemax={Math.round(totalMs / 1000)}
-          aria-valuenow={Math.round(displayMs / 1000)}
-          onPointerDown={(event) => {
-            if (disabled) return
-            event.currentTarget.setPointerCapture(event.pointerId)
-            setDragMs(msFromClientX(event.clientX))
-          }}
-          onPointerMove={(event) => {
-            if (dragMs === null) return
-            setDragMs(msFromClientX(event.clientX))
-          }}
-          onPointerUp={(event) => {
-            if (dragMs === null) return
-            const target = msFromClientX(event.clientX)
-            setDragMs(null)
-            seekTo(target)
-          }}
-          onPointerCancel={() => setDragMs(null)}
-          onKeyDown={(event) => {
-            if (disabled) return
-            if (event.key === 'ArrowRight') {
-              event.preventDefault()
-              seekBy(5000)
-            }
-            if (event.key === 'ArrowLeft') {
-              event.preventDefault()
-              seekBy(-5000)
-            }
-            if (event.key === ' ' || event.key === 'Enter') {
-              event.preventDefault()
-              toggle()
-            }
-          }}
-        >
-          <div className="player-progress__track">
-            <div className="player-progress__fill" style={{ width: `${percent}%` }} />
-            {totalMs > 0 &&
-              chapters
-                .filter((chapter) => chapter.start_ms > 0 && chapter.start_ms < totalMs)
-                .map((chapter) => (
-                  <span
-                    key={chapter.id}
-                    className="player-progress__tick"
-                    style={{ left: `${(chapter.start_ms / totalMs) * 100}%` }}
-                  />
-                ))}
-            <span className={`player-progress__knob ${dragMs !== null ? 'is-dragging' : ''}`} style={{ left: `${percent}%` }} />
-          </div>
-        </div>
-        <span className="player-card__time">{formatMs(totalMs)}</span>
+    <div className="player-video-dock">
+      <div className="player-video">
+        <video
+          ref={attachMediaElement}
+          className="player-video__element"
+          src={mediaSrc}
+          controls
+          playsInline
+          preload="metadata"
+        />
       </div>
-
-      <div className="player-card__bottom">
-        <div className="player-card__speakers">
-          <AvatarGroup speakers={speakers} max={4} size={27} label="发言人" />
-        </div>
-        <div className="player-controls">
-          <Tooltip title="后退 15 秒">
-            <button type="button" className="player-control player-control--seek" aria-label="后退 15 秒" disabled={disabled} onClick={() => seekBy(-15000)}>
-              <SeekGlyph />
-            </button>
-          </Tooltip>
-          <Tooltip title={disabled ? '暂无媒体文件' : playing ? '暂停' : '播放'}>
-            <button type="button" className="player-control player-control--play" aria-label={playing ? '暂停' : '播放'} disabled={disabled} onClick={toggle}>
-              {playing ? <PauseOutlined /> : <CaretRightOutlined />}
-            </button>
-          </Tooltip>
-          <Tooltip title="前进 15 秒">
-            <button type="button" className="player-control player-control--seek" aria-label="前进 15 秒" disabled={disabled} onClick={() => seekBy(15000)}>
-              <SeekGlyph forward />
-            </button>
-          </Tooltip>
-        </div>
-        <div className="player-card__right">
-          <Dropdown menu={{ items: rateItems, onClick: ({ key }) => setRate(Number(key)) }} trigger={['click']} placement="bottomRight">
-            <button type="button" className="player-rate" aria-label="播放速度">
-              {rate === 1 ? '1.0' : rate} x
-            </button>
-          </Dropdown>
-          {allowDownload && (
-            <Tooltip title="下载原始音视频文件">
-              <a className="player-more public-player__download" href={publicDownloadUrl(token)} aria-label="下载原文件">
-                <DownloadOutlined />
-              </a>
-            </Tooltip>
-          )}
-        </div>
-      </div>
-
-      {disabled && <div className="player-card__notice">媒体文件加载失败，分享链接可能已失效或文件已删除</div>}
-      </section>
-    </>
+    </div>
   )
 }

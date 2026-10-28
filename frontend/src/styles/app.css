@@ -4717,7 +4717,8 @@ mark {
 .ai-float-btn {
   position: fixed;
   right: 24px;
-  bottom: 28px;
+  /* v1.0.3: keep clear of the always-visible player bar (≈71px). */
+  bottom: 96px;
   z-index: 90;
   display: flex;
   align-items: center;
@@ -5553,7 +5554,8 @@ mark {
   }
 
   .ai-float-btn {
-    bottom: 74px;
+    /* v1.0.3: sit above the fixed player bar (≈81px) + mobile nav (60px). */
+    bottom: calc(152px + env(safe-area-inset-bottom, 0px));
     right: 14px;
     padding: 10px 15px;
     font-size: 13px;
@@ -8470,5 +8472,147 @@ mark {
 
   .audit-toolbar__total {
     margin-left: auto;
+  }
+}
+
+
+/* ==========================================================================
+   v1.0.3: always-reachable floating playback bar
+   Detail page: last flex child of the content column (never covers the AI
+   panel). Mobile detail + public page: viewport-fixed above the mobile nav.
+   ========================================================================== */
+.player-bar {
+  flex: 0 0 auto;
+  background: var(--player-bg);
+  border-top: 1px solid var(--player-border);
+  box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.08);
+  z-index: 60;
+}
+
+.player-bar__inner {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 8px 32px;
+}
+
+.player-bar__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.player-bar__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-bar__seek {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.player-bar__seek .player-control--play {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+
+.player-bar__seek .player-control--seek {
+  width: 32px;
+  height: 32px;
+  font-size: 17px;
+}
+
+.player-bar__timeline {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-bar__right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.player-bar--no-media {
+  opacity: 0.95;
+}
+
+/* Public share: fixed dock, centered like the share column. */
+.player-bar--public {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 120;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(14px);
+}
+
+.player-bar--public .player-bar__inner {
+  padding-top: 8px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+}
+
+.public-page--with-bar {
+  padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Detail page on narrow screens: body scrolls and the mobile nav is fixed. */
+@media (max-width: 767px) {
+  .player-bar--detail {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    z-index: 110;
+    background: var(--glass-bg-strong);
+    backdrop-filter: blur(14px);
+  }
+
+  .player-bar__inner {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'timeline timeline timeline'
+      'seek . right';
+    gap: 0 10px;
+    padding: 6px 14px 8px;
+  }
+
+  .player-bar__meta {
+    display: none;
+  }
+
+  .player-bar__seek {
+    grid-area: seek;
+    gap: 4px;
+  }
+
+  .player-bar__timeline {
+    grid-area: timeline;
+    gap: 8px;
+  }
+
+  .player-bar__right {
+    grid-area: right;
+  }
+
+  .detail-scroll__inner {
+    padding-bottom: 150px;
   }
 }

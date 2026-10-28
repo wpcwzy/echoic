@@ -29,6 +29,7 @@ import { BrandMark } from '../components/common/BrandMark'
 import { AvatarGroup } from '../components/common/AvatarGroup'
 import { EmptyState } from '../components/common/EmptyState'
 import { PublicAudioPlayer } from '../components/public/PublicAudioPlayer'
+import { PlayerControlsBar } from '../components/player/PlayerControlsBar'
 import { TranscriptTab } from '../components/detail/TranscriptTab'
 import { SummaryTab } from '../components/detail/SummaryTab'
 import { ViewpointTreeTab } from '../components/detail/ViewpointTreeTab'
@@ -198,7 +199,15 @@ function PublicWorkspace({
 
   return (
     <div className="public-workspace">
-      <PublicAudioPlayer token={token} speakers={speakers} chapters={chapters} allowDownload={share.allow_download} />
+      <PublicAudioPlayer />
+      <PlayerControlsBar
+        variant="public"
+        title={recording.title}
+        speakers={speakers}
+        chapters={chapters}
+        allowDownload={share.allow_download}
+        publicDownloadHref={publicDownloadUrl(token)}
+      />
 
       {tabs.length > 0 && (
         <div className="detail-tabs public-tabs" role="tablist" aria-label="录音内容">
@@ -425,7 +434,7 @@ export default function PublicSharePage() {
   const insights = insightsQuery.data
 
   return (
-    <div className="public-page">
+    <div className="public-page public-page--with-bar">
       <PublicHeader />
       <main className="public-main">
         <section className="public-hero">
